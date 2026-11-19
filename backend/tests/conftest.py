@@ -11,6 +11,7 @@ PLAIN_TEST_DB_URL = TEST_DB_URL.replace("+asyncpg", "")
 ADMIN_DB_URL = re.sub(r"/[^/]+$", "/postgres", _DEV_DB).replace("+asyncpg", "")
 os.environ["DATABASE_URL"] = TEST_DB_URL
 os.environ["REDIS_URL"] = re.sub(r"/\d+$", "", _DEV_REDIS) + "/15"
+os.environ.setdefault("REAL_GEMINI_API_KEY", os.environ.get("GEMINI_API_KEY", ""))  # only for the marker-gated live eval
 os.environ["GEMINI_API_KEY"] = "test-key-not-used"
 
 import asyncpg

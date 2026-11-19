@@ -34,6 +34,8 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
+markers = ["live: calls the real Gemini API (needs a real GEMINI_API_KEY); run with `make eval-router`"]
+addopts = "-m 'not live'"
 
 [dependency-groups]
 dev = [
