@@ -1,0 +1,75 @@
+"""Gemini access behind a small interface, so the graph and services can be tested with a fake."""
+
+from __future__ import annotations
+
+from typing import Any, Protocol, TypeVar
+
+from google import genai
+from google.genai import errors, types
+from pydantic import BaseModel
+
+T = TypeVar("T", bound=BaseModel)
+
+
+class LLMError(Exception):
+    def __init__(self, message: str, status: int = 502):
+        super().__init__(message)
+        self.status = status
+
+
+class LLM(Protocol):
+    async def text(self, *, system: str, prompt: str, temperature: float = 0.5) -> str: ...
+
+    async def json(self, *, system: str, contents: list[dict[str, Any]], schema: type[T], temperature: float = 0.3) -> T: ...
+
+
+def _contents(items: list[dict[str, Any]]) -> list[types.Content]:
+    return [types.Content(role=i["role"], parts=[types.Part(text=t) for t in i["parts"]]) for i in items]
+
+
+class GeminiLLM:
+    def __init__(self, api_key: str, model: str):
+        self.model = model
+        self.client = genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=60_000, api_version="v1beta"))
+
+    async def _generate(self, *, system: str, contents: Any, **config: Any) -> types.GenerateContentResponse:
+        async def go(thinking: bool) -> types.GenerateContentResponse:
+            extra = {"thinking_config": types.ThinkingConfig(thinking_level=types.ThinkingLevel.LOW)} if thinking else {}
+            cfg = types.GenerateContentConfig(system_instruction=system, **config, **extra)
+            return await self.client.aio.models.generate_content(model=self.model, contents=contents, config=cfg)
+
+        try:
+            try:
+                return await go(True)
+            except errors.ClientError as e:
+                # Some models reject a thinking level; retry without it.
+                if "thinking" not in str(e).lower():
+                    raise
+                return await go(False)
+        except errors.APIError as e:
+            raise LLMError(e.message or "Gemini request failed.", 429 if e.code == 429 else 502) from e
+        except Exception as e:  # network, timeout…
+            raise LLMError(f"Could not reach Gemini: {e}") from e
+
+    @staticmethod
+    def _check(resp: types.GenerateContentResponse) -> str:
+        text = resp.text or ""
+        if not text.strip():
+            blocked = getattr(resp.prompt_feedback, "block_reason", None)
+            raise LLMError("Gemini’s safety filters blocked this request." if blocked else "Gemini returned an empty answer.")
+        return text
+
+    async def text(self, *, system: str, prompt: str, temperature: float = 0.5) -> str:
+        resp = await self._generate(system=system, contents=prompt, temperature=temperature)
+        return self._check(resp)
+
+    async def json(self, *, system: str, contents: list[dict[str, Any]], schema: type[T], temperature: float = 0.3) -> T:
+        resp = await self._generate(
+            system=system, contents=_contents(contents), temperature=temperature,
+            response_mime_type="application/json", response_schema=schema,
+        )
+        raw = self._check(resp)
+        try:
+            return schema.model_validate_json(raw)
+        except Exception as e:  # noqa: BLE001
+            raise LLMError("The assistant returned an unreadable answer. Please try again.") from e
