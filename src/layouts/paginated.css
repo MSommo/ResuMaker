@@ -1,0 +1,34 @@
+.pg {
+  --page-w: 210mm; --page-h: 297mm; --pad-t: 11mm; --pad-x: 15.8mm; --pad-b: 10mm; --side-w: 58.7mm; --col-pad: 9mm; --col-pad-rest: 5.5mm;
+  position: relative;
+}
+.pg-pages {
+  display: flex; flex-direction: column; align-items: safe center; gap: 8mm; width: max-content; margin: 0 auto;
+  zoom: var(--fit, 1);
+}
+.pg-page {
+  width: var(--page-w); height: var(--page-h); padding: var(--pad-t) var(--pad-x) var(--pad-b); background: #fff;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, .12); display: flex; flex-direction: column; overflow: hidden;
+  break-after: page; page-break-after: always;
+}
+.pg-header { flex: none; }
+.pg-body { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--side-w) 1fr; }
+.pg-side { padding: var(--col-pad) var(--side-pr, 8.9mm) 0 0; }
+.pg-main { padding: var(--col-pad) 0 0 var(--main-pl, 9.2mm); border-left: var(--main-rule, 1px solid var(--rule, #d9d9d9)); }
+.pg-cont .pg-side, .pg-cont .pg-main { padding-top: var(--col-pad-rest); }
+.pg-unit { break-inside: avoid; }
+
+/* Offscreen measuring copy: same widths, never visible, takes no layout space. */
+.pg-measure { position: absolute; left: -99999px; top: 0; visibility: hidden; pointer-events: none; }
+.pg-measure .pg-page { height: auto; box-shadow: none; overflow: visible; }
+.pg-measure .pg-body { display: grid; }
+.pg-probe-inner { height: calc(var(--page-h) - var(--pad-t) - var(--pad-b)); width: 1px; }
+.pg-probe-pad { height: var(--col-pad); width: 1px; }
+.pg-probe-pad2 { height: var(--col-pad-rest); width: 1px; }
+
+@media print {
+  .pg-pages { display: block; gap: 0; zoom: 1; width: auto; }
+  .pg-page { box-shadow: none; }
+  .pg-page:last-of-type { break-after: auto; page-break-after: auto; }
+  .pg-measure { display: none; }
+}
