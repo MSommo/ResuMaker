@@ -78,14 +78,29 @@ Schema changes go through Alembic (`backend/migrations/`); the API applies them 
 
 ## The agent
 
-`plan` asks Gemini for a structured list of edit operations. `apply` runs them through the operations engine (deterministic, validated). If some fail, `repair` shows the model what failed and why and asks for corrected operations, up to twice. The model only *proposes*; validated code decides what changes.
+`route` (a cheap model, `gemini-flash-lite-latest`) decides whether a message is a question or an edit request; if it fails, the message is treated as an edit. Questions go to `answer`, which replies in text and changes nothing. Edits go to `plan`, where Gemini returns a structured list of operations. `apply` runs them through the operations engine (deterministic, validated). If some fail, `repair` shows the model what failed and why and asks for corrected operations, up to twice. The model only *proposes*; validated code decides what changes.
 
 ```mermaid
 graph TD;
-  START --> plan --> apply;
+  START --> route;
+  route -->|question| answer --> END;
+  route -->|edit| plan --> apply;
   apply -->|all applied| END;
   apply -->|some failed, retries left| repair --> apply;
+  apply -->|review mode| review --> finalize --> END;
 ```
+
+**Review mode.** Tick "Review changes before applying" in the chat (or send `mode: "propose"`). The graph pauses at `review` and nothing is saved. The paused run is stored in Postgres by LangGraph's checkpointer (its own `checkpoint*` tables; Alembic ignores them), so it survives an API restart; unanswered proposals are pruned after 7 days. You then accept all, none, or some changes; `finalize` re-applies only the accepted ones. A proposal can be decided once (`410` afterwards), and if the CV changed meanwhile the decision fails with `409`.
+
+**History and undo.** Every AI, MCP and restore change snapshots the CV first (last 100 kept), and autosaves checkpoint every 15 minutes. Undo restores the snapshot, so it works after a reload. `dryRun` on `/ops` previews changes without saving.
+
+| Endpoint | |
+|---|---|
+| `POST /api/resumes/{id}/chat` | One turn, plain JSON. |
+| `POST /api/resumes/{id}/chat/stream` | Same, as Server-Sent Events: `status`, `step`, then `done`, `proposal` or `error`. Body `{message, mode: "apply"\|"propose"}`. |
+| `POST /api/resumes/{id}/chat/{runId}/decide` | `{accept: "all"\|"none"\|[indices]}` for a proposal. |
+| `GET /api/resumes/{id}/versions`, `.../versions/{vid}`, `.../diff`, `POST .../restore` | History, diff and restore. |
+| `POST /api/resumes/{id}/ops` | Apply operations; `dryRun: true` previews. |
 
 ## MCP server
 
@@ -105,7 +120,7 @@ Claude Desktop (`claude_desktop_config.json`):
 { "mcpServers": { "resumaker": { "command": "docker", "args": ["compose", "-f", "/ABSOLUTE/PATH/TO/ResuMaker/docker-compose.stable.yml", "run", "--rm", "-T", "mcp"] } } }
 ```
 
-Tools: `list_personas`, `create_persona`, `list_resumes`, `get_resume`, `create_resume`, `apply_operations`, `improve_text`, `ask_assistant`, `export_pdf`. Resource: `resume://{id}`. Prompt: `review_cv`.
+Tools: `list_personas`, `create_persona`, `list_resumes`, `get_resume`, `create_resume`, `apply_operations` (with `dry_run`), `list_versions`, `diff_version`, `restore_version`, `improve_text`, `ask_assistant`, `propose_changes` + `decide_proposal` (review before applying), `export_pdf`. Resource: `resume://{id}`. Prompt: `review_cv`.
 
 ## Notes and limits
 
