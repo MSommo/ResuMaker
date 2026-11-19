@@ -35,7 +35,7 @@ from ..domain.catalog import LAYOUTS, TEMPLATES
 from ..domain.models import Resume
 from ..domain.ops import OP_NAMES, Op, apply_ops
 from .llm import LLM
-from .prompts import ANSWER_SYSTEM, CHAT_SYSTEM, REPAIR_NOTE, ROUTER_SYSTEM
+from .prompts import ANSWER_SYSTEM, CHAT_SYSTEM, DECOMPOSE_SYSTEM, REPAIR_NOTE, ROUTER_SYSTEM
 
 log = logging.getLogger("resumaker.agent")
 
@@ -43,6 +43,8 @@ MAX_REPAIRS = 2
 
 # Human-readable description of each node, served with the graph drawing (GET /api/agent/graph?format=json).
 NODE_DOCS = {
+    "decompose": "Cheap-model LLM call: splits a big request (whole-CV rewrite, tailoring, translation) into focused tasks, one per section or item. Small requests stay a single task.",
+    "next": "Deterministic: moves to the next task, carrying over anything that failed.",
     "route": "Cheap-model LLM call: is this message a question (answer) or a request to change the CV (edit)? Defaults to edit.",
     "answer": "LLM call: answers a question about the CV in plain text. Never changes anything.",
     "plan": "LLM call: reads the CV and the conversation, returns a reply plus structured edit operations.",
@@ -116,6 +118,20 @@ class Route(BaseModel):
     reason: str = ""
 
 
+class Task(BaseModel):
+    instruction: str
+    sectionIds: list[str] = Field(default_factory=list)  # noqa: N815  (empty = the whole CV)
+    itemIds: list[str] = Field(default_factory=list)  # noqa: N815  (empty = every item of those sections)
+
+
+class Decomposition(BaseModel):
+    summary: str = ""
+    tasks: list[Task] = Field(default_factory=list)
+
+
+MAX_TASKS = 16
+
+
 def to_ops(plan: AgentPlan) -> list[Op]:
     return [Op(**{**o.model_dump(exclude={"patch"}), "patch": o.patch.model_dump(exclude_none=True)}) for o in plan.ops]
 
@@ -138,12 +154,25 @@ class AgentState(TypedDict, total=False):
     skipped: list[str]               # failures from the most recent apply round
     failed: list[dict[str, str]]     # the ops behind `skipped`, with reasons
     attempts: int
+    tasks: list[dict[str, Any]]      # decompose: the focused tasks (empty/one = just run `plan` on the whole request)
+    task_idx: int
+    summary: str                     # decompose: one-line description of the whole request, used as the reply for multi-task runs
+    carried: list[str]               # failures from earlier tasks
     decision: dict[str, Any]         # the user's answer at `review`: {"accept": "all" | "none" | [indices]}
 
 
 def needs_repair(state: AgentState) -> bool:
     """After `apply`: did something fail that the model could still fix?"""
-    return bool(state["plan"].get("ops")) and bool(state.get("skipped")) and state["attempts"] < MAX_REPAIRS
+    return bool(state["plan"].get("ops")) and bool(state.get("failed")) and state["attempts"] < MAX_REPAIRS
+
+
+def more_tasks(state: AgentState) -> bool:
+    return len(state.get("tasks", [])) > 1 and state.get("task_idx", 0) + 1 < len(state["tasks"])
+
+
+def current_task(state: AgentState) -> dict[str, Any] | None:
+    tasks = state.get("tasks", [])
+    return tasks[state.get("task_idx", 0)] if len(tasks) > 1 else None
 
 
 def catalog() -> dict[str, Any]:
@@ -153,11 +182,31 @@ def catalog() -> dict[str, Any]:
     }
 
 
-def snapshot(r: Resume) -> dict[str, Any]:
-    """Compact, id-carrying view of the CV for the model. Basics are flattened to match the update_basics patch."""
+def snapshot(r: Resume, section_ids: list[str] | None = None, item_ids: list[str] | None = None) -> dict[str, Any]:
+    """Compact, id-carrying view of the CV for the model. Basics are flattened to match the update_basics patch.
+    A focused task passes the sections (and items) it works on; everything else is left out to keep the prompt small."""
     b = r.basics.model_dump()
     addr = b.pop("address")
-    return {"layoutId": r.layoutId, "basics": {**b, **addr}, "sections": [s.model_dump() for s in r.sections]}
+    secs = []
+    for s in r.sections:
+        if section_ids and s.id not in section_ids:
+            continue
+        d = s.model_dump()
+        if item_ids and "items" in d:
+            d["items"] = [i for i in d["items"] if i["id"] in item_ids]
+        secs.append(d)
+    return {"layoutId": r.layoutId, "basics": {**b, **addr}, "sections": secs}
+
+
+def outline(r: Resume) -> dict[str, Any]:
+    """Ids and titles only: what the decomposer needs to split a request, without the (long) text."""
+    out = []
+    for s in r.sections:
+        d: dict[str, Any] = {"id": s.id, "title": s.title, "kind": s.kind, "onPage": s.zone is not None}
+        if hasattr(s, "items"):
+            d["items"] = [{"id": i.id, "label": getattr(i, "title", "") or getattr(i, "name", "") or getattr(i, "label", ""), "organisation": getattr(i, "organisation", "")} for i in s.items]
+        out.append(d)
+    return {"layoutId": r.layoutId, "sections": out}
 
 
 def _contents(state: AgentState, extra: str | None = None) -> list[dict[str, Any]]:
@@ -166,8 +215,14 @@ def _contents(state: AgentState, extra: str | None = None) -> list[dict[str, Any
     for i, m in enumerate(turns):
         role = "model" if m["role"] == "assistant" else "user"
         if i == len(turns) - 1 and role == "user":
-            ctx = f"CATALOG (layouts, zones, templates):\n{json.dumps(catalog())}\n\nCURRENT CV STATE:\n{json.dumps(snapshot(Resume.model_validate(state['resume'])), ensure_ascii=False)}"
-            out.append({"role": "user", "parts": [ctx, m["text"], *([extra] if extra else [])]})
+            task = current_task(state)
+            if task:  # one focused part of a bigger request: show only what it needs
+                view = snapshot(Resume.model_validate(state["resume"]), task["sectionIds"], task["itemIds"])
+                ask = f"{task['instruction']}\n\n(This is one part of a larger request: \"{m['text'][:600]}\". Do ONLY this part; other parts are handled separately.)"
+            else:
+                view, ask = snapshot(Resume.model_validate(state["resume"])), m["text"]
+            ctx = f"CATALOG (layouts, zones, templates):\n{json.dumps(catalog())}\n\nCURRENT CV STATE:\n{json.dumps(view, ensure_ascii=False)}"
+            out.append({"role": "user", "parts": [ctx, ask, *([extra] if extra else [])]})
         else:
             out.append({"role": role, "parts": [m["text"]]})
     return out
@@ -182,7 +237,7 @@ def _route_contents(state: AgentState) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------- graph
 
 
-def build_graph(llm: LLM | None, checkpointer: Any = None):
+def build_graph(llm: LLM | None, checkpointer: Any = None, use_decompose: bool = True):
     """`checkpointer` makes runs durable: required for `review` to pause and resume (propose mode)."""
 
     async def route(state: AgentState) -> AgentState:
@@ -200,20 +255,47 @@ def build_graph(llm: LLM | None, checkpointer: Any = None):
         text = await llm.text(system=ANSWER_SYSTEM, prompt=f"CURRENT CV STATE:\n{cv}\n\nCONVERSATION:\n{convo}", temperature=0.4)
         return {"answer": text.strip(), "applied": [], "applied_ops": [], "skipped": []}
 
+    async def decompose(state: AgentState) -> AgentState:
+        """Best effort: on any problem the request simply runs as one task, exactly as before."""
+        if not use_decompose:
+            return {"tasks": [], "task_idx": 0, "summary": ""}
+        try:
+            cv = Resume.model_validate(state["resume"])
+            ask = f"REQUEST:\n{state['messages'][-1]['text']}\n\nCV OUTLINE:\n{json.dumps(outline(cv))}"
+            d = await llm.json(system=DECOMPOSE_SYSTEM, contents=[{"role": "user", "parts": [ask]}], schema=Decomposition, temperature=0.0, fast=True)
+            known = {s.id: {i.id for i in getattr(s, "items", [])} for s in cv.sections}
+            tasks = []
+            for t in d.tasks:
+                if any(sid not in known for sid in t.sectionIds) or any(not any(iid in known[sid] for sid in (t.sectionIds or known)) for iid in t.itemIds):
+                    raise ValueError("task refers to unknown ids")  # a hallucinated id would silently hide content from the writer
+                tasks.append(t.model_dump())
+            if len(tasks) > MAX_TASKS:
+                raise ValueError("too many tasks")
+            return {"tasks": tasks if len(tasks) > 1 else [], "task_idx": 0, "summary": d.summary if len(tasks) > 1 else ""}
+        except Exception as e:  # noqa: BLE001
+            log.warning("decompose failed, running as one task: %s", e)
+            return {"tasks": [], "task_idx": 0, "summary": ""}
+
     async def plan(state: AgentState) -> AgentState:
         p = await llm.json(system=CHAT_SYSTEM, contents=_contents(state), schema=AgentPlan, temperature=0.3)
-        return {"plan": p.model_dump(), "first_reply": p.reply, "attempts": 0, "applied": [], "applied_ops": [], "skipped": [], "failed": []}
+        out: AgentState = {"plan": p.model_dump(), "attempts": 0, "failed": []}
+        if state.get("task_idx", 0) == 0:  # the first (or only) task starts the run's totals
+            out.update({"first_reply": p.reply, "applied": [], "applied_ops": [], "skipped": [], "carried": []})
+        return out
+
+    async def next_task(state: AgentState) -> AgentState:
+        return {"task_idx": state.get("task_idx", 0) + 1, "carried": state.get("skipped", []), "failed": [], "attempts": 0}
 
     async def apply(state: AgentState) -> AgentState:
         ops = to_ops(AgentPlan.model_validate(state["plan"]))
         if not ops:  # nothing proposed: keep whatever failed earlier so it is still reported
-            return {"failed": state.get("failed", []), "skipped": state.get("skipped", [])}
+            return {"failed": state.get("failed", [])}
         res = apply_ops(Resume.model_validate(state["resume"]), ops)
         return {
             "resume": res.resume.model_dump(mode="json"),
             "applied": [*state.get("applied", []), *res.applied],
             "applied_ops": [*state.get("applied_ops", []), *(o.model_dump(exclude_none=True) for o in res.applied_ops)],
-            "skipped": res.skipped,
+            "skipped": [*state.get("carried", []), *res.skipped],
             "failed": [{"op": o.model_dump_json(exclude_none=True, exclude_defaults=True), "reason": why} for o, why in res.failed],
         }
 
@@ -228,7 +310,7 @@ def build_graph(llm: LLM | None, checkpointer: Any = None):
             {
                 "items": [{"index": i, "summary": s} for i, s in enumerate(state.get("applied", []))],
                 "skipped": state.get("skipped", []),
-                "reply": state["plan"].get("reply") or state.get("first_reply", ""),
+                "reply": state.get("summary") or state["plan"].get("reply") or state.get("first_reply", ""),
             }
         )
         return {"decision": decision if isinstance(decision, dict) else {"accept": "all"}}
@@ -248,24 +330,28 @@ def build_graph(llm: LLM | None, checkpointer: Any = None):
         res = apply_ops(Resume.model_validate(state["original"]), [Op(**ops[i]) for i in keep])
         return {"resume": res.resume.model_dump(mode="json"), "applied": res.applied, "applied_ops": [o.model_dump(exclude_none=True) for o in res.applied_ops]}
 
-    def after_route(state: AgentState) -> Literal["answer", "plan"]:
-        return "answer" if state.get("intent") == "answer" else "plan"
+    def after_route(state: AgentState) -> Literal["answer", "decompose"]:
+        return "answer" if state.get("intent") == "answer" else "decompose"
 
-    def after_apply(state: AgentState) -> Literal["repair", "review", "__end__"]:
+    def after_apply(state: AgentState) -> Literal["repair", "next", "review", "__end__"]:
         if needs_repair(state):
             return "repair"
+        if more_tasks(state):
+            return "next"
         if state.get("mode") == "propose" and state.get("applied"):
             return "review"
         return END
 
     g = StateGraph(AgentState)
-    for name, fn in (("route", route), ("answer", answer), ("plan", plan), ("apply", apply), ("repair", repair), ("review", review), ("finalize", finalize)):
+    for name, fn in (("route", route), ("answer", answer), ("decompose", decompose), ("plan", plan), ("next", next_task), ("apply", apply), ("repair", repair), ("review", review), ("finalize", finalize)):
         g.add_node(name, fn)
     g.add_edge(START, "route")
-    g.add_conditional_edges("route", after_route, {"answer": "answer", "plan": "plan"})
+    g.add_conditional_edges("route", after_route, {"answer": "answer", "decompose": "decompose"})
     g.add_edge("answer", END)
+    g.add_edge("decompose", "plan")
     g.add_edge("plan", "apply")
-    g.add_conditional_edges("apply", after_apply, {"repair": "repair", "review": "review", END: END})
+    g.add_edge("next", "plan")
+    g.add_conditional_edges("apply", after_apply, {"repair": "repair", "next": "next", "review": "review", END: END})
     g.add_edge("repair", "apply")
     g.add_edge("review", "finalize")
     g.add_edge("finalize", END)

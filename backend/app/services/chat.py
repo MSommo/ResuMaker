@@ -14,7 +14,7 @@ from typing import Any, AsyncIterator
 
 from langgraph.types import Command
 
-from ..agent.graph import needs_repair
+from ..agent.graph import more_tasks, needs_repair
 from ..agent.llm import LLMError
 from ..db import PersonaRow
 from ..domain.diff import diff_resumes
@@ -55,6 +55,9 @@ def _plural(n: int, word: str) -> str:
 def _detail(node: str, state: dict[str, Any]) -> str:
     if node == "route":
         return str(state.get("intent", ""))
+    if node == "decompose":
+        n = len(state.get("tasks", []))
+        return f"{n} tasks" if n > 1 else "1 task"
     if node == "plan":
         return f"{_plural(len(state.get('plan', {}).get('ops', [])), 'change')} proposed"
     if node == "apply":
@@ -68,14 +71,21 @@ def _detail(node: str, state: dict[str, Any]) -> str:
 def _status_after(node: str, state: dict[str, Any]) -> str | None:
     """What the user should read while the next step runs."""
     if node == "route":
-        return "Writing an answer…" if state.get("intent") == "answer" else "Planning the changes…"
+        return "Writing an answer…" if state.get("intent") == "answer" else "Planning the work…"
+    if node == "decompose":
+        n = len(state.get("tasks", []))
+        return f"Planning the changes… (task 1 of {n})" if n > 1 else "Planning the changes…"
+    if node == "next":
+        return f"Planning the changes… (task {state.get('task_idx', 0) + 1} of {len(state.get('tasks', []))})"
     if node == "plan":
         return "Checking the changes…"
     if node == "repair":
         return "Checking the corrected changes…"
     if node == "apply":
         if needs_repair(state):  # type: ignore[arg-type]
-            return f"Fixing {_plural(len(state.get('skipped', [])), 'failed change')}…"
+            return f"Fixing {_plural(len(state.get('failed', [])), 'failed change')}…"
+        if more_tasks(state):  # type: ignore[arg-type]
+            return None
         return "Preparing your review…" if state.get("mode") == "propose" and state.get("applied") else "Saving…"
     return None
 
@@ -102,7 +112,7 @@ async def _commit(infra: Infra, s: Any, rid: uuid.UUID, row: repo.ResumeRow, per
     if intent == "answer":
         reply = final.get("answer") or "I don’t have an answer for that."
     else:
-        reply = plan.get("reply") or final.get("first_reply") or ("Done." if applied else "I didn’t change anything.")
+        reply = final.get("summary") or plan.get("reply") or final.get("first_reply") or ("Done." if applied else "I didn’t change anything.")
         if proposed is not None and len(applied) != proposed:  # the user accepted only some of the proposed changes
             reply = f"Applied {len(applied)} of {_plural(proposed, 'proposed change')}." if applied else "Okay, I didn’t apply any of the proposed changes."
 

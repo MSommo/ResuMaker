@@ -78,13 +78,14 @@ Schema changes go through Alembic (`backend/migrations/`); the API applies them 
 
 ## The agent
 
-`route` (a cheap model, `gemini-flash-lite-latest`) decides whether a message is a question or an edit request; if it fails, the message is treated as an edit. Questions go to `answer`, which replies in text and changes nothing. Edits go to `plan`, where Gemini returns a structured list of operations. `apply` runs them through the operations engine (deterministic, validated). If some fail, `repair` shows the model what failed and why and asks for corrected operations, up to twice. The model only *proposes*; validated code decides what changes.
+`route` (a cheap model, `gemini-flash-lite-latest`) decides whether a message is a question or an edit request; if it fails, the message is treated as an edit. Questions go to `answer`, which replies in text and changes nothing. Edits go to `decompose` (the cheap model splits a big request, such as a whole-CV rewrite, tailoring or translation, into focused tasks: one per section, or per job; small requests stay one task, and any problem falls back to one task), then to `plan`, where Gemini returns a structured list of operations. `apply` runs them through the operations engine (deterministic, validated). If some fail, `repair` shows the model what failed and why and asks for corrected operations, up to twice. The model only *proposes*; validated code decides what changes.
 
 ```mermaid
 graph TD;
   START --> route;
   route -->|question| answer --> END;
-  route -->|edit| plan --> apply;
+  route -->|edit| decompose --> plan --> apply;
+  apply -->|more tasks| next --> plan;
   apply -->|all applied| END;
   apply -->|some failed, retries left| repair --> apply;
   apply -->|review mode| review --> finalize --> END;
@@ -94,7 +95,7 @@ graph TD;
 
 `make eval-router` runs a golden set of 20 messages (questions vs. edits) against the real fast model (a few cents; excluded from `make test`). It currently scores 20/20.
 
-`make eval-agent` runs 17 end-to-end editing tasks (single edits, multi-part requests, whole-CV rewrites, tailoring to a job posting) through the real graph and checks the resulting CV deterministically (no LLM judge). It reports pass rate, repairs and latency, and writes `backend/.data/eval-report.json`. Baseline with the current single-shot `plan`: 17/17, no repairs, about 4 s per task.
+`make eval-agent` runs 20 end-to-end editing tasks (single edits, multi-part requests, whole-CV rewrites, and the same on a 10-job CV) through the real graph and checks the resulting CV deterministically (no LLM judge). It reports pass rate, repairs and latency and writes `backend/.data/eval-report.json`; `EVAL_DECOMPOSE=0` runs the one-shot baseline. One run each: one-shot 19/20 (long CV: 2/3, it left every job of a tailoring request untouched), with decomposition 20/20 (long CV: 3/3). The price is latency, since tasks run one after another: about 11 s per task on average against 5.5 s. Phase 3 runs them in parallel. Single runs are noisy, so treat the gap as a trend, not a measurement.
 
 **History and undo.** Every AI, MCP and restore change snapshots the CV first (last 100 kept), and autosaves checkpoint every 15 minutes. Undo restores the snapshot, so it works after a reload. `dryRun` on `/ops` previews changes without saving.
 

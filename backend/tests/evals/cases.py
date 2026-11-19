@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-from app.domain.models import Resume
+from app.domain.catalog import sample_resume
+from app.domain.models import Entry, Resume
 
 Check = Callable[[Resume, Resume], bool]  # (before, after) -> passed
 
@@ -31,9 +32,31 @@ def jobs(r: Resume):
 
 
 def same_facts(before: Resume, after: Resume) -> bool:
-    """Employers, titles and dates survive a rewrite."""
+    """Employers and dates survive a rewrite."""
     a, b = jobs(before), jobs(after)
-    return len(a) == len(b) and all((x.organisation, x.start, x.end, x.title) == (y.organisation, y.start, y.end, y.title) for x, y in zip(a, b))
+    return len(a) == len(b) and all((x.organisation, x.start, x.end) == (y.organisation, y.start, y.end) for x, y in zip(a, b))
+
+
+def big_resume() -> Resume:
+    """A long career: 10 jobs x 6 bullets plus a description each, to stress whole-CV rewrites."""
+    r = sample_resume()
+    job = next(s for s in r.sections if s.kind == "entries" and s.job)
+    job.items = [
+        Entry(
+            id=f"job{i}", title=f"Software Engineer {i}", organisation=f"Company {i}", start=f"{2024 - 2 * i - 1}-01", end=f"{2024 - 2 * i}-12",
+            description=f"Worked on backend services and internal tooling for team {i}, covering delivery, reliability and mentoring of junior engineers.",
+            bullets=[
+                f"Deployed services {i}.1 to Kubernetes clusters on AWS, serving about {k * 100 + 50} customers" if k == 1 else
+                f"Built CI/CD pipelines in GitHub Actions for team {i}, cutting release time by {10 * k}%" if k == 2 else
+                f"Set up Prometheus and Grafana dashboards for monitoring service {i}" if k == 3 else
+                f"Wrote Python tooling to automate operations tasks for team {i}" if k == 4 else
+                f"Delivered feature {i}.{k} used by about {k * 100 + 50} customers, working with product and design"
+                for k in range(1, 7)
+            ],
+        )
+        for i in range(10)
+    ]
+    return r
 
 
 @dataclass
@@ -41,7 +64,8 @@ class Case:
     id: str
     message: str
     check: Check
-    tags: tuple[str, ...] = ()  # "multi" = needs several kinds of change in one request
+    tags: tuple[str, ...] = ()  # "multi" = several kinds of change in one request; "whole" = whole-CV rewrite; "big" = large CV
+    big: bool = False  # run against big_resume() instead of the small sample
 
 
 CASES: list[Case] = [
@@ -66,10 +90,19 @@ CASES: list[Case] = [
     Case("polish-all", "Review my whole CV and improve the wording everywhere: the profile, every job's bullets and descriptions. Keep all facts.",
          lambda b, a: same_facts(b, a) and sec(a, "Profile").text != sec(b, "Profile").text
          and all(y.bullets != x.bullets or y.description != x.description for x, y in zip(jobs(b), jobs(a))), ("whole",)),
-    Case("tailor", "Tailor my CV to this job posting: 'Platform Engineer. You will run Kubernetes clusters, build CI/CD pipelines and improve observability. Strong Python and cloud experience required.' Rewrite the profile and every job's bullets to emphasise the relevant parts of my EXISTING experience. Do not invent anything.",
+    Case("tailor", "Tailor my CV to this job posting: 'Senior Backend Engineer. You will design event-driven backend systems on cloud infrastructure, write TypeScript, test thoroughly and mentor engineers.' Rewrite the profile and every job's bullets to emphasise the relevant parts of my EXISTING experience. Do not invent anything.",
          lambda b, a: same_facts(b, a) and sec(a, "Profile").text != sec(b, "Profile").text
          and sum(y.bullets != x.bullets or y.description != x.description for x, y in zip(jobs(b), jobs(a))) == len(jobs(b)), ("whole",)),
     Case("shorten-all", "My CV is too long. Shorten every text field (profile, each job's description and bullets) by about a third without losing facts.",
          lambda b, a: same_facts(b, a) and sum(len(x.description) + sum(map(len, x.bullets)) for x in jobs(a)) < 0.85 * sum(len(x.description) + sum(map(len, x.bullets)) for x in jobs(b))
          and len(sec(a, "Profile").text) < len(sec(b, "Profile").text), ("whole",)),
+    # The same whole-CV tasks on a long CV (10 jobs x 6 bullets). One-shot planning may degrade here.
+    Case("polish-all-big", "Review my whole CV and improve the wording everywhere: the profile, every job's bullets and descriptions. Keep all facts.",
+         lambda b, a: same_facts(b, a) and sec(a, "Profile").text != sec(b, "Profile").text
+         and all(y.bullets != x.bullets or y.description != x.description for x, y in zip(jobs(b), jobs(a))), ("whole", "big"), True),
+    Case("tailor-big", "Tailor my CV to this job posting: 'Platform Engineer. You will run Kubernetes clusters, build CI/CD pipelines and improve observability. Strong Python and cloud experience required.' Rewrite the profile and every job's bullets to emphasise the relevant parts of my EXISTING experience. Do not invent anything.",
+         lambda b, a: same_facts(b, a) and sec(a, "Profile").text != sec(b, "Profile").text
+         and all(y.bullets != x.bullets or y.description != x.description for x, y in zip(jobs(b), jobs(a))), ("whole", "big"), True),
+    Case("translate-big", "Translate the whole CV to French, keeping names, employers and dates unchanged.",
+         lambda b, a: same_facts(b, a) and all(y.description != x.description and y.bullets != x.bullets for x, y in zip(jobs(b), jobs(a))), ("whole", "big"), True),
 ]

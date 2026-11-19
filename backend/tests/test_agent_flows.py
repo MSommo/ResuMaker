@@ -2,7 +2,7 @@
 
 import json
 
-from app.agent.graph import AgentPlan, Patch, PlanOp, Route, build_graph
+from app.agent.graph import AgentPlan, Decomposition, Patch, PlanOp, Route, Task, build_graph
 from app.agent.llm import LLMError
 from tests.test_api import create, plan, sec, skill_names
 
@@ -63,9 +63,9 @@ async def test_stream_reports_progress_then_the_result(client, infra):
     infra.llm.plans.append(plan("Done.", PlanOp(op="update_basics", patch=Patch(headline="Staff"))))
     events = await stream(client, doc["id"], "headline: Staff")
     assert events[0] == {"type": "status", "label": "Understanding your request…"}
-    assert [e["node"] for e in events if e["type"] == "step"] == ["route", "plan", "apply"]
+    assert [e["node"] for e in events if e["type"] == "step"] == ["route", "decompose", "plan", "apply"]
     labels = [e["label"] for e in events if e["type"] == "status"]
-    assert labels == ["Understanding your request…", "Planning the changes…", "Checking the changes…", "Saving…"]
+    assert labels == ["Understanding your request…", "Planning the work…", "Planning the changes…", "Checking the changes…", "Saving…"]
     done = events[-1]
     assert done["type"] == "done" and done["result"]["applied"] == ["Updated personal info (headline)"]
     assert done["result"]["resume"]["version"] == 2
@@ -77,7 +77,7 @@ async def test_stream_shows_the_repair_loop(client, infra):
     infra.llm.plans.append(plan("x", PlanOp(op="add_item", sectionId=skills, patch=Patch())))  # rejected: no content
     infra.llm.plans.append(plan("Added.", add_skill(skills, "Docker", 4)))
     events = await stream(client, doc["id"], "add docker")
-    assert [e["node"] for e in events if e["type"] == "step"] == ["route", "plan", "apply", "repair", "apply"]
+    assert [e["node"] for e in events if e["type"] == "step"] == ["route", "decompose", "plan", "apply", "repair", "apply"]
     assert "Fixing 1 failed change…" in [e["label"] for e in events if e["type"] == "status"]
     assert events[-1]["result"]["applied"] == ["Added “Docker” to “Skills”"]
 
@@ -196,3 +196,57 @@ async def test_invalid_decisions_are_rejected(client, infra):
     doc = await create(client)
     r = await client.post(f"/api/resumes/{doc['id']}/chat/abc/decide", json={"accept": "maybe"})
     assert r.status_code == 422
+
+
+# ---------------------------------------------------------------- decomposition (big requests run as focused tasks)
+
+
+async def test_big_requests_run_as_focused_tasks(client, infra):
+    doc = await create(client)
+    skills, hobbies = sec(doc, "Skills")["id"], sec(doc, "Hobbies")["id"]
+    infra.llm.decompositions.append(Decomposition(summary="Added two skills and a headline.", tasks=[
+        Task(instruction="Add Rust", sectionIds=[skills]), Task(instruction="Add Go", sectionIds=[skills]), Task(instruction="Set headline Staff"),
+    ]))
+    infra.llm.plans += [
+        plan("a", add_skill(skills, "Rust")), plan("b", add_skill(skills, "Go")), plan("c", PlanOp(op="update_basics", patch=Patch(headline="Staff"))),
+    ]
+    events = await stream(client, doc["id"], "do three things")
+    assert [e["node"] for e in events if e["type"] == "step"] == ["route", "decompose", "plan", "apply", "next", "plan", "apply", "next", "plan", "apply"]
+    assert any("task 2 of 3" in e["label"] for e in events if e["type"] == "status")
+    r = events[-1]["result"]
+    assert len(r["applied"]) == 3 and r["reply"] == "Added two skills and a headline." and r["resume"]["version"] == 2  # ONE save, one undo
+    assert {"Rust", "Go"} <= set(skill_names(r["resume"])) and hobbies
+
+
+async def test_a_failing_task_is_reported_but_the_others_still_run(client, infra):
+    doc = await create(client)
+    skills = sec(doc, "Skills")["id"]
+    infra.llm.decompositions.append(Decomposition(summary="Did it.", tasks=[Task(instruction="x"), Task(instruction="y")]))
+    bad = PlanOp(op="add_item", sectionId=skills, patch=Patch())  # rejected, and the repair attempts keep failing
+    infra.llm.plans += [plan("1", bad), plan("1b", bad), plan("1c", bad), plan("2", add_skill(skills, "Go"))]
+    out = (await client.post(f"/api/resumes/{doc['id']}/chat", json={"message": "two things"})).json()
+    assert out["applied"] == ["Added “Go” to “Skills”"] and len(out["skipped"]) == 1
+
+
+async def test_hallucinated_ids_or_a_failing_decomposer_fall_back_to_one_task(client, infra):
+    doc = await create(client)
+    infra.llm.decompositions.append(Decomposition(tasks=[Task(instruction="a", sectionIds=["nope"]), Task(instruction="b")]))
+    infra.llm.plans.append(plan("Done.", PlanOp(op="update_basics", patch=Patch(headline="One"))))
+    out = (await client.post(f"/api/resumes/{doc['id']}/chat", json={"message": "x"})).json()
+    assert out["applied"] and infra.llm.json_calls == 1
+    infra.llm.decompositions.append(LLMError("lite down"))
+    infra.llm.plans.append(plan("Done.", PlanOp(op="update_basics", patch=Patch(headline="Two"))))
+    out = (await client.post(f"/api/resumes/{doc['id']}/chat", json={"message": "y"})).json()
+    assert out["applied"] and infra.llm.json_calls == 2
+
+
+async def test_tasks_work_in_review_mode_too(client, infra):
+    doc = await create(client)
+    skills = sec(doc, "Skills")["id"]
+    infra.llm.decompositions.append(Decomposition(summary="Added Rust and Go.", tasks=[Task(instruction="a"), Task(instruction="b")]))
+    infra.llm.plans += [plan("a", add_skill(skills, "Rust")), plan("b", add_skill(skills, "Go"))]
+    events = await stream(client, doc["id"], "two skills", mode="propose")
+    proposal = events[-1]
+    assert proposal["type"] == "proposal" and len(proposal["items"]) == 2 and proposal["reply"] == "Added Rust and Go."
+    out = (await client.post(f"/api/resumes/{doc['id']}/chat/{proposal['runId']}/decide", json={"accept": [0]})).json()
+    assert out["applied"] == ["Added “Rust” to “Skills”"]

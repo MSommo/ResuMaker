@@ -19,7 +19,7 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from app.agent.graph import AgentPlan, Route
+from app.agent.graph import AgentPlan, Decomposition, Route
 from app.agent.llm import LLMError
 from app.agent.prompts import ANSWER_SYSTEM
 from app.config import get_settings
@@ -40,6 +40,8 @@ class FakeLLM:
         self.text_calls: list[str] = []  # Improve prompts
         self.plans: list[AgentPlan] = []
         self.routes: list[Route | Exception] = []
+        self.decompositions: list[Decomposition | Exception] = []  # unscripted: one task, i.e. the old behaviour
+        self.decompose_calls = 0
         self.answers: list[str] = []
         self.json_calls = 0
         self.route_calls = 0
@@ -58,6 +60,12 @@ class FakeLLM:
             self.route_calls += 1
             self.fast_flags.append(fast)
             nxt = self.routes.pop(0) if self.routes else Route(intent="edit", reason="test default")
+            if isinstance(nxt, Exception):
+                raise nxt
+            return nxt
+        if schema is Decomposition:
+            self.decompose_calls += 1
+            nxt = self.decompositions.pop(0) if self.decompositions else Decomposition()
             if isinstance(nxt, Exception):
                 raise nxt
             return nxt
@@ -114,8 +122,8 @@ async def client(infra):
     app = create_app(infra)
     app.state.infra = infra  # ASGITransport doesn't run lifespan; infra is already started
     llm = infra.llm
-    llm.plans.clear(), llm.routes.clear(), llm.answers.clear(), llm.text_calls.clear(), llm.fast_flags.clear()
-    llm.json_calls = llm.route_calls = llm.answer_calls = 0
+    llm.plans.clear(), llm.routes.clear(), llm.decompositions.clear(), llm.answers.clear(), llm.text_calls.clear(), llm.fast_flags.clear()
+    llm.json_calls = llm.route_calls = llm.answer_calls = llm.decompose_calls = 0
     infra.pdf.renders = 0
     infra.settings.ai_rate_limit_per_min = 1000
     await infra.redis.flushdb()

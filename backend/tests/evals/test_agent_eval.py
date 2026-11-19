@@ -11,7 +11,7 @@ from app.agent.graph import build_graph
 from app.agent.llm import GeminiLLM
 from app.domain.catalog import sample_resume
 from app.domain.models import Resume
-from tests.evals.cases import CASES
+from tests.evals.cases import CASES, big_resume
 
 pytestmark = pytest.mark.live
 MIN_PASS = float(os.environ.get("EVAL_MIN_PASS", "0.8"))
@@ -22,10 +22,10 @@ async def test_agent_eval():
     if not key:
         pytest.skip("needs a real GEMINI_API_KEY")
     llm = GeminiLLM(key, os.environ.get("GEMINI_MODEL", "gemini-flash-latest"), "gemini-flash-lite-latest")
-    graph = build_graph(llm)
+    graph = build_graph(llm, use_decompose=os.environ.get("EVAL_DECOMPOSE", "1") != "0")  # EVAL_DECOMPOSE=0 for the one-shot baseline
     rows = []
     for c in CASES:
-        before = sample_resume()
+        before = big_resume() if c.big else sample_resume()
         data = before.model_dump(mode="json")
         t0 = time.time()
         try:
@@ -38,11 +38,13 @@ async def test_agent_eval():
         rows.append({"id": c.id, "tags": c.tags, "pass": ok, "applied": applied, "skipped": skipped, "repairs": repairs, "seconds": round(time.time() - t0, 1), "error": err})
     n = len(rows)
     multi = [r for r in rows if "multi" in r["tags"]]
-    whole = [r for r in rows if "whole" in r["tags"]]
+    whole = [r for r in rows if "whole" in r["tags"] and "big" not in r["tags"]]
+    big = [r for r in rows if "big" in r["tags"]]
     summary = {
         "pass_rate": sum(r["pass"] for r in rows) / n,
         "multi_pass_rate": sum(r["pass"] for r in multi) / len(multi),
         "whole_cv_pass_rate": sum(r["pass"] for r in whole) / len(whole),
+        "big_cv_pass_rate": sum(r["pass"] for r in big) / len(big),
         "avg_seconds": round(sum(r["seconds"] for r in rows) / n, 1),
         "repairs": sum(r["repairs"] for r in rows),
     }
