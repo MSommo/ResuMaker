@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { chat, chatHistory, clearChat, restoreVersion } from '../api/client'
+import { chatHistory, chatStream, clearChat, decideProposal, restoreVersion, type ChatResult, type Proposal } from '../api/client'
 import { Chat, Close, Send, Sparkle, Trash, Undo } from '../components/icons'
 import { useResume } from '../state/ResumeContext'
 
@@ -28,6 +28,10 @@ export function ChatBubble() {
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
+  const [status, setStatus] = useState('Thinking…')
+  const [review, setReview] = useState(false) // propose changes first instead of applying them
+  const [proposal, setProposal] = useState<Proposal | null>(null)
+  const [picked, setPicked] = useState<Set<number>>(new Set())
   const loaded = useRef(false)
   const endRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -58,18 +62,41 @@ export function ChatBubble() {
 
   const send = async (raw: string) => {
     const content = raw.trim()
-    if (!content || busy) return
+    if (!content || busy || proposal) return
     setMsgs((m) => [...m, { role: 'user', text: content }])
     setText('')
     setBusy(true)
     try {
       await flush() // the agent reads the saved CV, so make sure it has your latest edits
-      const out = await chat(id, content)
-      if (out.applied.length) adopt(out.resume.resume, out.resume.version)
-      setMsgs((m) => [...m, { role: 'assistant', text: out.reply, applied: out.applied, skipped: out.skipped, undoVersionId: out.undoVersionId }])
+      setStatus('Thinking…')
+      const out = await chatStream(id, content, review ? 'propose' : 'apply', (ev) => ev.type === 'status' && setStatus(ev.label))
+      if ('runId' in out) {
+        setProposal(out)
+        setPicked(new Set(out.items.map((i) => i.index)))
+      } else showResult(out)
     } catch (e) {
       setMsgs((m) => [...m, { role: 'assistant', text: e instanceof Error ? e.message : 'Something went wrong.', error: true }])
     } finally {
+      setBusy(false)
+    }
+  }
+
+  const showResult = (out: ChatResult) => {
+    if (out.applied.length) adopt(out.resume.resume, out.resume.version)
+    setMsgs((m) => [...m, { role: 'assistant', text: out.reply, applied: out.applied, skipped: out.skipped, undoVersionId: out.undoVersionId }])
+  }
+
+  const decide = async (accept: 'all' | 'none' | number[]) => {
+    if (!proposal) return
+    setBusy(true)
+    setStatus('Applying…')
+    try {
+      await flush()
+      showResult(await decideProposal(id, proposal.runId, accept))
+    } catch (e) {
+      setMsgs((m) => [...m, { role: 'assistant', text: e instanceof Error ? e.message : 'Could not apply the changes.', error: true }])
+    } finally {
+      setProposal(null)
       setBusy(false)
     }
   }
@@ -135,7 +162,27 @@ export function ChatBubble() {
                 {m.undoVersionId && (m.undone ? <small className="undone">Undone</small> : lastApplied === i && <button type="button" className="btn small" disabled={busy} onClick={() => void undo(i)}><Undo /> Undo</button>)}
               </div>
             ))}
-            {busy && <div className="msg assistant"><p className="ai-status"><Sparkle className="spin" /> Thinking…</p></div>}
+            {busy && <div className="msg assistant"><p className="ai-status"><Sparkle className="spin" /> {status}</p></div>}
+            {proposal && (
+              <div className="msg assistant proposal">
+                <p>{proposal.reply}</p>
+                <p><strong>Review the proposed changes:</strong></p>
+                <ul className="applied">
+                  {proposal.items.map((it) => (
+                    <li key={it.index}>
+                      <label>
+                        <input type="checkbox" checked={picked.has(it.index)} disabled={busy} onChange={(e) => setPicked((p) => { const n = new Set(p); e.target.checked ? n.add(it.index) : n.delete(it.index); return n })} /> {it.summary}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+                {proposal.skipped.length > 0 && <p className="skipped">Couldn’t prepare {proposal.skipped.length}: {proposal.skipped.join('; ')}</p>}
+                <div className="proposal-actions">
+                  <button type="button" className="btn small primary" disabled={busy || picked.size === 0} onClick={() => void decide(picked.size === proposal.items.length ? 'all' : [...picked].sort((a, b) => a - b))}>Apply {picked.size === proposal.items.length ? 'all' : `${picked.size} selected`}</button>
+                  <button type="button" className="btn small" disabled={busy} onClick={() => void decide('none')}>Reject</button>
+                </div>
+              </div>
+            )}
             <div ref={endRef} />
           </div>
 
@@ -149,8 +196,9 @@ export function ChatBubble() {
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), void send(text))}
             />
-            <button type="submit" className="btn primary icon" disabled={busy || !text.trim()} aria-label="Send"><Send /></button>
+            <button type="submit" className="btn primary icon" disabled={busy || !!proposal || !text.trim()} aria-label="Send"><Send /></button>
           </form>
+          <label className="ai-note review-toggle"><input type="checkbox" checked={review} onChange={(e) => setReview(e.target.checked)} /> Review changes before applying</label>
           <small className="ai-note">Your CV text is sent to Google Gemini to answer. AI can make mistakes. Check the changes.</small>
         </section>
       )}

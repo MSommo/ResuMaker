@@ -106,6 +106,54 @@ export const deleteResume = async (id: string) => void (await request('DELETE', 
 // AI
 export const improve = (body: { kind: string; text: string; instruction?: string; context?: object }) => json<{ text: string; cached: boolean }>('POST', '/ai/improve', body)
 export const chat = (id: string, message: string) => json<ChatResult>('POST', `/resumes/${id}/chat`, { message })
+/** Changes the assistant proposes in review mode; nothing is applied until `decideProposal`. */
+export interface Proposal {
+  runId: string
+  reply: string
+  items: { index: number; summary: string }[]
+  skipped: string[]
+  changes: string[]
+}
+
+export type ChatEvent =
+  | { type: 'status'; label: string }
+  | { type: 'step'; node: string; detail: string }
+  | { type: 'proposal' } & Proposal
+  | { type: 'done'; result: ChatResult }
+  | { type: 'error'; status: number; message: string }
+
+/**
+ * Streams one assistant turn as Server-Sent Events (a POST, so EventSource can't be used). Calls `onEvent` for every event
+ * and resolves with the final `done` result, or with a `proposal` in review mode. Throws on an `error` event.
+ */
+export async function chatStream(id: string, message: string, mode: 'apply' | 'propose', onEvent: (e: ChatEvent) => void, signal?: AbortSignal): Promise<ChatResult | Proposal> {
+  const res = await request('POST', `/resumes/${id}/chat/stream`, { message, mode }, { signal })
+  if (!res.body) throw new ApiError('Streaming is not supported by this browser.', 0)
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buf = ''
+  let result: ChatResult | Proposal | null = null
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (done) break
+    buf += decoder.decode(value, { stream: true })
+    let end: number
+    while ((end = buf.indexOf('\n\n')) >= 0) {
+      const line = buf.slice(0, end).trim()
+      buf = buf.slice(end + 2)
+      if (!line.startsWith('data:')) continue
+      const ev = JSON.parse(line.slice(5)) as ChatEvent
+      onEvent(ev)
+      if (ev.type === 'error') throw new ApiError(ev.message, ev.status)
+      if (ev.type === 'done') result = ev.result
+      if (ev.type === 'proposal') result = ev
+    }
+  }
+  if (!result) throw new ApiError('The assistant stopped before finishing. Please try again.', 0)
+  return result
+}
+
+export const decideProposal = (id: string, runId: string, accept: 'all' | 'none' | number[]) => json<ChatResult>('POST', `/resumes/${id}/chat/${runId}/decide`, { accept })
 export const chatHistory = (id: string) => json<ChatMessage[]>('GET', `/resumes/${id}/chat`)
 export const clearChat = async (id: string) => void (await request('DELETE', `/resumes/${id}/chat`))
 
