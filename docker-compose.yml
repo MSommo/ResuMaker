@@ -1,0 +1,108 @@
+# ResuMaker, development setup: `docker compose up --build`  →  http://localhost:5173
+# Code is bind-mounted, so edits hot-reload (Vite HMR for the frontend, uvicorn --reload for the API).
+# Host ports are bound to 127.0.0.1 and overridable (WEB_PORT, API_PORT) so they never clash with other local projects.
+name: resumaker
+
+x-api-env: &api-env
+  env_file:
+    - path: .env            # GEMINI_API_KEY lives here; optional so a fresh clone still starts (AI is simply off)
+      required: false
+  environment:
+    DATABASE_URL: postgresql+asyncpg://resumaker:resumaker@db:5432/resumaker
+    REDIS_URL: redis://redis:6379/0
+    FRONTEND_URL: http://web:5173      # headless Chrome in the api container loads the app from here to render PDFs
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: resumaker-postgres
+    environment:
+      POSTGRES_USER: resumaker
+      POSTGRES_PASSWORD: resumaker   # local development only
+      POSTGRES_DB: resumaker
+    ports:
+      - "127.0.0.1:5433:5432"        # for host tools (psql, DB clients); containers use db:5432
+    volumes:
+      - resumaker-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U resumaker -d resumaker"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: resumaker-redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]   # cache only: no persistence needed
+    ports:
+      - "127.0.0.1:6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    <<: *api-env
+    build: ./backend
+    container_name: resumaker-api
+    ports:
+      - "127.0.0.1:${API_PORT:-8100}:8100"
+    volumes:
+      - ./backend:/app
+      - /app/.venv                     # hide the host's (macOS) virtualenv
+      - ./src:/src:ro                  # read by the catalog-parity test
+    shm_size: 1gb                      # Chrome needs more than Docker's default 64MB /dev/shm
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8100/api/status')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: resumaker-web
+    environment:
+      API_URL: http://api:8100         # Vite proxies /api here
+    ports:
+      - "127.0.0.1:${WEB_PORT:-5173}:5173"
+    volumes:
+      - ./src:/app/src
+      - ./public:/app/public
+      - ./index.html:/app/index.html
+      - ./vite.config.ts:/app/vite.config.ts
+      - ./tsconfig.json:/app/tsconfig.json
+      - ./package.json:/app/package.json
+      - ./package-lock.json:/app/package-lock.json
+      - web-node-modules:/app/node_modules
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5173/"]   # not "localhost": Alpine resolves it to ::1, Vite listens on IPv4
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+  # MCP server for Claude Desktop / Claude Code (stdio). Not started by `up`; clients launch it on demand:
+  #   docker compose run --rm -T mcp
+  mcp:
+    <<: *api-env
+    build: ./backend
+    profiles: ["mcp"]
+    command: ["python", "-m", "app.mcp_server"]
+    stdin_open: true
+    volumes:
+      - ./backend:/app
+      - /app/.venv
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+volumes:
+  resumaker-pgdata:
+  web-node-modules:
