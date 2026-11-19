@@ -94,6 +94,8 @@ graph TD;
 
 `make eval-router` runs a golden set of 20 messages (questions vs. edits) against the real fast model (a few cents; excluded from `make test`). It currently scores 20/20.
 
+`make eval-agent` runs 17 end-to-end editing tasks (single edits, multi-part requests, whole-CV rewrites, tailoring to a job posting) through the real graph and checks the resulting CV deterministically (no LLM judge). It reports pass rate, repairs and latency, and writes `backend/.data/eval-report.json`. Baseline with the current single-shot `plan`: 17/17, no repairs, about 4 s per task.
+
 **History and undo.** Every AI, MCP and restore change snapshots the CV first (last 100 kept), and autosaves checkpoint every 15 minutes. Undo restores the snapshot, so it works after a reload. `dryRun` on `/ops` previews changes without saving.
 
 | Endpoint | |

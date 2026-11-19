@@ -198,6 +198,9 @@ test-local: ## Backend tests on the host (needs `make infra`; uses the scratch d
 eval-router: ## Live router accuracy check against real Gemini (uses GEMINI_API_KEY from .env; costs a few cents)
 	cd backend && set -a && . ../.env && set +a && DATABASE_URL=$(SCRATCH_DB) REDIS_URL=$(SCRATCH_REDIS) uv run pytest -m live -s -q tests/test_router_eval.py
 
+eval-agent: ## Live end-to-end eval of the editing agent (13 tasks, real Gemini; prints pass rate, repairs, latency)
+	cd backend && set -a && . ../.env && set +a && DATABASE_URL=$(SCRATCH_DB) REDIS_URL=$(SCRATCH_REDIS) uv run pytest -m live -s -q tests/evals
+
 test-web: ## Frontend unit tests (Markdown helpers), on the host
 	npx vitest run
 
@@ -211,7 +214,7 @@ check: typecheck test-web test ## Type-check + frontend unit tests + backend tes
 
 ##@ MCP server (for Claude Desktop / Claude Code)
 
-.PHONY: eval-router
+.PHONY: eval-router eval-agent
 .PHONY: mcp mcp-local mcp-http
 mcp: ## MCP over stdio, in Docker (what a client config runs)
 	$(COMPOSE) run --rm -T mcp
