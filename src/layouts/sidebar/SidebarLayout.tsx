@@ -29,7 +29,7 @@ function entryPieces(en: Entry): ReactNode[] {
         {en.location && <span className="sb-loc">{en.location}</span>}
       </div>
       {dates && <div className="sb-dates">{dates}</div>}
-      {en.note && <div className="sb-note">{en.note}</div>}
+      {en.note && <div className="sb-note"><Rich text={en.note} /></div>}
     </>
   )
   const body: ReactNode[] = en.description ? paragraphs(en.description, 'sb-text') : []

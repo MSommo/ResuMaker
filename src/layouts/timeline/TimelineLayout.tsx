@@ -65,7 +65,7 @@ function entryPieces(en: Entry, job: boolean): ReactNode[] {
         {entryLine(en, job)}
       </div>
       {dates && <div className="tm-dates">{dates}</div>}
-      {en.note && <div className="tm-note">{en.note}</div>}
+      {en.note && <div className="tm-note"><Rich text={en.note} /></div>}
     </>
   )
   const body: ReactNode[] = en.description ? paragraphs(en.description, 'tm-text') : []

@@ -64,6 +64,12 @@ Frontend dependency changes need a rebuild (`make build-web`) unless you use `HO
 
 **Without Docker for the app:** `make infra` starts just the scratch Postgres and Redis, then `make local-api` and `make local-web` run the API and frontend on the host (needs Node 22+, [uv](https://docs.astral.sh/uv/) and Chrome). Host-side commands default to the **scratch** database, never the frozen one.
 
+## Text formatting
+
+Every text box (profile, descriptions, free-text sections) is **Markdown** (CommonMark + GitHub flavour): headings, **bold**, *italic*, ~~strikethrough~~, `code`, links, bulleted / numbered / task lists (nestable), quotes, tables and rules. The editor has a toolbar, shortcuts (⌘/Ctrl + B, I, K, ⇧X), list continuation on Enter, a Write / Preview toggle and a built-in cheat sheet. Single-line fields (bullets, highlight lines) take inline Markdown only. A single line break is kept as typed.
+
+Rendering is safe by design: raw HTML is never rendered and images are not shown (a CV must not load remote content). Long lists and tables are split into page-breakable blocks, so they flow across PDF pages like any other content. In a bullet list on an entry, a line starting with `# ` is this app's own *subheading* marker (not a Markdown heading). `make test-web` runs the unit tests for the Markdown helpers.
+
 ## Personas and CVs
 
 A **persona** is a person: name, email, phone, address, birth date and place, nationality. A persona owns any number of **CVs**. A CV stores only its own content and its **headline** (the role it targets, e.g. "AI Strategy Lead" vs "Senior Software Engineer"). The personal details are read live from the persona, so editing them in any CV, or on the persona page, updates all of that person's CVs. Deleting a persona deletes its CVs (the UI asks first).

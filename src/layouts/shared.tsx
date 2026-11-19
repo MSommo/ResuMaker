@@ -1,34 +1,22 @@
 import type { ReactNode } from 'react'
+import { splitBlocks } from '../components/markdown/blocks'
+import { Md } from '../components/markdown/Markdown'
 
-/** Renders `**bold**` and `*italic*` inline. */
+/** Inline Markdown (bold, italic, strike, links, code): for single-line fields such as bullets and highlight lines. */
 export function Rich({ text }: { text: string }) {
-  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*\s][^*]*\*)/g)
-  return (
-    <>
-      {parts.map((p, i) =>
-        p.startsWith('**') && p.endsWith('**') && p.length > 4 ? (
-          <strong key={i}>{p.slice(2, -2)}</strong>
-        ) : p.startsWith('*') && p.endsWith('*') && p.length > 2 ? (
-          <em key={i}>{p.slice(1, -1)}</em>
-        ) : (
-          <span key={i}>{p}</span>
-        ),
-      )}
-    </>
-  )
+  return <Md source={text} inline />
 }
 
-/** One <p> per blank-line separated paragraph. */
+/**
+ * Full Markdown, one node per top-level block (a paragraph, a heading, a table, one list item…), so the paginator
+ * can place each on a page separately. `className` gives the layout's text style and spacing.
+ */
 export const paragraphs = (text: string, className: string): ReactNode[] =>
-  text
-    .split(/\n\s*\n/)
-    .map((t) => t.trim())
-    .filter(Boolean)
-    .map((t, i) => (
-      <p key={`p${i}`} className={className}>
-        <Rich text={t} />
-      </p>
-    ))
+  splitBlocks(text).map(({ src, tight }, i) => (
+    <div key={`p${i}`} className={`${className} md${tight ? ' md-item' : ''}`}>
+      <Md source={src} />
+    </div>
+  ))
 
 export type BulletItem = { type: 'heading' | 'bullet'; text: string }
 

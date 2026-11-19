@@ -1,8 +1,11 @@
-import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import { LEVEL_LABEL, uid, type Id } from '../model/types'
 import { NATIONALITIES, countries } from '../model/countries'
 import { useImprove, type ImproveContext, type ImproveSpec } from '../ai/improve'
-import { Bold, Down, Italic, Plus, Trash, Up, Chevron } from './icons'
+import { cycleHeading, insertLink, insertRule, toggleInline, toggleLines } from './markdown/format'
+import { Md } from './markdown/Markdown'
+import { useFormatting, type Transform } from './markdown/useFormatting'
+import { Bold, Chevron, Code, Down, Heading, Italic, LinkIcon, ListOl, ListUl, Plus, Quote, Rule, Strike, Task, Trash, Up } from './icons'
 
 interface FieldProps {
   label: string
@@ -89,45 +92,104 @@ export function CheckField({ label, checked, onChange }: { label: string; checke
 }
 
 /** Textarea with a small formatting toolbar. Stores `**bold**` / `*italic*` markers. */
+const MOD = typeof navigator !== 'undefined' && /mac|iphone|ipad/i.test(navigator.platform) ? '⌘' : 'Ctrl+'
+
+interface Tool {
+  label: string
+  shortcut?: string
+  icon: ReactNode
+  run: Transform
+}
+
+// Grouped: inline · blocks · insert. A `null` is a visual separator.
+const TOOLS: (Tool | null)[] = [
+  { label: 'Bold', shortcut: `${MOD}B`, icon: <Bold />, run: (v, s, e) => toggleInline(v, s, e, '**') },
+  { label: 'Italic', shortcut: `${MOD}I`, icon: <Italic />, run: (v, s, e) => toggleInline(v, s, e, '*') },
+  { label: 'Strikethrough', shortcut: `${MOD}⇧X`, icon: <Strike />, run: (v, s, e) => toggleInline(v, s, e, '~~') },
+  { label: 'Inline code', icon: <Code />, run: (v, s, e) => toggleInline(v, s, e, '`', 'code') },
+  null,
+  { label: 'Heading (click again for a smaller one)', icon: <Heading />, run: cycleHeading },
+  { label: 'Bulleted list', icon: <ListUl />, run: (v, s, e) => toggleLines(v, s, e, 'ul') },
+  { label: 'Numbered list', icon: <ListOl />, run: (v, s, e) => toggleLines(v, s, e, 'ol') },
+  { label: 'Task list', icon: <Task />, run: (v, s, e) => toggleLines(v, s, e, 'task') },
+  { label: 'Quote', icon: <Quote />, run: (v, s, e) => toggleLines(v, s, e, 'quote') },
+  null,
+  { label: 'Link', shortcut: `${MOD}K`, icon: <LinkIcon />, run: insertLink },
+  { label: 'Horizontal rule', icon: <Rule />, run: insertRule },
+]
+
+function MarkdownHelp() {
+  return (
+    <details className="md-help">
+      <summary>Markdown help</summary>
+      <div>
+        <p>Markdown works in every text box. A blank line starts a new paragraph; a single line break is kept as typed.</p>
+        <dl>
+          <dt><code>**bold**</code> <code>*italic*</code> <code>~~strike~~</code> <code>`code`</code></dt>
+          <dd>Inline styles</dd>
+          <dt><code>## Heading</code> <code>### Smaller</code></dt>
+          <dd>Headings (start the line with #)</dd>
+          <dt><code>- item</code> <code>1. item</code> <code>- [ ] task</code></dt>
+          <dd>Lists; indent two spaces to nest. Enter continues a list, Enter on an empty item ends it.</dd>
+          <dt><code>&gt; quote</code> <code>---</code></dt>
+          <dd>Quote, horizontal rule</dd>
+          <dt><code>[text](https://…)</code></dt>
+          <dd>Link (<code>{MOD}K</code>). Images and raw HTML are not shown.</dd>
+          <dt><code>| a | b |</code> + <code>|---|---|</code> rows</dt>
+          <dd>Tables</dd>
+        </dl>
+      </div>
+    </details>
+  )
+}
+
+/** Markdown textarea: full toolbar, keyboard shortcuts, list continuation and a live preview. */
 export function RichTextField({ label, hint, className, value, onChange, rows = 4, improve }: FieldProps & { value: string; onChange: (v: string) => void; rows?: number; improve?: ImproveSpec }) {
   const id = useId()
-  const ref = useRef<HTMLTextAreaElement>(null)
+  const [mode, setMode] = useState<'write' | 'preview'>('write')
   const ai = useImprove(improve, value, onChange)
-
-  const wrap = (marker: string) => {
-    const el = ref.current
-    if (!el) return
-    const { selectionStart: a, selectionEnd: b } = el
-    const sel = value.slice(a, b)
-    const already = sel.startsWith(marker) && sel.endsWith(marker) && sel.length >= marker.length * 2
-    const next = already
-      ? value.slice(0, a) + sel.slice(marker.length, -marker.length) + value.slice(b)
-      : value.slice(0, a) + marker + (sel || 'text') + marker + value.slice(b)
-    onChange(next)
-    const start = a + (already ? 0 : marker.length)
-    const end = start + (already ? sel.length - marker.length * 2 : sel ? sel.length : 4)
-    requestAnimationFrame(() => {
-      el.focus()
-      el.setSelectionRange(start, end)
-    })
-  }
-  const onKey = (e: KeyboardEvent) => {
-    if (!(e.metaKey || e.ctrlKey)) return
-    if (e.key === 'b') (e.preventDefault(), wrap('**'))
-    if (e.key === 'i') (e.preventDefault(), wrap('*'))
-  }
+  const { ref, apply, onKeyDown } = useFormatting(value, onChange)
+  const writing = mode === 'write'
 
   return (
     <Wrap {...{ label, hint, className, id }} below={ai.panel}>
       <div className="rich">
         <div className="rich-bar" role="toolbar" aria-label="Formatting">
-          <button type="button" onClick={() => wrap('**')} title="Bold (Ctrl/⌘ B)" aria-label="Bold"><Bold /></button>
-          <button type="button" onClick={() => wrap('*')} title="Italic (Ctrl/⌘ I)" aria-label="Italic"><Italic /></button>
-          <span>Blank line = new paragraph</span>
+          <div className="rich-tools">
+            {TOOLS.map((t, i) =>
+              t ? (
+                <button
+                  key={t.label}
+                  type="button"
+                  disabled={!writing}
+                  // Keep the selection in the textarea while the button is pressed.
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => apply(t.run)}
+                  title={t.shortcut ? `${t.label} (${t.shortcut})` : t.label}
+                  aria-label={t.label}
+                >
+                  {t.icon}
+                </button>
+              ) : (
+                <span key={`sep${i}`} className="rich-sep" aria-hidden />
+              ),
+            )}
+          </div>
+          <div className="rich-mode" role="group" aria-label="Editor mode">
+            <button type="button" aria-pressed={writing} onClick={() => setMode('write')}>Write</button>
+            <button type="button" aria-pressed={!writing} onClick={() => setMode('preview')}>Preview</button>
+          </div>
           {ai.trigger}
         </div>
-        <textarea id={id} ref={ref} rows={rows} value={value} onChange={(e) => onChange(e.target.value)} onKeyDown={onKey} />
+        {writing ? (
+          <textarea id={id} ref={ref} rows={rows} value={value} onChange={(e) => onChange(e.target.value)} onKeyDown={onKeyDown} spellCheck />
+        ) : (
+          <div id={id} className="md-preview" aria-live="polite">
+            {value.trim() ? <div className="md"><Md source={value} /></div> : <p className="md-empty">Nothing to preview yet.</p>}
+          </div>
+        )}
       </div>
+      <MarkdownHelp />
     </Wrap>
   )
 }
@@ -207,12 +269,13 @@ function BulletRow({ heading, text, context, onChange, onToggle, tools }: {
   tools: ReactNode
 }) {
   const ai = useImprove({ kind: heading ? 'subheading' : 'bullet', context }, text, onChange)
+  const { ref, onKeyDown } = useFormatting(text, onChange, { lists: false }) // bold/italic/link shortcuts; a bullet is one line
   return (
     <div className={`brow ${heading ? 'is-heading' : ''}`}>
       <button type="button" className="btype" onClick={onToggle} title={heading ? 'Subheading (click to make a bullet)' : 'Bullet (click to make a subheading)'} aria-label={heading ? 'Subheading' : 'Bullet'}>
         {heading ? 'H' : '•'}
       </button>
-      <textarea rows={heading ? 1 : 2} value={text} placeholder={heading ? 'Subheading' : 'What did you do or achieve? Use **bold** for key terms.'} onChange={(e) => onChange(e.target.value)} aria-label={heading ? 'Subheading text' : 'Bullet text'} />
+      <textarea ref={ref} rows={heading ? 1 : 2} value={text} placeholder={heading ? 'Subheading' : 'What did you do or achieve? Inline Markdown works: **bold**, *italic*, [link](https://…)'} onChange={(e) => onChange(e.target.value)} onKeyDown={onKeyDown} aria-label={heading ? 'Subheading text' : 'Bullet text'} />
       <span className="item-tools">
         {ai.trigger}
         {tools}

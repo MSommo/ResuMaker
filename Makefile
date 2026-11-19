@@ -187,7 +187,7 @@ logs-redis: ## Follow Redis logs
 
 ##@ Tests and checks
 
-.PHONY: test test-local typecheck web-build check
+.PHONY: test test-local test-web typecheck web-build check
 test: ## Backend tests in a container built from the working tree (own test DB + Redis db 15 on the scratch stack)
 	$(COMPOSE) build api
 	$(COMPOSE) run --rm -T -v "$(CURDIR)/src:/src:ro" api pytest -q
@@ -195,13 +195,16 @@ test: ## Backend tests in a container built from the working tree (own test DB +
 test-local: ## Backend tests on the host (needs `make infra`; uses the scratch database)
 	cd backend && DATABASE_URL=$(SCRATCH_DB) REDIS_URL=$(SCRATCH_REDIS) uv run pytest -q
 
+test-web: ## Frontend unit tests (Markdown helpers), on the host
+	npx vitest run
+
 typecheck: ## TypeScript type-check
 	npx tsc -b
 
 web-build: ## Production build of the frontend into dist/
 	npm run build
 
-check: typecheck test ## Type-check + backend tests
+check: typecheck test-web test ## Type-check + frontend unit tests + backend tests
 
 ##@ MCP server (for Claude Desktop / Claude Code)
 

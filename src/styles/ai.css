@@ -6,7 +6,6 @@
 .ai-btn:hover:not(:disabled), .ai-btn.on { background: var(--accent); color: #fff; }
 .ai-btn:disabled { opacity: 0.45; cursor: default; }
 .rich-bar .ai-btn { display: inline-flex; width: auto; height: auto; margin-left: 8px; padding: 2px 9px; border-radius: 99px; font-size: 12px; }
-.rich-bar span { margin-left: auto; }
 .item-tools .ai-btn { width: auto; height: 22px; padding: 0 6px; border-radius: 6px; }
 .item-tools .ai-btn span { display: none; }
 .item-tools .ai-btn:hover:not(:disabled) { color: #fff; background: var(--accent); }

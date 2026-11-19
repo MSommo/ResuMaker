@@ -22,6 +22,15 @@ export const Expand = (p: P) => <I {...p}><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M2
 export const Layers = (p: P) => <I {...p}><path d="M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5" /></I>
 export const Bold = (p: P) => <I {...p} strokeWidth="2.4"><path d="M7 5h6a3.5 3.5 0 0 1 0 7H7zM7 12h7a3.5 3.5 0 0 1 0 7H7z" /></I>
 export const Italic = (p: P) => <I {...p}><path d="M10 5h8M6 19h8M14 5l-4 14" /></I>
+export const Strike = (p: P) => <I {...p}><path d="M5 12h14M16.5 7.5C15.5 6 13.9 5 12 5c-2.500 0-4.200 1.300-4.200 3.200 0 1.500 1 2.400 2.700 3M8 16.500C8.900 18 10.300 19 12.300 19c2.600 0 4.200-1.300 4.200-3.100 0-.7-.2-1.200-.6-1.700" /></I>
+export const Heading = (p: P) => <I {...p}><path d="M6 5v14M18 5v14M6 12h12" /></I>
+export const ListUl = (p: P) => <I {...p}><path d="M9 6h11M9 12h11M9 18h11" /><circle cx="4.500" cy="6" r="1" /><circle cx="4.500" cy="12" r="1" /><circle cx="4.500" cy="18" r="1" /></I>
+export const ListOl = (p: P) => <I {...p}><path d="M10 6h10M10 12h10M10 18h10M4 5l1.500-1v5M3.500 13.500c.5-1 2.500-1 2.500.3 0 1-1.500 1.500-2.500 2.700H6M3.500 19.500c1 .5 2.500.2 2.500-.7 0-.7-.7-1-1.500-1 .8 0 1.300-.3 1.300-.9 0-.9-1.700-1.200-2.300-.5" /></I>
+export const Task = (p: P) => <I {...p}><rect x="4" y="4" width="16" height="16" rx="3" /><path d="M8.500 12l2.500 2.500 4.500-5" /></I>
+export const Quote = (p: P) => <I {...p}><path d="M5 17V11a4 4 0 0 1 4-4M14 17V11a4 4 0 0 1 4-4M5 17h4v-4H5zM14 17h4v-4h-4z" /></I>
+export const LinkIcon = (p: P) => <I {...p}><path d="M10 14a4 4 0 0 0 5.700 0l3-3a4 4 0 0 0-5.700-5.700l-1 1M14 10a4 4 0 0 0-5.700 0l-3 3a4 4 0 0 0 5.700 5.700l1-1" /></I>
+export const Code = (p: P) => <I {...p}><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M14 5l-4 14" /></I>
+export const Rule = (p: P) => <I {...p}><path d="M4 12h16M8 7h8M8 17h8" strokeDasharray="0.1 0" /></I>
 export const More = (p: P) => <I {...p}><circle cx="5" cy="12" r="1.2" /><circle cx="12" cy="12" r="1.2" /><circle cx="19" cy="12" r="1.2" /></I>
 export const Download = (p: P) => <I {...p}><path d="M12 4v11M7 11l5 5 5-5M5 20h14" /></I>
 export const Sparkle = (p: P) => <I {...p}><path d="M12 3l1.8 5.2L19 10l-5.200 1.800L12 17l-1.800-5.200L5 10l5.200-1.800zM19 16l.8 2.200L22 19l-2.200.8L19 22l-.8-2.200L16 19l2.200-.8z" /></I>

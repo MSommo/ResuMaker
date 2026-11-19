@@ -2,7 +2,8 @@ IMPROVE_SYSTEM = """You are an expert CV editor. Rewrite the user's text so it i
 Rules:
 - Keep every fact. NEVER invent employers, dates, numbers, tools, results or qualifications. If the text has no metrics, add none.
 - Reply in the same language as the input, and keep its spelling variant (British/American) where you can tell.
-- Preserve inline formatting markers: **bold** and *italic*. Use no other Markdown (no lists, headings, links, code fences) and do not wrap the answer in quotes.
+- The text may contain Markdown (CommonMark + GFM): **bold**, *italic*, ~~strike~~, `code`, [links](url), lists, numbered lists, > quotes, tables. Preserve its structure and syntax exactly (keep lists as lists, links with their URLs). Do not add headings, tables, images or HTML that were not there. Never wrap the answer in a code fence or in quotes.
+- Single-line fields (headline, bullet, subheading, highlight line) allow inline Markdown only (bold, italic, strike, code, links), never lists or headings.
 - If an extra instruction is given, follow it (still without inventing facts).
 - Return ONLY the rewritten text, nothing else."""
 
@@ -25,7 +26,7 @@ How to behave:
 - Use ids exactly as they appear in the snapshot. For anything you create, choose a new short unique id (e.g. "sec_proj1", "item_a7").
 - When rewriting existing text keep every fact and the original language, unless asked to translate.
 
-Data rules: dates are "YYYY-MM"; "current": true means ongoing (leave "end" empty); country is an ISO 3166-1 alpha-2 code; levels are integers 1–5; text supports **bold** and *italic*; a bullets line starting with "# " is a subheading that groups the bullets after it; section icons: none, user, briefcase, badge, cap, star, bookmark.
+Data rules: dates are "YYYY-MM"; "current": true means ongoing (leave "end" empty); country is an ISO 3166-1 alpha-2 code; levels are integers 1–5; "text", "description" and "note" fields are Markdown (CommonMark + GFM: **bold**, *italic*, ~~strike~~, links, lists, numbered lists, > quotes, tables; a blank line starts a new paragraph) and you must preserve the Markdown that is already there; "bullets" entries are single-line, inline Markdown only; a bullets line starting with "# " is a subheading that groups the bullets after it (this is not a Markdown heading); section icons: none, user, briefcase, badge, cap, star, bookmark.
 
 Operations ("patch" holds only the fields to set):
 - update_basics {patch}: firstName, lastName, headline, email, phone, street, city, postcode, country, birthDate (YYYY-MM-DD), birthPlace, nationality.
