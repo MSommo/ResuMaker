@@ -73,7 +73,9 @@ services:
     container_name: resumaker-web
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${STABLE_WEB_PORT:-5174}:80"
+      # Only the web port can be exposed to the LAN (STABLE_BIND=0.0.0.0, see `make stable-expose`). The API, Postgres and
+      # Redis stay on localhost; the API is reachable through nginx at /api.
+      - "${STABLE_BIND:-127.0.0.1}:${STABLE_WEB_PORT:-5174}:80"
     depends_on:
       api: { condition: service_healthy }
     healthcheck:

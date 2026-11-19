@@ -12,10 +12,14 @@ API_PORT ?= 8100
 export WEB_PORT API_PORT          # docker-compose.yml reads these for the published host ports
 
 # The frozen stack (docker-compose.stable.yml): pre-built images from a git tag, no bind mounts, your real data.
+-include stable.env               # local, git-ignored: written by `make stable-expose` / `stable-hide`
 STABLE_TAG      ?= stable-1
 STABLE_WEB_PORT ?= 5174
+STABLE_BIND     ?= 127.0.0.1      # 0.0.0.0 = reachable from the local network
 STABLE          := docker compose -f docker-compose.stable.yml
-export STABLE_TAG STABLE_WEB_PORT
+LAN_IP          := $(shell ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || hostname -I 2>/dev/null | awk '{print $$1}')
+LAN_NAME        := $(shell scutil --get LocalHostName 2>/dev/null)
+export STABLE_TAG STABLE_WEB_PORT STABLE_BIND
 
 ##@ Help
 
@@ -28,7 +32,7 @@ help: ## Show this help
 
 ##@ Frozen stack (the stable build, with your real data: no hot reload, immune to edits in this repo)
 
-.PHONY: stable-build stable-up stable-down stable-restart stable-ps stable-logs stable-status stable-backup stable-mcp
+.PHONY: stable-build stable-up stable-expose stable-hide stable-down stable-restart stable-ps stable-logs stable-status stable-backup stable-mcp
 stable-build: ## Build the frozen images from git tag STABLE_TAG (committed code only, never the working tree)
 	@git rev-parse --verify --quiet refs/tags/$(STABLE_TAG) >/dev/null || { echo "No git tag '$(STABLE_TAG)'."; exit 1; }
 	git archive $(STABLE_TAG):backend | docker build -t resumaker-api:$(STABLE_TAG) -
@@ -37,7 +41,19 @@ stable-build: ## Build the frozen images from git tag STABLE_TAG (committed code
 stable-up: ## Start / update the frozen stack (http://localhost:STABLE_WEB_PORT)
 	@$(MAKE) --no-print-directory check-ports WEB_PORT=$(STABLE_WEB_PORT) MAKECMDGOALS=stable-up
 	$(STABLE) up -d --wait --remove-orphans
-	@echo; echo "  Frozen app  http://localhost:$(STABLE_WEB_PORT)   (build: $(STABLE_TAG))"; echo
+	@echo; echo "  Frozen app  http://localhost:$(STABLE_WEB_PORT)   (build: $(STABLE_TAG))"
+	@if [ "$(STABLE_BIND)" = "0.0.0.0" ]; then \
+		echo "  On the LAN  http://$(LAN_IP):$(STABLE_WEB_PORT)$(if $(LAN_NAME),   or   http://$(LAN_NAME).local:$(STABLE_WEB_PORT))"; \
+		echo "  ⚠ Exposed: there is no login, so anyone on this network can read and edit every CV."; \
+	fi; echo
+
+stable-expose: ## Make the frozen app reachable from the local network (web port only; persists in stable.env)
+	@echo "STABLE_BIND=0.0.0.0" > stable.env
+	@$(MAKE) --no-print-directory stable-up STABLE_BIND=0.0.0.0
+
+stable-hide: ## Back to localhost-only
+	@echo "STABLE_BIND=127.0.0.1" > stable.env
+	@$(MAKE) --no-print-directory stable-up STABLE_BIND=127.0.0.1
 
 stable-down: ## Stop the frozen stack (containers removed, data kept)
 	$(STABLE) down
