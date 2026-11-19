@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
 
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from psycopg.rows import dict_row
+from psycopg_pool import AsyncConnectionPool
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -43,13 +47,43 @@ class Infra:
         await asyncio.to_thread(run_migrations)  # alembic drives its own event loop, so it gets its own thread
         self.redis = Redis.from_url(s.redis_url)
         self.cache = Cache(self.redis)
-        self.llm: LLM | None = self._llm_override or (GeminiLLM(s.gemini_api_key, s.gemini_model) if s.gemini_api_key else None)
+        self.llm: LLM | None = self._llm_override or (GeminiLLM(s.gemini_api_key, s.gemini_model, s.gemini_fast_model or None) if s.gemini_api_key else None)
+
+        # LangGraph's own tables (checkpoints) live in the same database but are created and versioned by the library,
+        # not by Alembic (migrations/env.py ignores them). Runs that pause for review are stored here.
+        self._pool = AsyncConnectionPool(
+            s.database_url.replace("postgresql+asyncpg://", "postgresql://"),
+            kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
+            min_size=1, max_size=4, open=False,
+        )
+        await self._pool.open()
+        self.checkpointer = AsyncPostgresSaver(self._pool)  # type: ignore[arg-type]
+        await self.checkpointer.setup()
+        await self._prune_stale_proposals()
+
+        # Two compiled copies of the same graph: plain runs are not persisted (no point storing a CV snapshot per message);
+        # runs in "propose" mode use the checkpointer so a pending review survives restarts.
         self.graph = build_graph(self.llm) if self.llm else None
+        self.graph_hitl = build_graph(self.llm, checkpointer=self.checkpointer) if self.llm else None
         self.pdf = PdfRenderer(s.chrome_path, s.chrome_no_sandbox)
         return self
 
+    async def _prune_stale_proposals(self, days: int = 7) -> None:
+        """Proposals nobody accepted or rejected would otherwise stay in Postgres forever. Best effort."""
+        try:
+            async with self._pool.connection() as conn:
+                cur = await conn.execute(
+                    "select distinct thread_id from checkpoints where (checkpoint->>'ts')::timestamptz < now() - make_interval(days => %s)", (days,)
+                )
+                stale = [r["thread_id"] for r in await cur.fetchall()]
+            for thread_id in stale:
+                await self.checkpointer.adelete_thread(thread_id)
+        except Exception as e:  # noqa: BLE001
+            logging.getLogger("resumaker.infra").warning("could not prune old proposals: %s", e)
+
     async def stop(self) -> None:
         await self.pdf.close()
+        await self._pool.close()
         await self.redis.aclose()
         await self.engine.dispose()
 

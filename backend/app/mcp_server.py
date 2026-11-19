@@ -27,7 +27,7 @@ from .infra import Infra
 from .services import personas as people
 from .services import resumes as repo
 from .services import versions
-from .services.chat import run_chat
+from .services.chat import ProposalGone, decide, run_chat, stream_chat
 from .services.improve import improve_text
 
 _infra: Infra | None = None
@@ -206,14 +206,54 @@ async def improve_text_tool(text: str, kind: str = "text", instruction: str = ""
 
 @mcp.tool()
 async def ask_assistant(resume_id: str, instruction: str) -> dict[str, Any]:
-    """Delegate a natural-language request to ResuMaker's own LangGraph editing agent (plan → apply → repair). It edits the CV directly."""
+    """Delegate a natural-language request to ResuMaker's own LangGraph agent (route → plan → apply → repair). It edits the CV
+    directly and returns "undoVersionId" (pass it to restore_version to undo). Questions are answered without changing anything.
+    To review changes before they are applied, use propose_changes instead."""
     try:
         out = await run_chat(infra(), _uuid(resume_id), instruction)
     except repo.NotFound:
         raise ValueError("CV not found.") from None
     except LLMError as e:
         raise ValueError(str(e)) from None
-    return {"reply": out.reply, "applied": out.applied, "skipped": out.skipped, "version": out.row.version}
+    return {"reply": out.reply, "applied": out.applied, "skipped": out.skipped, "changes": out.changes, "version": out.row.version, "undoVersionId": out.undo_version_id}
+
+
+@mcp.tool()
+async def propose_changes(resume_id: str, instruction: str) -> dict[str, Any]:
+    """Like ask_assistant, but NOTHING is changed yet: the agent plans and validates the changes, then pauses. You get
+    "runId" and a numbered list of "items". Show them to the user, then call decide_proposal with the ones to keep.
+    If the request was only a question there is nothing to review and you get the answer in "reply" directly."""
+    try:
+        async for ev in stream_chat(infra(), _uuid(resume_id), instruction, "propose"):
+            if ev["type"] == "proposal":
+                return {k: ev[k] for k in ("runId", "reply", "items", "skipped", "changes")}
+            if ev["type"] == "done":
+                o = ev["outcome"]
+                return {"reply": o.reply, "items": [], "changes": o.changes, "version": o.row.version}
+    except repo.NotFound:
+        raise ValueError("CV not found.") from None
+    except LLMError as e:
+        raise ValueError(str(e)) from None
+    raise ValueError("The assistant did not finish.")
+
+
+@mcp.tool()
+async def decide_proposal(resume_id: str, run_id: str, accept: list[int] | str = "all") -> dict[str, Any]:
+    """Apply a proposal from propose_changes. accept: "all", "none", or the list of item indices to keep (e.g. [0, 2]).
+    A proposal can be decided once; if the CV changed in the meantime this fails and you should propose again."""
+    if isinstance(accept, str) and accept not in ("all", "none"):
+        raise ValueError('accept must be "all", "none" or a list of item indices.')
+    try:
+        out = await decide(infra(), _uuid(resume_id), run_id, accept)
+    except ProposalGone:
+        raise ValueError("This proposal was already decided, or has expired. Propose again.") from None
+    except repo.VersionConflict:
+        raise ValueError("The CV changed while the proposal was waiting. Propose again.") from None
+    except repo.NotFound:
+        raise ValueError("CV not found.") from None
+    except LLMError as e:
+        raise ValueError(str(e)) from None
+    return {"reply": out.reply, "applied": out.applied, "changes": out.changes, "version": out.row.version, "undoVersionId": out.undo_version_id}
 
 
 @mcp.tool()

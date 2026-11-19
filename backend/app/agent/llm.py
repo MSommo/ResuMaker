@@ -18,9 +18,11 @@ class LLMError(Exception):
 
 
 class LLM(Protocol):
-    async def text(self, *, system: str, prompt: str, temperature: float = 0.5) -> str: ...
+    """`fast=True` selects the cheaper model, for small decisions (routing, classification) where quality headroom is wasted."""
 
-    async def json(self, *, system: str, contents: list[dict[str, Any]], schema: type[T], temperature: float = 0.3) -> T: ...
+    async def text(self, *, system: str, prompt: str, temperature: float = 0.5, fast: bool = False) -> str: ...
+
+    async def json(self, *, system: str, contents: list[dict[str, Any]], schema: type[T], temperature: float = 0.3, fast: bool = False) -> T: ...
 
 
 def _contents(items: list[dict[str, Any]]) -> list[types.Content]:
@@ -28,15 +30,18 @@ def _contents(items: list[dict[str, Any]]) -> list[types.Content]:
 
 
 class GeminiLLM:
-    def __init__(self, api_key: str, model: str):
+    def __init__(self, api_key: str, model: str, fast_model: str | None = None):
         self.model = model
+        self.fast_model = fast_model or model
         self.client = genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=60_000, api_version="v1beta"))
 
-    async def _generate(self, *, system: str, contents: Any, **config: Any) -> types.GenerateContentResponse:
+    async def _generate(self, *, system: str, contents: Any, fast: bool = False, **config: Any) -> types.GenerateContentResponse:
+        model = self.fast_model if fast else self.model
+
         async def go(thinking: bool) -> types.GenerateContentResponse:
             extra = {"thinking_config": types.ThinkingConfig(thinking_level=types.ThinkingLevel.LOW)} if thinking else {}
             cfg = types.GenerateContentConfig(system_instruction=system, **config, **extra)
-            return await self.client.aio.models.generate_content(model=self.model, contents=contents, config=cfg)
+            return await self.client.aio.models.generate_content(model=model, contents=contents, config=cfg)
 
         try:
             try:
@@ -59,13 +64,13 @@ class GeminiLLM:
             raise LLMError("Gemini’s safety filters blocked this request." if blocked else "Gemini returned an empty answer.")
         return text
 
-    async def text(self, *, system: str, prompt: str, temperature: float = 0.5) -> str:
-        resp = await self._generate(system=system, contents=prompt, temperature=temperature)
+    async def text(self, *, system: str, prompt: str, temperature: float = 0.5, fast: bool = False) -> str:
+        resp = await self._generate(system=system, contents=prompt, temperature=temperature, fast=fast)
         return self._check(resp)
 
-    async def json(self, *, system: str, contents: list[dict[str, Any]], schema: type[T], temperature: float = 0.3) -> T:
+    async def json(self, *, system: str, contents: list[dict[str, Any]], schema: type[T], temperature: float = 0.3, fast: bool = False) -> T:
         resp = await self._generate(
-            system=system, contents=_contents(contents), temperature=temperature,
+            system=system, contents=_contents(contents), temperature=temperature, fast=fast,
             response_mime_type="application/json", response_schema=schema,
         )
         raw = self._check(resp)

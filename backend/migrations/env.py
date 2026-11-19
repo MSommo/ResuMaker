@@ -9,9 +9,17 @@ from app.db import Base
 
 target_metadata = Base.metadata
 
+# LangGraph's checkpointer creates and versions these tables itself. Without this, `alembic revision --autogenerate`
+# would see them as "tables not in the models" and propose dropping them.
+LIBRARY_TABLES = {"checkpoints", "checkpoint_blobs", "checkpoint_writes", "checkpoint_migrations"}
+
+
+def _include_object(obj, name, type_, reflected, compare_to):
+    return not (type_ == "table" and name in LIBRARY_TABLES)
+
 
 def _run(connection):
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(connection=connection, target_metadata=target_metadata, include_object=_include_object)
     with context.begin_transaction():
         # Two processes (API + MCP) may start together: only one migrates at a time. Released when the transaction ends.
         connection.execute(text("select pg_advisory_xact_lock(727274)"))

@@ -116,6 +116,17 @@ class ChatIn(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
 
 
+class ChatStreamIn(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+    # "propose": don't change the CV yet; stream a proposal to accept or reject (POST .../chat/{runId}/decide).
+    mode: Literal["apply", "propose"] = "apply"
+
+
+class DecideIn(BaseModel):
+    # "all", "none", or the indices (from the proposal's `items`) of the changes to keep.
+    accept: Literal["all", "none"] | list[int] = "all"
+
+
 class ChatMessageOut(BaseModel):
     id: str
     role: str

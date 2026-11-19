@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import html
+import json
+import logging
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..agent.graph import MAX_REPAIRS, NODE_DOCS, build_graph
@@ -17,7 +19,7 @@ from ..infra import Infra
 from ..services import personas as people
 from ..services import resumes as repo
 from ..services import versions as vers
-from ..services.chat import run_chat
+from ..services.chat import ProposalGone, decide, run_chat, stream_chat
 from ..services.improve import improve_text
 from . import schemas as sc
 from .deps import get_infra, get_session, parse_id, rate_limit
@@ -227,10 +229,61 @@ async def chat(resume_id: str, body: sc.ChatIn, infra: Infra = Depends(get_infra
         raise HTTPException(409, "The CV changed while the assistant was working. Please try again.") from None
     except LLMError as e:
         raise HTTPException(e.status, str(e)) from e
+    return _chat_out(out)
+
+
+def _chat_out(out) -> sc.ChatOut:
     return sc.ChatOut(
         reply=out.reply, applied=out.applied, skipped=out.skipped, changes=out.changes, messageId=out.message_id,
         undoVersionId=out.undo_version_id, resume=sc.ResumeOut.of(out.row, out.persona),
     )
+
+
+def _sse(event: dict) -> str:
+    return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+
+@router.post("/resumes/{resume_id}/chat/stream", dependencies=[Depends(rate_limit)])
+async def chat_stream(resume_id: str, body: sc.ChatStreamIn, infra: Infra = Depends(get_infra)):
+    """The assistant turn as Server-Sent Events: `status` (what it is doing now), `step` (a graph node finished), then
+    `done` with the result, or `proposal` (mode=propose: nothing is changed until you POST .../chat/{runId}/decide), or `error`."""
+    _ai(infra)
+    rid = parse_id(resume_id)
+    async with infra.session() as s:
+        await _row(s, resume_id)  # 404 as a normal JSON error before the stream starts
+
+    async def events():
+        try:
+            async for ev in stream_chat(infra, rid, body.message, body.mode):
+                if ev["type"] == "done":
+                    ev = {"type": "done", "result": _chat_out(ev["outcome"]).model_dump(mode="json")}
+                yield _sse(ev)
+        except repo.VersionConflict:
+            yield _sse({"type": "error", "status": 409, "message": "The CV changed while the assistant was working. Please try again."})
+        except LLMError as e:
+            yield _sse({"type": "error", "status": e.status, "message": str(e)})
+        except Exception:  # noqa: BLE001  never leave a stream hanging without telling the client
+            logging.getLogger("resumaker.api").exception("chat stream failed")
+            yield _sse({"type": "error", "status": 500, "message": "Something went wrong while the assistant was working."})
+
+    return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@router.post("/resumes/{resume_id}/chat/{run_id}/decide", response_model=sc.ChatOut, dependencies=[Depends(rate_limit)])
+async def chat_decide(resume_id: str, run_id: str, body: sc.DecideIn, infra: Infra = Depends(get_infra)):
+    """Accept all, none, or some of the changes in a proposal. Resumes the paused run (stored in Postgres)."""
+    _ai(infra)
+    try:
+        out = await decide(infra, parse_id(resume_id), run_id, body.accept)
+    except ProposalGone:
+        raise HTTPException(410, "This proposal was already decided, or has expired. Ask again.") from None
+    except repo.NotFound:
+        raise HTTPException(404, "CV not found.") from None
+    except repo.VersionConflict:
+        raise HTTPException(409, "The CV was changed while you were reviewing. Ask again to get a fresh proposal.") from None
+    except LLMError as e:
+        raise HTTPException(e.status, str(e)) from e
+    return _chat_out(out)
 
 
 @router.get("/resumes/{resume_id}/chat", response_model=list[sc.ChatMessageOut])

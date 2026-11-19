@@ -18,7 +18,9 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from app.agent.graph import AgentPlan
+from app.agent.graph import AgentPlan, Route
+from app.agent.llm import LLMError
+from app.agent.prompts import ANSWER_SYSTEM
 from app.config import get_settings
 from app.infra import Infra
 from app.main import create_app
@@ -27,20 +29,42 @@ HEADERS = {"x-resumaker": "1"}
 
 
 class FakeLLM:
-    """Scripted stand-in for Gemini: records calls and replays queued plans."""
+    """Scripted stand-in for Gemini: records calls and replays queued plans, routes and answers.
+
+    Unscripted, the router says "edit" and answers are a fixed sentence, so tests only script what they care about.
+    `json_calls` counts planning calls (plan + repair) only; routing is counted separately in `route_calls`.
+    """
 
     def __init__(self):
-        self.text_calls: list[str] = []
+        self.text_calls: list[str] = []  # Improve prompts
         self.plans: list[AgentPlan] = []
+        self.routes: list[Route | Exception] = []
+        self.answers: list[str] = []
         self.json_calls = 0
+        self.route_calls = 0
+        self.answer_calls = 0
+        self.fast_flags: list[bool] = []
 
-    async def text(self, *, system: str, prompt: str, temperature: float = 0.5) -> str:
+    async def text(self, *, system: str, prompt: str, temperature: float = 0.5, fast: bool = False) -> str:
+        if system == ANSWER_SYSTEM:
+            self.answer_calls += 1
+            return self.answers.pop(0) if self.answers else "Here is some advice."
         self.text_calls.append(prompt)
         return "Improved text."
 
-    async def json(self, *, system, contents, schema, temperature=0.3):
+    async def json(self, *, system, contents, schema, temperature=0.3, fast=False):
+        if schema is Route:
+            self.route_calls += 1
+            self.fast_flags.append(fast)
+            nxt = self.routes.pop(0) if self.routes else Route(intent="edit", reason="test default")
+            if isinstance(nxt, Exception):
+                raise nxt
+            return nxt
         self.json_calls += 1
-        return self.plans.pop(0)
+        nxt = self.plans.pop(0)
+        if isinstance(nxt, Exception):
+            raise nxt
+        return nxt
 
 
 class FakePdf:
@@ -88,9 +112,9 @@ async def infra():
 async def client(infra):
     app = create_app(infra)
     app.state.infra = infra  # ASGITransport doesn't run lifespan; infra is already started
-    infra.llm.plans.clear()
-    infra.llm.text_calls.clear()
-    infra.llm.json_calls = 0
+    llm = infra.llm
+    llm.plans.clear(), llm.routes.clear(), llm.answers.clear(), llm.text_calls.clear(), llm.fast_flags.clear()
+    llm.json_calls = llm.route_calls = llm.answer_calls = 0
     infra.pdf.renders = 0
     infra.settings.ai_rate_limit_per_min = 1000
     await infra.redis.flushdb()
