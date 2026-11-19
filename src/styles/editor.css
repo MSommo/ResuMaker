@@ -101,3 +101,6 @@
   .tb-layout span { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .drawer, .zone { transition: none; } }
+
+.save-state { font-size: 12.5px; color: var(--muted); }
+.save-state.error, .save-state.conflict { color: var(--danger); }

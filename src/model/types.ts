@@ -68,6 +68,15 @@ export interface Basics {
   nationality: string
 }
 
+/** Who the person is: stored once on the persona and shared by all of their CVs. */
+export type PersonalDetails = Omit<Basics, 'headline'>
+
+/** The persona's part of a CV's basics (everything except the CV's own headline). */
+export const personalOf = (b: Basics): PersonalDetails => {
+  const { headline: _headline, ...rest } = b
+  return rest
+}
+
 export type SectionKind = 'details' | 'text' | 'entries' | 'levels' | 'links'
 
 export type IconId = 'none' | 'user' | 'briefcase' | 'badge' | 'cap' | 'star' | 'bookmark'

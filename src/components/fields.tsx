@@ -1,6 +1,7 @@
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { LEVEL_LABEL, uid, type Id } from '../model/types'
 import { NATIONALITIES, countries } from '../model/countries'
+import { useImprove, type ImproveContext, type ImproveSpec } from '../ai/improve'
 import { Bold, Down, Italic, Plus, Trash, Up, Chevron } from './icons'
 
 interface FieldProps {
@@ -9,20 +10,25 @@ interface FieldProps {
   className?: string
 }
 
-function Wrap({ label, hint, className = '', id, children }: FieldProps & { id: string; children: ReactNode }) {
+function Wrap({ label, hint, className = '', id, action, below, children }: FieldProps & { id: string; action?: ReactNode; below?: ReactNode; children: ReactNode }) {
   return (
     <div className={`field ${className}`}>
-      <label htmlFor={id}>{label}</label>
+      <div className="field-head">
+        <label htmlFor={id}>{label}</label>
+        {action}
+      </div>
       {children}
+      {below}
       {hint && <small>{hint}</small>}
     </div>
   )
 }
 
-export function TextField({ label, hint, className, value, onChange, ...rest }: FieldProps & { value: string; onChange: (v: string) => void } & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>) {
+export function TextField({ label, hint, className, value, onChange, improve, ...rest }: FieldProps & { value: string; onChange: (v: string) => void; improve?: ImproveSpec } & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>) {
   const id = useId()
+  const ai = useImprove(improve, value, onChange)
   return (
-    <Wrap {...{ label, hint, className, id }}>
+    <Wrap {...{ label, hint, className, id }} action={ai.trigger} below={ai.panel}>
       <input id={id} value={value} onChange={(e) => onChange(e.target.value)} {...rest} />
     </Wrap>
   )
@@ -83,9 +89,10 @@ export function CheckField({ label, checked, onChange }: { label: string; checke
 }
 
 /** Textarea with a small formatting toolbar. Stores `**bold**` / `*italic*` markers. */
-export function RichTextField({ label, hint, className, value, onChange, rows = 4 }: FieldProps & { value: string; onChange: (v: string) => void; rows?: number }) {
+export function RichTextField({ label, hint, className, value, onChange, rows = 4, improve }: FieldProps & { value: string; onChange: (v: string) => void; rows?: number; improve?: ImproveSpec }) {
   const id = useId()
   const ref = useRef<HTMLTextAreaElement>(null)
+  const ai = useImprove(improve, value, onChange)
 
   const wrap = (marker: string) => {
     const el = ref.current
@@ -111,12 +118,13 @@ export function RichTextField({ label, hint, className, value, onChange, rows = 
   }
 
   return (
-    <Wrap {...{ label, hint, className, id }}>
+    <Wrap {...{ label, hint, className, id }} below={ai.panel}>
       <div className="rich">
         <div className="rich-bar" role="toolbar" aria-label="Formatting">
           <button type="button" onClick={() => wrap('**')} title="Bold (Ctrl/⌘ B)" aria-label="Bold"><Bold /></button>
           <button type="button" onClick={() => wrap('*')} title="Italic (Ctrl/⌘ I)" aria-label="Italic"><Italic /></button>
           <span>Blank line = new paragraph</span>
+          {ai.trigger}
         </div>
         <textarea id={id} ref={ref} rows={rows} value={value} onChange={(e) => onChange(e.target.value)} onKeyDown={onKey} />
       </div>
@@ -189,9 +197,34 @@ export function ListEditor<T extends { id: Id }>({ items, onChange, create, addL
   )
 }
 
+/** One bullet or subheading row, with its own Improve button. */
+function BulletRow({ heading, text, context, onChange, onToggle, tools }: {
+  heading: boolean
+  text: string
+  context?: ImproveContext
+  onChange: (text: string) => void
+  onToggle: () => void
+  tools: ReactNode
+}) {
+  const ai = useImprove({ kind: heading ? 'subheading' : 'bullet', context }, text, onChange)
+  return (
+    <div className={`brow ${heading ? 'is-heading' : ''}`}>
+      <button type="button" className="btype" onClick={onToggle} title={heading ? 'Subheading (click to make a bullet)' : 'Bullet (click to make a subheading)'} aria-label={heading ? 'Subheading' : 'Bullet'}>
+        {heading ? 'H' : '•'}
+      </button>
+      <textarea rows={heading ? 1 : 2} value={text} placeholder={heading ? 'Subheading' : 'What did you do or achieve? Use **bold** for key terms.'} onChange={(e) => onChange(e.target.value)} aria-label={heading ? 'Subheading text' : 'Bullet text'} />
+      <span className="item-tools">
+        {ai.trigger}
+        {tools}
+      </span>
+      {ai.panel}
+    </div>
+  )
+}
+
 /** Bullets with optional subheadings, stored as strings (`#` prefix = subheading). */
-export function BulletsEditor({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
-  const rows = value.map((raw) => ({ id: raw, heading: raw.trimStart().startsWith('#'), text: raw.replace(/^\s*#+\s*/, '') }))
+export function BulletsEditor({ value, onChange, improveContext }: { value: string[]; onChange: (v: string[]) => void; improveContext?: ImproveContext }) {
+  const rows = value.map((raw) => ({ heading: raw.trimStart().startsWith('#'), text: raw.replace(/^\s*#+\s*/, '') }))
   const set = (i: number, heading: boolean, text: string) => onChange(value.map((v, k) => (k === i ? (heading ? `# ${text}` : text) : v)))
   const move = (i: number, d: number) => {
     const j = i + d
@@ -206,17 +239,21 @@ export function BulletsEditor({ value, onChange }: { value: string[]; onChange: 
       <label>Highlights</label>
       <div className="bullets">
         {rows.map((r, i) => (
-          <div key={i} className={`brow ${r.heading ? 'is-heading' : ''}`}>
-            <button type="button" className="btype" onClick={() => set(i, !r.heading, r.text)} title={r.heading ? 'Subheading (click to make a bullet)' : 'Bullet (click to make a subheading)'} aria-label={r.heading ? 'Subheading' : 'Bullet'}>
-              {r.heading ? 'H' : '•'}
-            </button>
-            <textarea rows={r.heading ? 1 : 2} value={r.text} placeholder={r.heading ? 'Subheading' : 'What did you do or achieve? Use **bold** for key terms.'} onChange={(e) => set(i, r.heading, e.target.value)} aria-label={r.heading ? 'Subheading text' : 'Bullet text'} />
-            <span className="item-tools">
-              <button type="button" onClick={() => move(i, -1)} disabled={i === 0} aria-label="Move up"><Up /></button>
-              <button type="button" onClick={() => move(i, 1)} disabled={i === rows.length - 1} aria-label="Move down"><Down /></button>
-              <button type="button" onClick={() => onChange(value.filter((_, k) => k !== i))} aria-label="Remove"><Trash /></button>
-            </span>
-          </div>
+          <BulletRow
+            key={i}
+            heading={r.heading}
+            text={r.text}
+            context={improveContext}
+            onChange={(t) => set(i, r.heading, t)}
+            onToggle={() => set(i, !r.heading, r.text)}
+            tools={
+              <>
+                <button type="button" onClick={() => move(i, -1)} disabled={i === 0} aria-label="Move up"><Up /></button>
+                <button type="button" onClick={() => move(i, 1)} disabled={i === rows.length - 1} aria-label="Move down"><Down /></button>
+                <button type="button" onClick={() => onChange(value.filter((_, k) => k !== i))} aria-label="Remove"><Trash /></button>
+              </>
+            }
+          />
         ))}
         <div className="bullets-add">
           <button type="button" className="add" onClick={() => onChange([...value, ' '])}><Plus /> Bullet</button>

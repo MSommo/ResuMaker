@@ -5,8 +5,11 @@ import {
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useCaps } from '../api/Caps'
+import { ChatBubble } from '../ai/ChatBubble'
 import { CvViewport } from '../components/CvView'
-import { Download, Expand, Layers, More, Plus, Print, Upload } from '../components/icons'
+import { PdfButton } from '../components/PdfButton'
+import { Back, Download, Expand, Layers, More, Plus, Print, Upload } from '../components/icons'
 import { Drawer } from '../editor/Drawer'
 import { type DragData, resolveOver } from '../editor/dnd'
 import { PersonalForm } from '../editor/PersonalForm'
@@ -21,6 +24,8 @@ import { pickZone, place, stash, zoneAccepts } from '../state/ops'
 import { parseImport } from '../state/storage'
 import { useResume } from '../state/ResumeContext'
 
+const SAVE_LABEL = { saved: 'Saved', saving: 'Saving…', error: 'Couldn’t save. Retrying on your next edit', conflict: 'Reloaded: this CV changed elsewhere' } as const
+
 // Prefer the element under the pointer; fall back to the nearest one (keyboard dragging).
 const collide: CollisionDetection = (args) => {
   const hits = pointerWithin(args)
@@ -28,7 +33,8 @@ const collide: CollisionDetection = (args) => {
 }
 
 export default function EditorPage() {
-  const { resume, setResume, setLayout, replace, reset } = useResume()
+  const { id, personaId, resume, setResume, setLayout, replace, reset, saveState } = useResume()
+  const caps = useCaps()
   const layout = getLayout(resume.layoutId)
   const [tab, setTab] = useState<'info' | 'sections'>('sections')
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -168,6 +174,7 @@ export default function EditorPage() {
 
         <section className="ed-stage">
           <div className="ed-toolbar no-print">
+            <Link className="btn small" to={`/p/${personaId}`} title="All of this person’s CVs"><Back /> {resume.basics.firstName || 'CVs'}</Link>
             <label className="tb-layout">
               <span>Layout</span>
               <select value={resume.layoutId} onChange={(e) => setLayout(e.target.value)}>
@@ -176,11 +183,13 @@ export default function EditorPage() {
             </label>
             <span className="tb-grow" />
             {notice && <span className="tb-notice" role="status">{notice}</span>}
-            <Link className="btn small" to="/preview"><Expand /> Full preview</Link>
-            <button type="button" className="btn small primary" onClick={() => window.print()}><Print /> Print / PDF</button>
+            <span className={`save-state ${saveState}`} role="status">{SAVE_LABEL[saveState]}</span>
+            <Link className="btn small" to={`/preview/${id}`}><Expand /> Full preview</Link>
+            <PdfButton />
             <details className="menu">
               <summary className="btn small icon" aria-label="More actions"><More /></summary>
               <div className="menu-pop">
+                <button type="button" onClick={() => window.print()}><Print /> Print…</button>
                 <button type="button" onClick={exportJson}><Download /> Export JSON</button>
                 <button type="button" onClick={() => fileRef.current?.click()}><Upload /> Import JSON</button>
                 <button type="button" className="danger" onClick={() => window.confirm('Clear all content and start with an empty CV?') && (reset(), setSelectedId(null))}>Start from empty CV</button>
@@ -197,6 +206,7 @@ export default function EditorPage() {
         </nav>
       </div>
       <DragOverlay dropAnimation={null}>{overlay}</DragOverlay>
+      {caps.ai && <ChatBubble />}
     </DndContext>
   )
 }

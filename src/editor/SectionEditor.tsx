@@ -4,7 +4,8 @@ import { ICON_LABEL, KIND_LABEL, emptyEntry, uid, type Entry, type IconId, type 
 import { entryDates } from '../model/dates'
 import { useResume } from '../state/ResumeContext'
 
-function EntryForm({ en, up }: { en: Entry; up: (p: Partial<Entry>) => void }) {
+function EntryForm({ en, up, section }: { en: Entry; up: (p: Partial<Entry>) => void; section: string }) {
+  const ctx = { role: en.title, organisation: en.organisation, section }
   return (
     <>
       <div className="grid2">
@@ -17,9 +18,9 @@ function EntryForm({ en, up }: { en: Entry; up: (p: Partial<Entry>) => void }) {
         <MonthField label="End" value={en.end} onChange={(v) => up({ end: v })} disabled={en.current} />
       </div>
       <CheckField label="Ongoing (shows “Present”)" checked={en.current} onChange={(v) => up({ current: v })} />
-      <TextField label="Highlight line" hint="Optional bold line, e.g. a grade or qualification level" value={en.note} onChange={(v) => up({ note: v })} />
-      <RichTextField label="Description" value={en.description} onChange={(v) => up({ description: v })} />
-      <BulletsEditor value={en.bullets} onChange={(v) => up({ bullets: v })} />
+      <TextField label="Highlight line" hint="Optional bold line, e.g. a grade or qualification level" value={en.note} onChange={(v) => up({ note: v })} improve={{ kind: 'note', context: ctx }} />
+      <RichTextField label="Description" value={en.description} onChange={(v) => up({ description: v })} improve={{ kind: 'description', context: ctx }} />
+      <BulletsEditor value={en.bullets} onChange={(v) => up({ bullets: v })} improveContext={ctx} />
     </>
   )
 }
@@ -44,7 +45,7 @@ export function SectionEditor({ sec, onBack, goInfo }: { sec: Section; onBack: (
           </p>
         )}
 
-        {sec.kind === 'text' && <RichTextField label="Text" rows={sec.zone === 'side' ? 6 : 8} value={sec.text} onChange={(v) => up({ text: v } as Partial<Section>)} />}
+        {sec.kind === 'text' && <RichTextField label="Text" rows={sec.zone === 'side' ? 6 : 8} value={sec.text} onChange={(v) => up({ text: v } as Partial<Section>)} improve={{ kind: sec.icon === 'user' ? 'summary' : 'text', context: { section: sec.title } }} />}
 
         {sec.kind === 'entries' && (
           <>
@@ -55,7 +56,7 @@ export function SectionEditor({ sec, onBack, goInfo }: { sec: Section; onBack: (
               create={emptyEntry}
               addLabel="Add entry"
               summary={(e) => [e.title, e.organisation].filter(Boolean).join(' · ') + (entryDates(e) ? `  (${entryDates(e)})` : '')}
-              render={(en, u) => <EntryForm en={en} up={u} />}
+              render={(en, u) => <EntryForm en={en} up={u} section={sec.title} />}
             />
           </>
         )}

@@ -12,4 +12,4 @@ export const locationLine = (b: Basics) =>
 
 export const birthLines = (b: Basics) => [formatDay(b.birthDate), b.birthPlace].filter(Boolean)
 
-export const fullName = (b: Basics) => [b.firstName, b.lastName].filter(Boolean).join(' ')
+export const fullName = (b: Pick<Basics, 'firstName' | 'lastName'>) => [b.firstName, b.lastName].filter(Boolean).join(' ')

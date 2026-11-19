@@ -1,15 +1,15 @@
 import { countryCode } from '../model/countries'
 import { parseLooseDay, parseLooseMonth } from '../model/dates'
-import { sampleResume } from '../model/sample'
 import { TEMPLATES } from '../model/templates'
 import { uid, type Entry, type Resume, type Section } from '../model/types'
 
-export const KEY = 'resumaker:resume:v2'
+const KEY = 'resumaker:resume:v2'
 const KEY_V1 = 'resumaker:resume:v1'
 
 const isResume = (x: any): x is Resume => x && Array.isArray(x.sections) && x.basics && typeof x.layoutId === 'string'
 
-export function load(): Resume {
+/** A CV saved in this browser by an earlier (server-less) version of the app, if any. Used for the one-time import. */
+export function readLocalResume(): Resume | null {
   try {
     const v2 = localStorage.getItem(KEY)
     if (v2) {
@@ -19,17 +19,9 @@ export function load(): Resume {
     const v1 = localStorage.getItem(KEY_V1)
     if (v1) return migrateV1(JSON.parse(v1))
   } catch {
-    /* corrupt or unavailable storage: fall through to the sample */
+    /* corrupt or unavailable storage */
   }
-  return sampleResume()
-}
-
-export function save(r: Resume) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(r))
-  } catch {
-    /* storage may be unavailable (private mode, quota) */
-  }
+  return null
 }
 
 /** Parse imported JSON (current or v1 format); throws on anything unusable. */

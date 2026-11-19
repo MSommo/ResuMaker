@@ -16,3 +16,44 @@
 .lcard-body p { margin: 4px 0 12px; color: var(--muted); }
 .badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); }
 @media (prefers-reduced-motion: reduce) { .lcard-thumb { transition: none; } }
+
+.block { margin-bottom: 56px; }
+.lcard-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.lcard-thumb:disabled { opacity: 0.6; cursor: progress; }
+.notice { margin: 0 0 32px; padding: 10px 14px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
+.state-box { display: grid; gap: 8px; justify-items: center; text-align: center; padding: 64px 20px; color: var(--muted); }
+.state-box.inline { margin-bottom: 40px; padding: 20px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.state-box h2 { color: var(--ink); }
+
+/* personas */
+.container.narrow { max-width: 760px; }
+.page { padding-top: 40px; padding-bottom: 72px; }
+.page h1 { font-size: 30px; letter-spacing: -0.02em; margin: 6px 0 8px; }
+.lede { color: var(--muted); margin-bottom: 20px; }
+.pgrid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 18px; }
+.pcard {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; padding: 28px 16px 22px; text-align: center; text-decoration: none; font: inherit;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;
+}
+.pcard:hover { transform: translateY(-3px); box-shadow: 0 2px 4px rgba(20, 20, 10, 0.08), 0 14px 32px rgba(20, 20, 10, 0.14); }
+.pcard-name { margin-top: 8px; font-weight: 650; font-size: 16px; }
+.pcard-meta { color: var(--muted); font-size: 13px; }
+.pcard.new { border-style: dashed; background: transparent; box-shadow: none; color: var(--muted); }
+.pcard.new:hover { color: var(--ink); border-color: var(--ink); box-shadow: none; }
+.avatar { display: inline-grid; place-items: center; flex: none; border-radius: 50%; color: #fff; font-weight: 650; letter-spacing: 0.02em; }
+.avatar.plus { width: 64px; height: 64px; background: var(--bg); color: var(--muted); font-size: 26px; border: 1.5px dashed var(--line-strong); }
+.persona-head { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin: 12px 0 36px; }
+.persona-id { flex: 1; min-width: 200px; }
+.persona-id h1 { font-size: 32px; letter-spacing: -0.02em; }
+.persona-id p { color: var(--muted); }
+.persona-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.panelbox { margin-bottom: 40px; padding: 20px 22px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.panelbox h2 { font-size: 18px; }
+.empty { padding: 28px; border: 1px dashed var(--line-strong); border-radius: var(--radius); color: var(--muted); text-align: center; }
+.form-actions { display: flex; gap: 8px; margin-top: 8px; }
+.form-error { color: var(--danger); margin: 8px 0; }
+.persona-form fieldset { margin-bottom: 14px; }
+.home .back { display: inline-flex; align-items: center; gap: 4px; padding: 0; margin-bottom: 8px; color: var(--muted); text-decoration: none; font-weight: 600; }
+.home .back:hover, .page .back:hover { color: var(--ink); }
+.page .back { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); text-decoration: none; font-weight: 600; }
+@media (prefers-reduced-motion: reduce) { .pcard { transition: none; } }

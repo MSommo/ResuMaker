@@ -24,6 +24,12 @@ export const Bold = (p: P) => <I {...p} strokeWidth="2.4"><path d="M7 5h6a3.5 3.
 export const Italic = (p: P) => <I {...p}><path d="M10 5h8M6 19h8M14 5l-4 14" /></I>
 export const More = (p: P) => <I {...p}><circle cx="5" cy="12" r="1.2" /><circle cx="12" cy="12" r="1.2" /><circle cx="19" cy="12" r="1.2" /></I>
 export const Download = (p: P) => <I {...p}><path d="M12 4v11M7 11l5 5 5-5M5 20h14" /></I>
+export const Sparkle = (p: P) => <I {...p}><path d="M12 3l1.8 5.2L19 10l-5.200 1.800L12 17l-1.800-5.200L5 10l5.200-1.800zM19 16l.8 2.200L22 19l-2.200.8L19 22l-.8-2.200L16 19l2.200-.8z" /></I>
+export const Send = (p: P) => <I {...p}><path d="M4 12l16-8-6 16-3-7z" /></I>
+export const Check = (p: P) => <I {...p}><path d="M5 12l5 5 9-10" /></I>
+export const Refresh = (p: P) => <I {...p}><path d="M20 11a8 8 0 0 0-14-4M4 4v4h4M4 13a8 8 0 0 0 14 4M20 20v-4h-4" /></I>
+export const Undo = (p: P) => <I {...p}><path d="M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3" /></I>
+export const Chat = (p: P) => <I {...p}><path d="M4 5h16v11H9l-5 4z" /></I>
 export const Upload = (p: P) => <I {...p}><path d="M12 16V5M7 9l5-5 5 5M5 20h14" /></I>
 
 /** One small glyph per section kind, used on cards. */

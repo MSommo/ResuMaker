@@ -44,7 +44,8 @@ button { cursor: pointer; }
 
 /* fields */
 .field { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; min-width: 0; }
-.field > label { font-size: 12px; font-weight: 600; color: var(--muted); }
+.field > label, .field-head > label { font-size: 12px; font-weight: 600; color: var(--muted); }
+.field-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 22px; }
 .field small { color: var(--muted); font-size: 11.5px; }
 input, select, textarea {
   width: 100%; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface);

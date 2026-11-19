@@ -24,3 +24,5 @@
   .footer { height: auto; padding: 10px 0; }
   .footer-inner { flex-wrap: wrap; justify-content: center; text-align: center; gap: 4px 14px; }
 }
+
+.nav-links a.nav-persona { display: inline-flex; align-items: center; gap: 8px; }
