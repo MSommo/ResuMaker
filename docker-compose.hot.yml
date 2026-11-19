@@ -1,0 +1,37 @@
+# Opt-in hot reload for the scratch stack:  make stack HOT=1
+# Layers bind mounts on top of docker-compose.yml: uvicorn --reload for the API, the Vite dev server (HMR) for the web app.
+services:
+  api:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8100", "--reload", "--reload-dir", "app"]
+    environment:
+      FRONTEND_URL: http://web:5173    # the Vite dev server, instead of nginx on :80
+    volumes:
+      - ./backend:/app
+      - /app/.venv                     # hide the host's (macOS) virtualenv
+      - ./src:/src:ro                  # read by the catalog-parity test
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web       # the Vite dev image
+    environment:
+      API_URL: http://api:8100         # Vite proxies /api here
+    ports: !override
+      - "127.0.0.1:${WEB_PORT:-5180}:5173"
+    volumes:
+      - ./src:/app/src
+      - ./public:/app/public
+      - ./index.html:/app/index.html
+      - ./vite.config.ts:/app/vite.config.ts
+      - ./tsconfig.json:/app/tsconfig.json
+      - ./package.json:/app/package.json
+      - ./package-lock.json:/app/package-lock.json
+      - web-node-modules:/app/node_modules
+    healthcheck: !override
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5173/"]   # not "localhost": Alpine resolves it to ::1, Vite listens on IPv4
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+volumes:
+  web-node-modules:

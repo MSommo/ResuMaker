@@ -2,9 +2,10 @@ import os
 import re
 
 # Tests use their own database and Redis db, never the dev data. Hosts/ports come from the environment so the same
-# tests run on the host (localhost:5433) and inside the docker network (db:5432).
-_DEV_DB = os.environ.get("DATABASE_URL", "postgresql+asyncpg://resumaker:resumaker@localhost:5433/resumaker")
-_DEV_REDIS = os.environ.get("REDIS_URL", "redis://localhost:6380/0")
+# tests run on the host (the scratch stack on localhost:5434) and inside the docker network (db:5432). The default
+# deliberately is NOT the frozen stack (5433), so a bare `pytest` can never touch its server.
+_DEV_DB = os.environ.get("DATABASE_URL", "postgresql+asyncpg://resumaker:resumaker@localhost:5434/resumaker")
+_DEV_REDIS = os.environ.get("REDIS_URL", "redis://localhost:6381/0")
 TEST_DB_URL = re.sub(r"/[^/]+$", "/resumaker_test", _DEV_DB)
 PLAIN_TEST_DB_URL = TEST_DB_URL.replace("+asyncpg", "")
 ADMIN_DB_URL = re.sub(r"/[^/]+$", "/postgres", _DEV_DB).replace("+asyncpg", "")

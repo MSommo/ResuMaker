@@ -12,9 +12,10 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-flash-latest"
 
-    # Host ports match docker-compose.yml (5433/6380 avoid clashing with other local projects).
-    database_url: str = "postgresql+asyncpg://resumaker:resumaker@localhost:5433/resumaker"
-    redis_url: str = "redis://localhost:6380/0"
+    # Defaults point at the SCRATCH stack's host ports (docker-compose.yml: 5434/6381), on purpose: running the API or tests
+    # on the host without configuration must never touch the frozen stack, which holds the real data (5433/6380).
+    database_url: str = "postgresql+asyncpg://resumaker:resumaker@localhost:5434/resumaker"
+    redis_url: str = "redis://localhost:6381/0"
 
     # Where the React app is served; headless Chrome loads it to render PDFs.
     frontend_url: str = "http://localhost:5173"

@@ -6,9 +6,9 @@ Built for a household, so there is no login: you pick a **persona** (yourself, a
 
 ```mermaid
 flowchart LR
-  B[React app<br/>Vite :5173] -- /api (proxy) --> A[FastAPI :8100]
-  A --> P[(Postgres :5433<br/>personas, CVs, chat history)]
-  A --> R[(Redis :6380<br/>cache + rate limit)]
+  B[React app<br/>nginx] -- /api (proxy) --> A[FastAPI]
+  A --> P[(Postgres<br/>personas, CVs, chat history)]
+  A --> R[(Redis<br/>cache + rate limit)]
   A --> G[LangGraph agent] --> M[Gemini]
   A -- Playwright + Chrome --> B
   C[MCP clients<br/>Claude Desktop / Code] --> S[MCP server] --> P
@@ -27,37 +27,42 @@ flowchart LR
 
 ## Run it
 
-Everything runs in Docker with hot reload. You only need Docker and a Gemini key.
+You need Docker and a Gemini key. There are **two completely separate stacks**, so work in progress can never disturb the app you actually use:
 
-```bash
-cp .env.example .env        # add GEMINI_API_KEY
-make stack                  # full build + start everything, wait until healthy
-```
-
-`make` lists every target (`make up`, `make logs`, `make test`, `make graph`, `make db-backup`, …). Plain `docker compose up --build` works too.
-
-Open **http://localhost:5173**. Edits to `src/` hot-reload (Vite HMR) and edits to `backend/app/` restart the API (uvicorn `--reload`).
-
-| Service | What | Host port |
+| | **Frozen** (`make stable-*`) | **Scratch** (`make stack`, …) |
 |---|---|---|
-| `web` | Vite dev server (React app), proxies `/api` to `api` | 5173 (`WEB_PORT`) |
-| `api` | FastAPI + LangGraph agent, with Chromium for PDFs | 8100 (`API_PORT`) |
-| `db` | Postgres 16 (data in the `resumaker-pgdata` volume) | 5433 |
-| `redis` | Redis 7 (cache, no persistence) | 6380 |
-| `mcp` | MCP server (stdio), started on demand, see below | n/a |
-
-All ports bind to `127.0.0.1`. If something already uses 5173 (for example a local `npm run dev`), `make` names the process and you can run `make stack WEB_PORT=5174`.
+| Purpose | The app you use, with your real data | A throwaway copy for testing changes |
+| Built from | A git tag (`stable-1`), never the working tree | The working tree |
+| Code in containers | Baked into the image: no bind mounts, no hot reload | Baked in too (`HOT=1` adds bind mounts and hot reload) |
+| Web (nginx) | **5174** | **5180** |
+| API / Postgres / Redis | 8100 / 5433 / 6380 | 8180 / 5434 / 6381 |
+| Data | volume `resumaker_resumaker-pgdata` | volume `resumaker-scratch_scratch-pgdata` (empty, disposable) |
 
 ```bash
-npm run logs                              # follow api + web logs
-docker compose exec api pytest            # backend tests (own test DB + Redis db 15)
-docker compose down                       # stop (data is kept); add -v to also delete the database
-docker compose build --no-cache api       # after changing backend dependencies (pyproject.toml / uv.lock)
+cp .env.example .env                 # add GEMINI_API_KEY
+
+# Scratch: try the current code
+make stack                           # build from the working tree, start, wait until healthy → http://localhost:5180
+make stack HOT=1                     # same, with hot reload (Vite HMR + uvicorn --reload)
+make test                            # backend tests against the scratch database
+make scratch-reset                   # wipe the scratch stack completely (asks first)
+
+# Frozen: the stable app
+make stable-build                    # build images from git tag stable-1 (STABLE_TAG=… for another tag)
+make stable-up                       # start / update → http://localhost:5174
+make stable-expose                   # reachable from your local network (see below); make stable-hide undoes it
+make stable-backup                   # dump the real database to backups/
 ```
 
-Frontend dependency changes are picked up automatically: the `web` container runs `npm install` on every start.
+`make` lists every target (logs, MCP, graph, personas, PDFs, migrations…). If something already uses a port, `make` names the process and you can override it, e.g. `make stack WEB_PORT=5181`.
 
-**Without Docker for the app** (faster for some workflows): `npm run infra` starts just Postgres and Redis, then `npm run api` and `npm run dev` run the API and frontend on the host (needs Node 22+, [uv](https://docs.astral.sh/uv/) and Chrome). The same `.env` and ports work.
+**To freeze a new build:** commit, `git tag -a stable-2 -m "…"`, `make stable-build STABLE_TAG=stable-2`, then `make stable-up STABLE_TAG=stable-2`. The database is migrated on startup, so take a `make stable-backup` first.
+
+**Local network.** `make stable-expose` publishes only the web port on all interfaces (`http://<your-ip>:5174`, or `http://<hostname>.local:5174`); the API, Postgres and Redis stay on localhost. There is no login, so anyone on that network can read and edit every CV. Only do this on a network you trust (not guest Wi-Fi).
+
+Frontend dependency changes need a rebuild (`make build-web`) unless you use `HOT=1`, where the `web` container runs `npm install` on every start.
+
+**Without Docker for the app:** `make infra` starts just the scratch Postgres and Redis, then `make local-api` and `make local-web` run the API and frontend on the host (needs Node 22+, [uv](https://docs.astral.sh/uv/) and Chrome). Host-side commands default to the **scratch** database, never the frozen one.
 
 ## Personas and CVs
 
@@ -81,18 +86,17 @@ graph TD;
 Lets Claude Desktop / Claude Code list, read, edit, improve and export your CVs. It uses the same database and engine, so edits appear in the editor. (Deleting CVs is deliberately not exposed. `export_pdf` needs the frontend running; from the Docker server, files land in `backend/.data/pdfs/`.)
 
 ```bash
-# Claude Code (runs the server in Docker on demand; the stack from `docker compose up` must have db + redis healthy)
-claude mcp add resumaker -- docker compose -f "$(pwd)/docker-compose.yml" run --rm -T mcp
+# Claude Code, against your REAL data (the frozen stack must be running: make stable-up)
+claude mcp add resumaker -- docker compose -f "$(pwd)/docker-compose.stable.yml" run --rm -T mcp
 
-# Or on the host, no Docker for the server:
-claude mcp add resumaker -- uv --directory "$(pwd)/backend" run python -m app.mcp_server
-#   HTTP instead of stdio:  npm run mcp -- --http   →  http://127.0.0.1:8101/mcp
+# Against the scratch stack instead (empty database, for experiments): make mcp  /  make mcp-local
+#   HTTP instead of stdio (scratch database):  make mcp-http   →  http://127.0.0.1:8101/mcp
 ```
 
 Claude Desktop (`claude_desktop_config.json`):
 
 ```json
-{ "mcpServers": { "resumaker": { "command": "docker", "args": ["compose", "-f", "/ABSOLUTE/PATH/TO/ResuMaker/docker-compose.yml", "run", "--rm", "-T", "mcp"] } } }
+{ "mcpServers": { "resumaker": { "command": "docker", "args": ["compose", "-f", "/ABSOLUTE/PATH/TO/ResuMaker/docker-compose.stable.yml", "run", "--rm", "-T", "mcp"] } } }
 ```
 
 Tools: `list_personas`, `create_persona`, `list_resumes`, `get_resume`, `create_resume`, `apply_operations`, `improve_text`, `ask_assistant`, `export_pdf`. Resource: `resume://{id}`. Prompt: `review_cv`.
@@ -101,6 +105,6 @@ Tools: `list_personas`, `create_persona`, `list_resumes`, `get_resume`, `create_
 
 - **No login, on purpose.** Anyone who can reach the app can open any persona's CVs. That is fine for a household on a trusted network; add authentication before exposing it more widely.
 - **The catalog exists twice** (TypeScript for the UI, Python for the agent/MCP). `backend/tests/test_catalog_parity.py` fails if they drift.
-- **PDFs** are rendered by headless Chrome loading `FRONTEND_URL/preview/<id>`, so the frontend must be reachable by the API (in Docker: `http://web:5173`). Chrome runs with `--no-sandbox` inside the container; it only ever loads our own page.
+- **PDFs** are rendered by headless Chrome loading `FRONTEND_URL/preview/<id>`, so the frontend must be reachable by the API (in Docker: `http://web`, i.e. nginx, or `http://web:5173` with `HOT=1`). Chrome runs with `--no-sandbox` inside the container; it only ever loads our own page.
 - **This is a development setup** (dev servers, bind mounts, default DB password). A production setup would build the frontend to static files behind nginx and drop the bind mounts.
 - **Concurrent edits:** saves carry the version they were based on; a stale save is rejected (409) and the editor reloads the newer version.

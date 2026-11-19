@@ -1,15 +1,24 @@
 # ResuMaker: every way to build, run, test and poke the project. `make` (or `make help`) lists the targets.
 #
-#   make stack                     # full build + start the whole stack (Docker), wait until healthy
-#   make stack WEB_PORT=5174       # same, if something else already uses 5173
+# Two completely separate stacks:
+#   FROZEN   (stable-*)  your real data, pre-built images from a git tag, nothing here can change it. http://localhost:5174
+#   SCRATCH  (the rest)  a throwaway copy with its own database, built from the working tree.       http://localhost:5180
+#
+#   make stack            # scratch: full build + start, wait until healthy (no hot reload)
+#   make stack HOT=1      # scratch with hot reload (bind mounts)
+#   make scratch-reset    # throw the scratch stack away completely
 
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
-COMPOSE  ?= docker compose
-WEB_PORT ?= 5173
-API_PORT ?= 8100
+# The scratch stack (docker-compose.yml). HOT=1 layers the bind-mount / hot-reload override on top.
+COMPOSE  := docker compose -f docker-compose.yml $(if $(HOT),-f docker-compose.hot.yml)
+WEB_PORT ?= 5180
+API_PORT ?= 8180
 export WEB_PORT API_PORT          # docker-compose.yml reads these for the published host ports
+# Host-side targets (local-api, test-local, mcp-*) talk to the SCRATCH database/cache, never to the frozen stack's.
+SCRATCH_DB    := postgresql+asyncpg://resumaker:resumaker@localhost:5434/resumaker
+SCRATCH_REDIS := redis://localhost:6381/0
 
 # The frozen stack (docker-compose.stable.yml): pre-built images from a git tag, no bind mounts, your real data.
 -include stable.env               # local, git-ignored: written by `make stable-expose` / `stable-hide`
@@ -77,9 +86,9 @@ stable-backup: ## Dump the frozen stack's database to backups/ (git-ignored: per
 stable-mcp: ## MCP over stdio against the frozen stack
 	$(STABLE) run --rm -T mcp
 
-##@ Full stack (Docker: web + api + db + redis, hot reload)
+##@ Scratch stack (throwaway: own database, built from the working tree; HOT=1 adds hot reload)
 
-.PHONY: stack stack-fresh up up-d start stop restart down down-volumes ps urls
+.PHONY: stack stack-fresh up up-d start stop restart down down-volumes scratch-reset ps urls
 stack: env check-ports ## FULL BUILD: build every image, start everything, wait until healthy
 	$(COMPOSE) up -d --build --wait --remove-orphans
 	@$(MAKE) --no-print-directory urls
@@ -104,22 +113,24 @@ stop: ## Stop containers (keeps them and the data)
 restart: check-ports ## Restart all containers
 	$(COMPOSE) restart
 
-down: ## Stop and remove containers (the database volume is kept)
+down: ## Stop and remove the scratch containers (its database volume is kept)
 	$(COMPOSE) down
 
-down-volumes: ## ⚠ Stop and DELETE the database (asks first; FORCE=1 skips the question)
-	@if [ "$(FORCE)" != "1" ]; then read -r -p "This permanently deletes ALL CVs. Type 'yes' to continue: " a; [ "$$a" = "yes" ] || { echo "Aborted."; exit 1; }; fi
+down-volumes: ## Stop and DELETE the scratch database too (never the frozen stack's; asks first, FORCE=1 skips)
+	@if [ "$(FORCE)" != "1" ]; then read -r -p "This deletes the SCRATCH stack's database (the frozen stack is not touched). Type 'yes' to continue: " a; [ "$$a" = "yes" ] || { echo "Aborted."; exit 1; }; fi
 	$(COMPOSE) down -v
+
+scratch-reset: down-volumes ## Same as down-volumes: wipe the scratch stack back to nothing
 
 ps: ## Show container status
 	$(COMPOSE) ps
 
 urls:
 	@echo
-	@echo "  App        http://localhost:$(WEB_PORT)"
-	@echo "  API        http://localhost:$(API_PORT)/api/status   (docs: /docs)"
-	@echo "  Agent      http://localhost:$(API_PORT)/api/agent/graph"
-	@echo "  Postgres   localhost:5433   Redis  localhost:6380"
+	@echo "  Scratch app  http://localhost:$(WEB_PORT)$(if $(HOT),   (hot reload),   (built, no hot reload))"
+	@echo "  API          http://localhost:$(API_PORT)/api/status   (docs: /docs)"
+	@echo "  Agent        http://localhost:$(API_PORT)/api/agent/graph"
+	@echo "  Postgres     localhost:5434   Redis  localhost:6381   (scratch; your real data is on the frozen stack)"
 	@echo
 
 ##@ Images
@@ -150,8 +161,8 @@ local: infra ## Run api + web on your machine instead of in containers (stops th
 	-$(COMPOSE) stop api web
 	$(MAKE) -j2 local-api local-web
 
-local-api: ## API on the host: uvicorn --reload (needs uv, Chrome; Postgres/Redis from `make infra`)
-	cd backend && uv run uvicorn app.main:app --reload --port $(API_PORT)
+local-api: ## API on the host: uvicorn --reload (needs uv, Chrome; scratch Postgres/Redis from `make infra`)
+	cd backend && DATABASE_URL=$(SCRATCH_DB) REDIS_URL=$(SCRATCH_REDIS) FRONTEND_URL=http://localhost:5173 uv run uvicorn app.main:app --reload --port $(API_PORT)
 
 local-web: ## Frontend on the host: Vite dev server (proxies /api to localhost:API_PORT)
 	API_URL=http://localhost:$(API_PORT) npm run dev
@@ -177,11 +188,12 @@ logs-redis: ## Follow Redis logs
 ##@ Tests and checks
 
 .PHONY: test test-local typecheck web-build check
-test: ## Backend tests, in a container (own test DB + Redis db 15)
-	$(COMPOSE) run --rm -T api pytest -q
+test: ## Backend tests in a container built from the working tree (own test DB + Redis db 15 on the scratch stack)
+	$(COMPOSE) build api
+	$(COMPOSE) run --rm -T -v "$(CURDIR)/src:/src:ro" api pytest -q
 
-test-local: ## Backend tests on the host (needs `make infra`)
-	cd backend && uv run pytest -q
+test-local: ## Backend tests on the host (needs `make infra`; uses the scratch database)
+	cd backend && DATABASE_URL=$(SCRATCH_DB) REDIS_URL=$(SCRATCH_REDIS) uv run pytest -q
 
 typecheck: ## TypeScript type-check
 	npx tsc -b
@@ -197,11 +209,11 @@ check: typecheck test ## Type-check + backend tests
 mcp: ## MCP over stdio, in Docker (what a client config runs)
 	$(COMPOSE) run --rm -T mcp
 
-mcp-local: ## MCP over stdio, on the host
-	cd backend && uv run python -m app.mcp_server
+mcp-local: ## MCP over stdio, on the host (scratch database)
+	cd backend && DATABASE_URL=$(SCRATCH_DB) REDIS_URL=$(SCRATCH_REDIS) uv run python -m app.mcp_server
 
-mcp-http: ## MCP over streamable HTTP on the host: http://127.0.0.1:8101/mcp
-	cd backend && uv run python -m app.mcp_server --http
+mcp-http: ## MCP over streamable HTTP on the host, scratch database: http://127.0.0.1:8101/mcp
+	cd backend && DATABASE_URL=$(SCRATCH_DB) REDIS_URL=$(SCRATCH_REDIS) uv run python -m app.mcp_server --http
 
 ##@ Inspect the running stack
 
