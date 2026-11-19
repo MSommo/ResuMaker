@@ -1,0 +1,96 @@
+# ResuMaker, FROZEN stack: the stable build, with your real data.
+#
+# It only references pre-built, tagged images (`make stable-build`), so `docker compose up` can never rebuild it from the
+# working tree, and there are no bind mounts: editing files in this repo cannot change what is running here.
+# Same project name and volume as the earlier dev stack, so your database carries over unchanged.
+#
+#   make stable-build   # build images from a git tag (default: stable-1), not from the working tree
+#   make stable-up      # start / update the frozen stack
+name: resumaker
+
+x-api: &api
+  image: resumaker-api:${STABLE_TAG:-stable-1}
+  env_file:
+    - path: .env            # GEMINI_API_KEY; optional (AI is simply off without it)
+      required: false
+  environment:
+    DATABASE_URL: postgresql+asyncpg://resumaker:resumaker@db:5432/resumaker
+    REDIS_URL: redis://redis:6379/0
+    FRONTEND_URL: http://web  # headless Chrome loads the app from nginx to render PDFs
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: resumaker-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: resumaker
+      POSTGRES_PASSWORD: resumaker   # local use only
+      POSTGRES_DB: resumaker
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - resumaker-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U resumaker -d resumaker"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: resumaker-redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    <<: *api
+    container_name: resumaker-api
+    restart: unless-stopped
+    # No --reload. --proxy-headers makes the rate limiter see the real client IP behind nginx.
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8100", "--proxy-headers", "--forwarded-allow-ips=*"]
+    ports:
+      - "127.0.0.1:8100:8100"
+    shm_size: 1gb
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8100/api/status')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  web:
+    image: resumaker-web:${STABLE_TAG:-stable-1}
+    container_name: resumaker-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${STABLE_WEB_PORT:-5174}:80"
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # MCP server (stdio), launched on demand:  docker compose -f docker-compose.stable.yml run --rm -T mcp
+  mcp:
+    <<: *api
+    profiles: ["mcp"]
+    command: ["python", "-m", "app.mcp_server"]
+    stdin_open: true
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+volumes:
+  resumaker-pgdata:       # => resumaker_resumaker-pgdata, the volume that already holds your data

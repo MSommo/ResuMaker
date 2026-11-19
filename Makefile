@@ -11,6 +11,12 @@ WEB_PORT ?= 5173
 API_PORT ?= 8100
 export WEB_PORT API_PORT          # docker-compose.yml reads these for the published host ports
 
+# The frozen stack (docker-compose.stable.yml): pre-built images from a git tag, no bind mounts, your real data.
+STABLE_TAG      ?= stable-1
+STABLE_WEB_PORT ?= 5174
+STABLE          := docker compose -f docker-compose.stable.yml
+export STABLE_TAG STABLE_WEB_PORT
+
 ##@ Help
 
 .PHONY: help
@@ -19,6 +25,41 @@ help: ## Show this help
 		/^##@/{printf "\n\033[1m%s\033[0m\n", substr($$0,5)} \
 		/^[a-zA-Z0-9_-]+:.*##/{printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@echo
+
+##@ Frozen stack (the stable build, with your real data: no hot reload, immune to edits in this repo)
+
+.PHONY: stable-build stable-up stable-down stable-restart stable-ps stable-logs stable-status stable-backup stable-mcp
+stable-build: ## Build the frozen images from git tag STABLE_TAG (committed code only, never the working tree)
+	@git rev-parse --verify --quiet refs/tags/$(STABLE_TAG) >/dev/null || { echo "No git tag '$(STABLE_TAG)'."; exit 1; }
+	git archive $(STABLE_TAG):backend | docker build -t resumaker-api:$(STABLE_TAG) -
+	git archive $(STABLE_TAG) | docker build -f Dockerfile.web.static -t resumaker-web:$(STABLE_TAG) -
+
+stable-up: ## Start / update the frozen stack (http://localhost:STABLE_WEB_PORT)
+	@$(MAKE) --no-print-directory check-ports WEB_PORT=$(STABLE_WEB_PORT) MAKECMDGOALS=stable-up
+	$(STABLE) up -d --wait --remove-orphans
+	@echo; echo "  Frozen app  http://localhost:$(STABLE_WEB_PORT)   (build: $(STABLE_TAG))"; echo
+
+stable-down: ## Stop the frozen stack (containers removed, data kept)
+	$(STABLE) down
+
+stable-restart: ## Restart the frozen containers
+	$(STABLE) restart
+
+stable-ps: ## Frozen stack status
+	$(STABLE) ps
+
+stable-logs: ## Follow frozen api + web logs
+	$(STABLE) logs -f --tail=100 api web
+
+stable-status: ## Frozen stack health: AI / PDF / database / cache
+	@curl -fsS localhost:$(STABLE_WEB_PORT)/api/status && echo
+
+stable-backup: ## Dump the frozen stack's database to backups/ (git-ignored: personal data)
+	@mkdir -p backups
+	@f=backups/resumaker-$$(date +%Y%m%d-%H%M%S).sql; $(STABLE) exec -T db pg_dump -U resumaker resumaker > $$f && echo "Wrote $$f"
+
+stable-mcp: ## MCP over stdio against the frozen stack
+	$(STABLE) run --rm -T mcp
 
 ##@ Full stack (Docker: web + api + db + redis, hot reload)
 
