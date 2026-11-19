@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import ChatMessageRow, PersonaRow, ResumeRow, utcnow
 from ..domain.catalog import blank_resume, sample_resume
 from ..domain.models import Basics, PersonalDetails, Resume
+from . import versions
 from .personas import PersonaNotFound, apply_details, to_details
 
 
@@ -23,10 +24,15 @@ class VersionConflict(Exception):
         self.current, self.persona = current, persona
 
 
+def merged_from(data: dict, persona: PersonaRow) -> Resume:
+    """The complete CV for stored CV `data` (the live row or a version snapshot): the persona's details + its own content."""
+    headline = (data.get("basics") or {}).get("headline", "")
+    return Resume.model_validate({**data, "basics": {**to_details(persona).model_dump(), "headline": headline}})
+
+
 def merged(row: ResumeRow, persona: PersonaRow) -> Resume:
     """The complete CV: the persona's details + this CV's own content and headline."""
-    headline = (row.data.get("basics") or {}).get("headline", "")
-    return Resume.model_validate({**row.data, "basics": {**to_details(persona).model_dump(), "headline": headline}})
+    return merged_from(row.data, persona)
 
 
 def _store(row: ResumeRow, resume: Resume) -> None:
@@ -60,11 +66,15 @@ async def create_resume(s: AsyncSession, persona_id: uuid.UUID, *, resume: Resum
     return row, persona
 
 
-async def save_resume(s: AsyncSession, rid: uuid.UUID, resume: Resume, expected_version: int | None, *, update_persona: bool) -> tuple[ResumeRow, PersonaRow]:
+async def save_resume(
+    s: AsyncSession, rid: uuid.UUID, resume: Resume, expected_version: int | None, *, update_persona: bool, checkpoint: bool = False
+) -> tuple[ResumeRow, PersonaRow]:
     """Replace the CV. With `expected_version` it is an optimistic-lock save (409 if someone else saved in between).
 
     `update_persona`: also write the personal details in `resume.basics` to the persona. The web editor edits those through
     the persona endpoint instead, so its CV saves pass False; the agent, ops endpoint and MCP pass True.
+    `checkpoint`: manual (autosave) edits get a version-history snapshot at the start of an editing session. Callers that
+    make a deliberate change (agent, ops, MCP) take their own labelled snapshot with `versions.snapshot` instead.
     """
     row = await s.scalar(select(ResumeRow).where(ResumeRow.id == rid).with_for_update())
     if row is None:
@@ -73,6 +83,8 @@ async def save_resume(s: AsyncSession, rid: uuid.UUID, resume: Resume, expected_
     assert persona is not None
     if expected_version is not None and row.version != expected_version:
         raise VersionConflict(row, persona)
+    if checkpoint:
+        await versions.checkpoint_if_stale(s, row)
     if update_persona:
         apply_details(persona, _personal(resume))
     _store(row, resume)
@@ -95,8 +107,11 @@ async def chat_history(s: AsyncSession, rid: uuid.UUID, limit: int = 40) -> list
     return list(reversed(rows))
 
 
-async def add_chat(s: AsyncSession, rid: uuid.UUID, role: str, text: str, applied: list[str] | None = None, skipped: list[str] | None = None) -> ChatMessageRow:
-    row = ChatMessageRow(resume_id=rid, role=role, text=text, applied=applied or [], skipped=skipped or [])
+async def add_chat(
+    s: AsyncSession, rid: uuid.UUID, role: str, text: str, applied: list[str] | None = None, skipped: list[str] | None = None,
+    undo_version_id: uuid.UUID | None = None,
+) -> ChatMessageRow:
+    row = ChatMessageRow(resume_id=rid, role=role, text=text, applied=applied or [], skipped=skipped or [], undo_version_id=undo_version_id)
     s.add(row)
     await s.flush()
     return row

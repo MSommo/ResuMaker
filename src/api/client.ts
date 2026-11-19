@@ -34,13 +34,19 @@ export interface ChatMessage {
   text: string
   applied: string[]
   skipped: string[]
+  /** Snapshot taken just before this message's changes: restoring it is "Undo". */
+  undoVersionId: string | null
+  undone: boolean
 }
 
 export interface ChatResult {
   reply: string
   applied: string[]
   skipped: string[]
+  /** Readable summary of what changed in the CV. */
+  changes: string[]
   messageId: string
+  undoVersionId: string | null
   resume: ResumeDoc
 }
 
@@ -102,6 +108,9 @@ export const improve = (body: { kind: string; text: string; instruction?: string
 export const chat = (id: string, message: string) => json<ChatResult>('POST', `/resumes/${id}/chat`, { message })
 export const chatHistory = (id: string) => json<ChatMessage[]>('GET', `/resumes/${id}/chat`)
 export const clearChat = async (id: string) => void (await request('DELETE', `/resumes/${id}/chat`))
+
+// Version history
+export const restoreVersion = (resumeId: string, versionId: string) => json<ResumeDoc>('POST', `/resumes/${resumeId}/versions/${versionId}/restore`)
 
 // PDF
 export const pdf = async (id: string): Promise<Blob> => (await request('POST', `/resumes/${id}/pdf`)).blob()

@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from ..db import PersonaRow, ResumeRow
+from ..db import PersonaRow, ResumeRow, ResumeVersionRow
 from ..domain.models import PersonalDetails, Resume
 from ..domain.ops import Op
 from ..services.personas import to_details
@@ -71,12 +71,33 @@ class SaveIn(BaseModel):
 
 class OpsIn(BaseModel):
     ops: list[Op] = Field(max_length=60)
+    dryRun: bool = False  # noqa: N815  (validate and preview; save nothing)
 
 
 class OpsOut(BaseModel):
     applied: list[str]
     skipped: list[str]
-    resume: ResumeOut
+    changes: list[str]  # what the CV looks like after, compared with before
+    saved: bool  # False for a dry run
+    version: int  # the CV's version (unchanged for a dry run)
+    undoVersionId: str | None = None  # noqa: N815  (snapshot taken before the change; restore it to undo)
+    resume: Resume  # complete CV after the ops (the proposed state for a dry run)
+
+
+class VersionOut(BaseModel):
+    id: str
+    version: int
+    source: str
+    label: str
+    createdAt: datetime  # noqa: N815
+
+    @classmethod
+    def of(cls, v: "ResumeVersionRow") -> "VersionOut":
+        return cls(id=str(v.id), version=v.version, source=v.source, label=v.label, createdAt=v.created_at)
+
+
+class DiffOut(BaseModel):
+    changes: list[str]
 
 
 class ImproveIn(BaseModel):
@@ -101,11 +122,15 @@ class ChatMessageOut(BaseModel):
     text: str
     applied: list[str] = []
     skipped: list[str] = []
+    undoVersionId: str | None = None  # noqa: N815
+    undone: bool = False
 
 
 class ChatOut(BaseModel):
     reply: str
     applied: list[str]
     skipped: list[str]
+    changes: list[str] = []
     messageId: str  # noqa: N815
+    undoVersionId: str | None = None  # noqa: N815  (restore this version to undo the change)
     resume: ResumeOut

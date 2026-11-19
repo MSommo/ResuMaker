@@ -71,10 +71,13 @@ async def test_legacy_database_is_migrated_and_backfilled(monkeypatch):
         assert json.loads(cvs[ids[0]]["data"])["basics"] == {"headline": "AI Strategy Lead"}  # identity moved out of the CV
         assert "name" not in cvs[ids[0]]
         assert await conn.fetchval("select count(*) from chat_messages") == 1  # chat history survived
+        # ...and old messages got the new columns' defaults: nothing to undo, not undone.
+        assert await conn.fetchval("select count(*) from chat_messages where undone is false and undo_version_id is null") == 1
         # Persona deletion cascades at the database level.
         await conn.execute("delete from personas where id = $1", mario["id"])
         assert await conn.fetchval("select count(*) from resumes") == 1
-        assert await conn.fetchval("select version_num from alembic_version") == "0002"
+        assert await conn.fetchval("select version_num from alembic_version") == "0003"  # head: personas (0002) + versions (0003)
+        assert await conn.fetchval("select count(*) from resume_versions") == 0  # 0003 added the (empty) history table
     finally:
         await conn.close()
         admin = await asyncpg.connect(ADMIN_DB_URL)

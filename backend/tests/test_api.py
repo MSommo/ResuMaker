@@ -59,7 +59,7 @@ async def test_personal_details_are_shared_by_all_of_a_personas_cvs(client):
     p = await new_persona(client, "Sam", "Shared")
     one, two = await create(client, "blank", persona=p), await create(client, "blank", layout="timeline", persona=p)
     r = await client.post(f"/api/resumes/{one['id']}/ops", json={"ops": [{"op": "update_basics", "patch": {"email": "sam@new.org", "headline": "Only on CV one"}}]})
-    assert r.json()["resume"]["resume"]["basics"]["email"] == "sam@new.org"
+    assert r.json()["resume"]["basics"]["email"] == "sam@new.org"
     other = (await client.get(f"/api/resumes/{two['id']}")).json()["resume"]["basics"]
     assert other["email"] == "sam@new.org"  # personal detail: shared
     assert other["headline"] == ""  # headline: per CV
@@ -125,7 +125,8 @@ async def test_ops_endpoint_applies_and_reports_skips(client):
         {"op": "add_item", "sectionId": skills, "patch": {}},
     ]})
     out = r.json()
-    assert len(out["applied"]) == 1 and len(out["skipped"]) == 1 and out["resume"]["version"] == 2
+    assert len(out["applied"]) == 1 and len(out["skipped"]) == 1 and out["version"] == 2 and out["saved"] is True
+    assert out["changes"] == ["Added “Rust” to “Skills”"]
 
 
 async def test_improve_is_cached_in_redis(client, infra):
@@ -227,3 +228,95 @@ async def test_agent_graph_endpoint_formats(client):
     assert h.headers["content-type"].startswith("text/html") and 'class="mermaid"' in h.text
 
     assert (await client.get("/api/agent/graph?format=png")).status_code == 422
+
+
+# ---------------------------------------------------------------- version history, dry run, durable undo
+
+
+def skill_names(doc_or_resume):
+    r = doc_or_resume.get("resume", doc_or_resume)
+    return [i["name"] for s in r["sections"] if s["title"] == "Skills" for i in s["items"]]
+
+
+async def test_dry_run_previews_without_saving_or_snapshotting(client):
+    doc = await create(client)
+    skills = sec(doc, "Skills")["id"]
+    body = {"dryRun": True, "ops": [
+        {"op": "add_item", "sectionId": skills, "patch": {"name": "Rust", "level": 3}},
+        {"op": "add_item", "sectionId": skills, "patch": {}},
+    ]}
+    out = (await client.post(f"/api/resumes/{doc['id']}/ops", json=body)).json()
+    assert out["saved"] is False and out["version"] == 1 and out["undoVersionId"] is None
+    assert out["changes"] == ["Added “Rust” to “Skills”"] and len(out["skipped"]) == 1
+    assert "Rust" in skill_names(out)  # the proposed state
+    stored = (await client.get(f"/api/resumes/{doc['id']}")).json()
+    assert stored["version"] == 1 and "Rust" not in skill_names(stored)  # nothing was saved
+    assert (await client.get(f"/api/resumes/{doc['id']}/versions")).json() == []
+
+
+async def test_applied_ops_snapshot_the_cv_and_can_be_restored_and_redone(client):
+    doc = await create(client)
+    skills = sec(doc, "Skills")["id"]
+    out = (await client.post(f"/api/resumes/{doc['id']}/ops", json={"ops": [{"op": "add_item", "sectionId": skills, "patch": {"name": "Rust", "level": 3}}]})).json()
+    undo = out["undoVersionId"]
+    assert out["saved"] is True and undo
+    versions = (await client.get(f"/api/resumes/{doc['id']}/versions")).json()
+    assert [v["source"] for v in versions] == ["ops"] and versions[0]["id"] == undo
+
+    diff = (await client.get(f"/api/resumes/{doc['id']}/versions/{undo}/diff")).json()
+    assert diff["changes"] == ["Removed “Rust” from “Skills”"]  # what restoring would do
+    snap = (await client.get(f"/api/resumes/{doc['id']}/versions/{undo}")).json()
+    assert "Rust" not in skill_names(snap)
+
+    restored = (await client.post(f"/api/resumes/{doc['id']}/versions/{undo}/restore")).json()
+    assert "Rust" not in skill_names(restored) and restored["version"] == 3
+    versions = (await client.get(f"/api/resumes/{doc['id']}/versions")).json()
+    assert [v["source"] for v in versions] == ["before-restore", "ops"]  # the restore is itself undoable
+
+    redo = versions[0]["id"]
+    again = (await client.post(f"/api/resumes/{doc['id']}/versions/{redo}/restore")).json()
+    assert "Rust" in skill_names(again)
+
+
+async def test_manual_edits_get_one_checkpoint_per_editing_session(client):
+    doc = await create(client)
+    r = doc["resume"]
+    first = (await client.put(f"/api/resumes/{doc['id']}", json={"resume": r, "version": 1})).json()
+    await client.put(f"/api/resumes/{doc['id']}", json={"resume": r, "version": first["version"]})
+    versions = (await client.get(f"/api/resumes/{doc['id']}/versions")).json()
+    assert [v["source"] for v in versions] == ["autosave"] and versions[0]["version"] == 1  # the state before the first save
+
+
+async def test_history_is_pruned_to_the_newest_snapshots(client, monkeypatch):
+    from app.services import versions as vers
+
+    monkeypatch.setattr(vers, "KEEP", 3)
+    doc = await create(client, "blank")
+    for i in range(6):
+        await client.post(f"/api/resumes/{doc['id']}/ops", json={"ops": [{"op": "update_basics", "patch": {"headline": f"H{i}"}}]})
+    versions = (await client.get(f"/api/resumes/{doc['id']}/versions")).json()
+    assert len(versions) == 3
+
+
+async def test_versions_belong_to_their_own_cv(client):
+    one, two = await create(client), await create(client)
+    skills = sec(one, "Skills")["id"]
+    undo = (await client.post(f"/api/resumes/{one['id']}/ops", json={"ops": [{"op": "add_item", "sectionId": skills, "patch": {"name": "Go"}}]})).json()["undoVersionId"]
+    assert (await client.get(f"/api/resumes/{two['id']}/versions/{undo}")).status_code == 404
+    assert (await client.post(f"/api/resumes/{two['id']}/versions/{undo}/restore")).status_code == 404
+
+
+async def test_chat_changes_are_listed_and_undo_is_durable(client, infra):
+    doc = await create(client)
+    infra.llm.plans.append(plan("Done.", PlanOp(op="update_basics", patch=Patch(headline="Principal Engineer"))))
+    out = (await client.post(f"/api/resumes/{doc['id']}/chat", json={"message": "new headline"})).json()
+    undo = out["undoVersionId"]
+    assert undo and out["changes"] == ["Headline: “Senior Software Engineer” → “Principal Engineer”"]
+
+    hist = (await client.get(f"/api/resumes/{doc['id']}/chat")).json()
+    assert hist[-1]["undoVersionId"] == undo and hist[-1]["undone"] is False  # still undoable after a reload
+
+    restored = (await client.post(f"/api/resumes/{doc['id']}/versions/{undo}/restore")).json()
+    assert restored["resume"]["basics"]["headline"] == "Senior Software Engineer"
+    hist = (await client.get(f"/api/resumes/{doc['id']}/chat")).json()
+    assert hist[-1]["undone"] is True  # the message that made the change is marked as undone, server-side

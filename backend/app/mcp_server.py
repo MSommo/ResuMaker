@@ -17,13 +17,16 @@ from pathlib import Path
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
+from mcp.types import ToolAnnotations
 
 from .agent.llm import LLMError
+from .domain.diff import diff_resumes
 from .domain.models import PersonalDetails, Resume
 from .domain.ops import Op, apply_ops
 from .infra import Infra
 from .services import personas as people
 from .services import resumes as repo
+from .services import versions
 from .services.chat import run_chat
 from .services.improve import improve_text
 
@@ -66,7 +69,17 @@ def _uuid(resume_id: str) -> uuid.UUID:
         raise ValueError(f"'{resume_id}' is not a valid CV id. Call list_resumes to see ids.") from None
 
 
-@mcp.tool()
+READ_ONLY = ToolAnnotations(read_only_hint=True)  # lets MCP clients auto-approve calls that cannot change anything
+
+
+async def _cv(s, resume_id: str):
+    try:
+        return await repo.get_resume(s, _uuid(resume_id))
+    except repo.NotFound:
+        raise ValueError("CV not found.") from None
+
+
+@mcp.tool(annotations=READ_ONLY)
 async def list_personas() -> list[dict[str, Any]]:
     """List the people (personas) whose CVs are stored, with how many CVs each has."""
     async with infra().session() as s:
@@ -81,7 +94,7 @@ async def create_persona(first_name: str, last_name: str = "", email: str = "", 
         return {"id": str(p.id), "name": p.display_name}
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 async def list_resumes(persona_id: str = "") -> list[dict[str, Any]]:
     """List CVs (id, title, layout, version, last update). Pass persona_id for one person's CVs; omit it for everyone's."""
     async with infra().session() as s:
@@ -96,7 +109,7 @@ async def list_resumes(persona_id: str = "") -> list[dict[str, Any]]:
         return [{"id": str(r.id), "personaId": str(r.persona_id), "title": r.title, "layoutId": r.layout_id, "version": r.version, "updatedAt": r.updated_at.isoformat()} for r in rows]
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 async def get_resume(resume_id: str) -> dict[str, Any]:
     """Get a complete CV as JSON: basics (the persona's details + this CV's headline) plus sections with ids for sections and their items. Sections with zone=null are not shown in the CV."""
     async with infra().session() as s:
@@ -119,8 +132,11 @@ async def create_resume(persona_id: str, layout_id: str = "sidebar", template: s
 
 
 @mcp.tool()
-async def apply_operations(resume_id: str, operations: list[Op]) -> dict[str, Any]:
+async def apply_operations(resume_id: str, operations: list[Op], dry_run: bool = False) -> dict[str, Any]:
     """Apply precise edits to a CV and save it. Invalid operations are skipped with a reason; valid ones still apply.
+
+    With dry_run=true nothing is saved: you get what would be applied or skipped and a readable list of "changes". Use it to
+    preview before committing. Real changes are snapshotted first, so they can be undone with restore_version (see "undoVersionId").
 
     Operations (patch holds only the fields to set; use ids from get_resume, and choose new ids for things you create):
     - update_basics {patch}: firstName,lastName,headline,email,phone,street,city,postcode,country(ISO alpha-2),birthDate(YYYY-MM-DD),birthPlace,nationality
@@ -136,10 +152,46 @@ async def apply_operations(resume_id: str, operations: list[Op]) -> dict[str, An
             row, persona = await repo.get_resume(s, _uuid(resume_id))
         except repo.NotFound:
             raise ValueError("CV not found.") from None
-        res = apply_ops(repo.merged(row, persona), operations)
-        if res.applied:
+        before = repo.merged(row, persona)
+        res = apply_ops(before, operations)
+        undo_id = None
+        saved = bool(res.applied) and not dry_run
+        if saved:
+            undo_id = str((await versions.snapshot(s, row, source="mcp", label=f"{len(res.applied)} operation(s) via MCP")).id)
             row, _ = await repo.save_resume(s, row.id, res.resume, row.version, update_persona=True)
-        return {"applied": res.applied, "skipped": res.skipped, "version": row.version}
+        return {"applied": res.applied, "skipped": res.skipped, "changes": diff_resumes(before, res.resume), "saved": saved, "version": row.version, "undoVersionId": undo_id}
+
+
+@mcp.tool(annotations=READ_ONLY)
+async def list_versions(resume_id: str) -> list[dict[str, Any]]:
+    """The CV's version history, newest first: snapshots taken before AI/API/MCP changes and before manual editing sessions."""
+    async with infra().session() as s:
+        row, _ = await _cv(s, resume_id)
+        return [{"id": str(v.id), "version": v.version, "source": v.source, "label": v.label, "createdAt": v.created_at.isoformat()} for v in await versions.list_versions(s, row.id)]
+
+
+@mcp.tool(annotations=READ_ONLY)
+async def diff_version(resume_id: str, version_id: str) -> list[str]:
+    """What restoring a version would change: the snapshot compared with the CV as it is now, as readable lines."""
+    async with infra().session() as s:
+        row, persona = await _cv(s, resume_id)
+        try:
+            v = await versions.get_version(s, row.id, _uuid(version_id))
+        except versions.VersionNotFound:
+            raise ValueError("Version not found. Call list_versions to see ids.") from None
+        return diff_resumes(repo.merged(row, persona), repo.merged_from(v.data, persona))
+
+
+@mcp.tool()
+async def restore_version(resume_id: str, version_id: str) -> dict[str, Any]:
+    """Make the CV match a snapshot (this is how to undo a change). The current state is snapshotted first, so a restore can be undone too."""
+    async with infra().session() as s:
+        row, _ = await _cv(s, resume_id)
+        try:
+            row, _ = await versions.restore(s, row.id, _uuid(version_id))
+        except versions.VersionNotFound:
+            raise ValueError("Version not found. Call list_versions to see ids.") from None
+        return {"restored": True, "version": row.version}
 
 
 @mcp.tool(name="improve_text")

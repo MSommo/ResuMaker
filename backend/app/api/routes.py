@@ -10,11 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..agent.graph import MAX_REPAIRS, NODE_DOCS, build_graph
 from ..agent.llm import LLMError
 from ..cache import digest
+from ..domain.diff import diff_resumes
 from ..domain.models import Resume
 from ..domain.ops import apply_ops
 from ..infra import Infra
 from ..services import personas as people
 from ..services import resumes as repo
+from ..services import versions as vers
 from ..services.chat import run_chat
 from ..services.improve import improve_text
 from . import schemas as sc
@@ -127,7 +129,7 @@ async def get_resume(resume_id: str, s: AsyncSession = Depends(get_session)):
 async def save_resume(resume_id: str, body: sc.SaveIn, s: AsyncSession = Depends(get_session)):
     """Save the CV's content and headline. Personal details are ignored here: they belong to the persona (PUT /personas/{id})."""
     try:
-        return sc.ResumeOut.of(*await repo.save_resume(s, parse_id(resume_id), body.resume, body.version, update_persona=False))
+        return sc.ResumeOut.of(*await repo.save_resume(s, parse_id(resume_id), body.resume, body.version, update_persona=False, checkpoint=True))
     except repo.NotFound:
         raise HTTPException(404, "CV not found.") from None
     except repo.VersionConflict as e:
@@ -145,12 +147,60 @@ async def delete_resume(resume_id: str, s: AsyncSession = Depends(get_session)):
 
 @router.post("/resumes/{resume_id}/ops", response_model=sc.OpsOut)
 async def apply_resume_ops(resume_id: str, body: sc.OpsIn, s: AsyncSession = Depends(get_session)):
-    """Apply validated edit operations directly (the same engine the agent and the MCP server use)."""
+    """Apply validated edit operations directly (the same engine the agent and the MCP server use).
+
+    With `dryRun` nothing is saved: you get what would be applied, what would be skipped, and a readable list of changes."""
     row, persona = await _row(s, resume_id)
-    res = apply_ops(repo.merged(row, persona), body.ops)
-    if res.applied:
+    before = repo.merged(row, persona)
+    res = apply_ops(before, body.ops)
+    changes = diff_resumes(before, res.resume)
+    undo_id = None
+    saved = bool(res.applied) and not body.dryRun
+    if saved:
+        snap = await vers.snapshot(s, row, source="ops", label=f"{len(res.applied)} operation(s) via API")
+        undo_id = str(snap.id)
         row, persona = await repo.save_resume(s, row.id, res.resume, row.version, update_persona=True)
-    return sc.OpsOut(applied=res.applied, skipped=res.skipped, resume=sc.ResumeOut.of(row, persona))
+    return sc.OpsOut(applied=res.applied, skipped=res.skipped, changes=changes, saved=saved, version=row.version, undoVersionId=undo_id, resume=res.resume if res.applied else before)
+
+
+# ------------------------------------------------------------------ Version history
+
+
+@router.get("/resumes/{resume_id}/versions", response_model=list[sc.VersionOut])
+async def list_versions(resume_id: str, s: AsyncSession = Depends(get_session)):
+    row, _ = await _row(s, resume_id)
+    return [sc.VersionOut.of(v) for v in await vers.list_versions(s, row.id)]
+
+
+async def _version(s: AsyncSession, row, version_id: str):
+    try:
+        return await vers.get_version(s, row.id, parse_id(version_id))
+    except vers.VersionNotFound:
+        raise HTTPException(404, "Version not found.") from None
+
+
+@router.get("/resumes/{resume_id}/versions/{version_id}", response_model=Resume)
+async def get_version(resume_id: str, version_id: str, s: AsyncSession = Depends(get_session)):
+    """The CV as it was in that snapshot (with the persona's current details)."""
+    row, persona = await _row(s, resume_id)
+    v = await _version(s, row, version_id)
+    return repo.merged_from(v.data, persona)
+
+
+@router.get("/resumes/{resume_id}/versions/{version_id}/diff", response_model=sc.DiffOut)
+async def diff_version(resume_id: str, version_id: str, s: AsyncSession = Depends(get_session)):
+    """What restoring this version would change: the snapshot compared with the CV as it is now."""
+    row, persona = await _row(s, resume_id)
+    v = await _version(s, row, version_id)
+    return sc.DiffOut(changes=diff_resumes(repo.merged(row, persona), repo.merged_from(v.data, persona)))
+
+
+@router.post("/resumes/{resume_id}/versions/{version_id}/restore", response_model=sc.ResumeOut)
+async def restore_version(resume_id: str, version_id: str, s: AsyncSession = Depends(get_session)):
+    """Make the CV match that snapshot. The current state is snapshotted first, so a restore can be undone too."""
+    row, _ = await _row(s, resume_id)
+    await _version(s, row, version_id)
+    return sc.ResumeOut.of(*await vers.restore(s, row.id, parse_id(version_id)))
 
 
 # ------------------------------------------------------------------ AI
@@ -177,13 +227,22 @@ async def chat(resume_id: str, body: sc.ChatIn, infra: Infra = Depends(get_infra
         raise HTTPException(409, "The CV changed while the assistant was working. Please try again.") from None
     except LLMError as e:
         raise HTTPException(e.status, str(e)) from e
-    return sc.ChatOut(reply=out.reply, applied=out.applied, skipped=out.skipped, messageId=out.message_id, resume=sc.ResumeOut.of(out.row, out.persona))
+    return sc.ChatOut(
+        reply=out.reply, applied=out.applied, skipped=out.skipped, changes=out.changes, messageId=out.message_id,
+        undoVersionId=out.undo_version_id, resume=sc.ResumeOut.of(out.row, out.persona),
+    )
 
 
 @router.get("/resumes/{resume_id}/chat", response_model=list[sc.ChatMessageOut])
 async def chat_history(resume_id: str, s: AsyncSession = Depends(get_session)):
     row, _ = await _row(s, resume_id)
-    return [sc.ChatMessageOut(id=str(m.id), role=m.role, text=m.text, applied=m.applied or [], skipped=m.skipped or []) for m in await repo.chat_history(s, row.id)]
+    return [
+        sc.ChatMessageOut(
+            id=str(m.id), role=m.role, text=m.text, applied=m.applied or [], skipped=m.skipped or [],
+            undoVersionId=str(m.undo_version_id) if m.undo_version_id else None, undone=m.undone,
+        )
+        for m in await repo.chat_history(s, row.id)
+    ]
 
 
 @router.delete("/resumes/{resume_id}/chat", status_code=204)

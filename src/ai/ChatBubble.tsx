@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { chat, chatHistory, clearChat } from '../api/client'
+import { chat, chatHistory, clearChat, restoreVersion } from '../api/client'
 import { Chat, Close, Send, Sparkle, Trash, Undo } from '../components/icons'
-import type { Resume } from '../model/types'
 import { useResume } from '../state/ResumeContext'
 
 interface Msg {
@@ -9,8 +8,8 @@ interface Msg {
   text: string
   applied?: string[]
   skipped?: string[]
-  /** CV as it was before this message's changes, for Undo (only for changes made in this session). */
-  before?: Resume
+  /** Server-side snapshot taken just before this message's changes. Restoring it is Undo (durable: works after a reload). */
+  undoVersionId?: string | null
   undone?: boolean
   error?: boolean
 }
@@ -24,9 +23,7 @@ const SUGGESTIONS = [
 
 /** Floating assistant. The LangGraph agent on the server edits the saved CV; every change is listed and can be undone. */
 export function ChatBubble() {
-  const { id, resume, adopt, flush, replace } = useResume()
-  const latest = useRef(resume)
-  latest.current = resume
+  const { id, adopt, flush } = useResume()
   const [open, setOpen] = useState(false)
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [text, setText] = useState('')
@@ -55,7 +52,7 @@ export function ChatBubble() {
     if (!open || loaded.current) return
     loaded.current = true
     chatHistory(id)
-      .then((h) => setMsgs((cur) => (cur.length ? cur : h.map((m) => ({ role: m.role, text: m.text, applied: m.applied, skipped: m.skipped })))))
+      .then((h) => setMsgs((cur) => (cur.length ? cur : h.map((m) => ({ role: m.role, text: m.text, applied: m.applied, skipped: m.skipped, undoVersionId: m.undoVersionId, undone: m.undone })))))
       .catch(() => {})
   }, [open, id])
 
@@ -67,10 +64,9 @@ export function ChatBubble() {
     setBusy(true)
     try {
       await flush() // the agent reads the saved CV, so make sure it has your latest edits
-      const before = latest.current
       const out = await chat(id, content)
       if (out.applied.length) adopt(out.resume.resume, out.resume.version)
-      setMsgs((m) => [...m, { role: 'assistant', text: out.reply, applied: out.applied, skipped: out.skipped, before: out.applied.length ? before : undefined }])
+      setMsgs((m) => [...m, { role: 'assistant', text: out.reply, applied: out.applied, skipped: out.skipped, undoVersionId: out.undoVersionId }])
     } catch (e) {
       setMsgs((m) => [...m, { role: 'assistant', text: e instanceof Error ? e.message : 'Something went wrong.', error: true }])
     } finally {
@@ -78,18 +74,27 @@ export function ChatBubble() {
     }
   }
 
-  const undo = (i: number) => {
+  const undo = async (i: number) => {
     const m = msgs[i]
-    if (!m.before) return
-    replace(m.before) // a normal edit: it autosaves like any other
-    setMsgs((all) => all.map((x, k) => (k === i ? { ...x, undone: true } : x)))
+    if (!m.undoVersionId) return
+    setBusy(true)
+    try {
+      await flush() // don't let a pending autosave race the restore
+      const out = await restoreVersion(id, m.undoVersionId) // server restores the snapshot taken before the change
+      adopt(out.resume, out.version)
+      setMsgs((all) => all.map((x, k) => (k === i ? { ...x, undone: true } : x)))
+    } catch (e) {
+      setMsgs((all) => [...all, { role: 'assistant', text: e instanceof Error ? e.message : 'Could not undo.', error: true }])
+    } finally {
+      setBusy(false)
+    }
   }
   const clear = async () => {
     setMsgs([])
     await clearChat(id).catch(() => {})
   }
   // Only the newest applied change can be undone, otherwise we'd silently revert later ones too.
-  const lastApplied = msgs.map((m, i) => (m.before && !m.undone ? i : -1)).filter((i) => i >= 0).pop()
+  const lastApplied = msgs.map((m, i) => (m.undoVersionId && !m.undone ? i : -1)).filter((i) => i >= 0).pop()
 
   return (
     <>
@@ -127,7 +132,7 @@ export function ChatBubble() {
                   </ul>
                 )}
                 {m.skipped && m.skipped.length > 0 && <p className="skipped">Couldn’t apply {m.skipped.length} change{m.skipped.length > 1 ? 's' : ''}: {m.skipped.join('; ')}</p>}
-                {m.before && (m.undone ? <small className="undone">Undone</small> : lastApplied === i && <button type="button" className="btn small" onClick={() => undo(i)}><Undo /> Undo</button>)}
+                {m.undoVersionId && (m.undone ? <small className="undone">Undone</small> : lastApplied === i && <button type="button" className="btn small" disabled={busy} onClick={() => void undo(i)}><Undo /> Undo</button>)}
               </div>
             ))}
             {busy && <div className="msg assistant"><p className="ai-status"><Sparkle className="spin" /> Thinking…</p></div>}

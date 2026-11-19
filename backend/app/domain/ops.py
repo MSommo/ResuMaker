@@ -56,6 +56,7 @@ class ApplyResult:
     applied: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
     failed: list[tuple[Op, str]] = field(default_factory=list)  # the ops behind `skipped`, with reasons (for agent repair)
+    applied_ops: list[Op] = field(default_factory=list)  # the ops behind `applied`, same order (to accept/reject individually)
 
 
 class OpError(Exception):
@@ -339,6 +340,7 @@ def apply_ops(resume: Resume, ops: list[Op]) -> ApplyResult:
             if handler is None:
                 raise OpError(f"unsupported operation “{op.op}”")
             res.applied.append(handler(op))
+            res.applied_ops.append(op)
         except Exception as e:  # OpError, or anything unexpected: never let one bad op abort the rest
             res.skipped.append(f"{op.op}: {e}")
             res.failed.append((op, str(e)))

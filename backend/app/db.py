@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -60,6 +60,24 @@ class ResumeRow(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
+class ResumeVersionRow(Base):
+    """A snapshot of a CV's content (without the persona's details, like `ResumeRow.data`) taken *before* a change, so the
+    change can be inspected (diff) and undone (restore). Taken before AI / operation / restore changes, and as a periodic
+    checkpoint before a manual editing session."""
+
+    __tablename__ = "resume_versions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    resume_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("resumes.id", ondelete="CASCADE"), index=True)
+    version: Mapped[int] = mapped_column(Integer)  # the CV's version number when the snapshot was taken
+    source: Mapped[str] = mapped_column(String(20))  # ai | ops | mcp | autosave | before-restore | import
+    label: Mapped[str] = mapped_column(String(200), default="")  # e.g. the instruction that caused the change
+    layout_id: Mapped[str] = mapped_column(String(50), default="sidebar")
+    title: Mapped[str] = mapped_column(String(200), default="Untitled CV")
+    data: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
 class ChatMessageRow(Base):
     """Assistant conversation per CV, so it survives reloads."""
 
@@ -71,6 +89,9 @@ class ChatMessageRow(Base):
     text: Mapped[str] = mapped_column(Text)
     applied: Mapped[list[str]] = mapped_column(JSONB, default=list)
     skipped: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    # The snapshot taken just before this message's changes: what "Undo" restores. Cleared (SET NULL) if it is pruned.
+    undo_version_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("resume_versions.id", ondelete="SET NULL"), nullable=True)
+    undone: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
 
