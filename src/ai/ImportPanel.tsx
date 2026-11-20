@@ -143,8 +143,10 @@ export function ImportPanel({ persona, incoming }: { persona: Persona; incoming?
               ) : (
                 <div className="dz-idle">
                   <span className="dz-icon"><Upload /></span>
-                  <strong>{drag ? 'Drop it to import' : 'Drag a CV here'}</strong>
-                  <span>or <u>choose a file</u></span>
+                  {/* Touch screens can't drag files: there the box is simply a file picker. */}
+                  <strong className="dz-say-drag">{drag ? 'Drop it to import' : 'Drag a CV here'}</strong>
+                  <span className="dz-say-or">or <u>choose a file</u></span>
+                  <strong className="dz-say-tap">Choose a CV file to import</strong>
                   <span className="dz-types"><b>PDF</b><b>DOCX</b><b>HTML</b><em>up to {MAX_MB} MB</em></span>
                 </div>
               )}

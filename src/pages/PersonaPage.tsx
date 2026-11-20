@@ -21,16 +21,23 @@ function ago(iso: string) {
   return rtf.format(-Math.round(s / 86400), 'day')
 }
 
-function CvCard({ cv, onDelete, onChanged }: { cv: ResumeSummary; onDelete: () => void; onChanged: () => void }) {
+type Work = 'rename' | 'duplicate' | 'delete'
+const WORKING: Record<Work, string> = { rename: 'Saving the new headline…', duplicate: 'Making a copy…', delete: 'Deleting…' }
+
+function CvCard({ cv, onDelete, onChanged }: { cv: ResumeSummary; onDelete: () => Promise<void>; onChanged: () => void }) {
   const [doc, setDoc] = useState<ResumeDoc | null>(null)
+  const [thumbFailed, setThumbFailed] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [name, setName] = useState(cv.title)
-  const [busy, setBusy] = useState(false)
+  const [work, setWork] = useState<Work | null>(null)
+  const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState('')
   const input = useRef<HTMLInputElement>(null)
+  const keep = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     let live = true
-    getResume(cv.id).then((d) => live && setDoc(d)).catch(() => {})
+    setThumbFailed(false)
+    getResume(cv.id).then((d) => live && setDoc(d)).catch(() => live && setThumbFailed(true))
     return () => {
       live = false
     }
@@ -38,44 +45,56 @@ function CvCard({ cv, onDelete, onChanged }: { cv: ResumeSummary; onDelete: () =
   useEffect(() => {
     if (renaming) input.current?.select()
   }, [renaming])
+  useEffect(() => {
+    if (confirming) keep.current?.focus() // the safe choice has focus, so Enter never deletes by accident
+  }, [confirming])
 
-  // A CV's name is the headline written on it, so renaming edits that.
-  const rename = async () => {
+  // Runs one action at a time; a failure leaves the CV as it was and says so in the card.
+  const run = async (what: Work, job: () => Promise<void>, failed: string) => {
+    setWork(what)
+    setError('')
+    try {
+      await job()
+    } catch (e) {
+      setError(`${failed} ${e instanceof Error ? e.message : ''}`.trim())
+    } finally {
+      setWork(null)
+    }
+  }
+
+  // A CV's name is the headline printed under your name, so changing it edits the CV itself.
+  const rename = () => {
     const next = name.trim()
     setRenaming(false)
     if (!next || next === cv.title) return setName(cv.title)
-    setBusy(true)
-    try {
-      const fresh = await getResume(cv.id)
-      await saveResume(cv.id, { ...fresh.resume, basics: { ...fresh.resume.basics, headline: next } }, fresh.version)
-      setError('')
-      onChanged()
-    } catch (e) {
-      setName(cv.title)
-      setError(e instanceof Error ? e.message : 'Could not rename the CV.')
-    } finally {
-      setBusy(false)
-    }
+    void run('rename', async () => {
+      try {
+        const fresh = await getResume(cv.id)
+        await saveResume(cv.id, { ...fresh.resume, basics: { ...fresh.resume.basics, headline: next } }, fresh.version)
+        onChanged()
+      } catch (e) {
+        setName(cv.title)
+        throw e
+      }
+    }, 'Couldn’t change the headline; the CV is unchanged.')
   }
-  const duplicate = async () => {
-    setBusy(true)
-    try {
+  const duplicate = () =>
+    void run('duplicate', async () => {
       const fresh = await getResume(cv.id)
       await createResume(cv.personaId, { resume: { ...fresh.resume, basics: { ...fresh.resume.basics, headline: `${cv.title} (copy)` } }, layoutId: cv.layoutId })
-      setError('')
       onChanged()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not duplicate the CV.')
-    } finally {
-      setBusy(false)
-    }
+    }, 'Couldn’t make a copy.')
+  const remove = () => {
+    setConfirming(false)
+    void run('delete', onDelete, 'Couldn’t delete the CV; it is still here.')
   }
 
+  const busy = work !== null
   return (
-    <article className="lcard" aria-busy={busy}>
+    <article className={`lcard ${busy ? 'busy' : ''}`} aria-busy={busy}>
       {/* The link covers the preview instead of wrapping it: the preview has links of its own (LinkedIn…), and a link can't hold links. */}
       <div className="lcard-thumb">
-        {doc ? <PageThumb resume={doc.resume} /> : <div className="thumb" />}
+        {doc ? <PageThumb resume={doc.resume} /> : <div className="thumb">{thumbFailed && <span className="thumb-missing">Preview unavailable</span>}</div>}
         <Link to={`/editor/${cv.id}`} className="thumb-hit" aria-label={`Open ${cv.title}`}>
           <span className="thumb-open" aria-hidden><span>Open</span></span>
         </Link>
@@ -88,10 +107,10 @@ function CvCard({ cv, onDelete, onChanged }: { cv: ResumeSummary; onDelete: () =
               className="rename"
               value={name}
               maxLength={200}
-              aria-label="CV name"
+              aria-label="Headline, shown under your name on this CV"
               autoFocus
               onChange={(e) => setName(e.target.value)}
-              onBlur={() => void rename()}
+              onBlur={rename}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') e.currentTarget.blur()
                 else if (e.key === 'Escape') (setName(cv.title), setRenaming(false))
@@ -101,16 +120,27 @@ function CvCard({ cv, onDelete, onChanged }: { cv: ResumeSummary; onDelete: () =
             <h3 title={cv.title}>{cv.title}</h3>
           )}
           <Menu label={`Actions for ${cv.title}`} triggerClassName="icon-btn" trigger={<More />}>
-            <MenuItem icon={<Edit />} onSelect={() => (setName(cv.title), setRenaming(true))}>Rename</MenuItem>
-            <MenuItem icon={<Copy />} onSelect={() => void duplicate()}>Duplicate</MenuItem>
+            <MenuItem icon={<Edit />} disabled={busy} onSelect={() => (setName(cv.title), setRenaming(true))}>Change headline</MenuItem>
+            <MenuItem icon={<Copy />} disabled={busy} onSelect={duplicate}>Duplicate</MenuItem>
             <MenuSep />
-            <MenuItem icon={<Trash />} danger onSelect={onDelete}>Delete…</MenuItem>
+            <MenuItem icon={<Trash />} danger disabled={busy} onSelect={() => setConfirming(true)}>Delete…</MenuItem>
           </Menu>
         </div>
+        {renaming && <p className="lcard-hint">The headline is printed under your name on this CV. Enter saves, Esc cancels.</p>}
         <p className="lcard-meta">
           <span className="badge">{layouts.find((l) => l.id === cv.layoutId)?.name ?? cv.layoutId}</span>
           <span>Edited {ago(cv.updatedAt)}</span>
         </p>
+        <p className="lcard-status" role="status">{work ? WORKING[work] : ''}</p>
+        {confirming && (
+          <div className="lcard-confirm" role="group" aria-label={`Delete ${cv.title}`}>
+            <p>Delete this CV for good? This can’t be undone.</p>
+            <div>
+              <button type="button" className="btn small danger" onClick={remove}>Delete CV</button>
+              <button ref={keep} type="button" className="btn small" onClick={() => setConfirming(false)} onKeyDown={(e) => e.key === 'Escape' && setConfirming(false)}>Keep it</button>
+            </div>
+          </div>
+        )}
         {error && <p className="form-error" role="alert">{error}</p>}
       </div>
     </article>
@@ -124,6 +154,7 @@ export default function PersonaPage() {
   const [persona, setPersona] = useState<Persona | null>(null)
   const [cvs, setCvs] = useState<ResumeSummary[]>([])
   const [error, setError] = useState('')
+  const [createError, setCreateError] = useState('')
   const [editing, setEditing] = useState(false)
   const [busy, setBusy] = useState(false)
   const [incoming, setIncoming] = useState<{ file: File; n: number } | undefined>()
@@ -173,27 +204,28 @@ export default function PersonaPage() {
 
   const create = async (layoutId: string, template: 'blank' | 'sample') => {
     setBusy(true)
+    setCreateError('')
     try {
       nav(`/editor/${(await createResume(personaId, { layoutId, template })).id}`)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not create the CV.')
+      setCreateError(`Couldn’t create the CV. ${e instanceof Error ? e.message : ''}`.trim())
       setBusy(false)
     }
   }
+  // Errors are shown by the card (deleteResume throws); the list only reloads once the CV is really gone.
   const removeCv = async (cv: ResumeSummary) => {
-    if (!window.confirm(`Delete the CV “${cv.title}” permanently? This can’t be undone.`)) return
     await deleteResume(cv.id)
     await load()
   }
   if (error && !persona)
     return (
       <div className="state-box" role="alert">
-        <h2>Couldn’t open this page</h2>
+        <h2>Couldn’t load your CVs</h2>
         <p>{error}</p>
-        <p><Link className="btn" to="/">My CVs</Link></p>
+        <p><button type="button" className="btn primary" onClick={() => (setError(''), void load())}>Try again</button></p>
       </div>
     )
-  if (!persona) return <div className="state-box" aria-busy="true"><p>Loading…</p></div>
+  if (!persona) return <div className="state-box" aria-busy="true"><p>Loading your CVs…</p></div>
 
   const contact = [persona.email, persona.phone, persona.address.city].filter(Boolean).join(' · ')
   return (
@@ -231,19 +263,20 @@ export default function PersonaPage() {
       <section className="block" aria-labelledby="cvs-h">
         <div className="section-head"><h2 id="cvs-h">{persona.firstName}’s CVs</h2></div>
         {cvs.length ? (
-          <div className="lgrid">{cvs.map((cv) => <CvCard key={cv.id} cv={cv} onDelete={() => void removeCv(cv)} onChanged={() => void load()} />)}</div>
+          <div className="lgrid">{cvs.map((cv) => <CvCard key={cv.id} cv={cv} onDelete={() => removeCv(cv)} onChanged={() => void load()} />)}</div>
         ) : (
-          <p className="empty">No CVs yet. Pick a layout below to start one.</p>
+          <p className="empty">No CVs yet. Import one you already have, or start from a layout below.</p>
         )}
       </section>
 
       <section className="block" aria-labelledby="new-h">
         <div className="section-head">
           <h2 id="new-h">{cvs.length ? 'Create another CV' : 'Create a CV'}</h2>
-          <p>Already have one? Drop it below. Otherwise choose a layout. You can switch later without losing anything.</p>
+          <p>Import a CV you already have, or start from a layout. You can switch layouts later without losing anything.</p>
         </div>
         <ImportPanel persona={persona} incoming={incoming} />
         <h3 className="sub-head">Start from a layout</h3>
+        {createError && <p className="form-error" role="alert">{createError}</p>}
         <div className="lgrid">
           {samples.map(({ l, r }) => (
             <article key={l.id} className="lcard">
@@ -256,8 +289,9 @@ export default function PersonaPage() {
                 <h3>{l.name}</h3>
                 <p>{l.description}</p>
                 <div className="lcard-actions">
-                  <button type="button" className="btn primary" disabled={busy} onClick={() => void create(l.id, 'blank')}>Use this layout</button>
-                  <button type="button" className="link" disabled={busy} onClick={() => void create(l.id, 'sample')}>or start with sample text</button>
+                  {/* The preview shows sample text; say plainly which start keeps it. */}
+                  <button type="button" className="btn primary" disabled={busy} onClick={() => void create(l.id, 'blank')} aria-label={`Start a blank CV with the ${l.name} layout`}>Start blank</button>
+                  <button type="button" className="link" disabled={busy} onClick={() => void create(l.id, 'sample')} aria-label={`Start a ${l.name} CV with the sample text shown`}>or keep the sample text</button>
                 </div>
               </div>
             </article>

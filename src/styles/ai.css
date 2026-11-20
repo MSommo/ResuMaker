@@ -125,6 +125,8 @@
 .dropzone.busy input[type="file"] { pointer-events: none; }
 .dz-idle, .dz-reading { display: grid; justify-items: center; gap: 6px; pointer-events: none; }
 .dz-idle strong, .dz-reading strong { color: var(--ink); font-size: 17px; }
+.dz-say-tap { display: none; }
+@media (hover: none) and (pointer: coarse) { .dz-say-drag, .dz-say-or { display: none; } .dz-say-tap { display: block; } }
 .dz-icon { display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 4px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); }
 .dz-icon svg { width: 26px; height: 26px; }
 .dropzone.over .dz-icon { animation: dz-bob 0.7s ease-in-out infinite alternate; }
@@ -172,7 +174,7 @@
 .imp-panel .dz-idle > .dz-icon { grid-area: icon; width: 48px; height: 48px; margin: 0; }
 .imp-panel .dz-idle > .dz-icon svg { width: 22px; height: 22px; }
 .imp-panel .dz-idle > strong { grid-area: title; font-size: 15px; }
-.imp-panel .dz-idle > span:not(.dz-icon):not(.dz-types) { grid-area: or; }
+.imp-panel .dz-idle > .dz-say-or { grid-area: or; }
 .imp-panel .dz-idle > .dz-types { grid-area: types; margin-top: 4px; }
 .imp-panel .imp-pick, .imp-panel .imp-review { margin-top: 0; }
 .imp-panel .imp-review { padding: 18px 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }

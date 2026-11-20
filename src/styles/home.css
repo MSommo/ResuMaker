@@ -22,6 +22,15 @@
 .lcard-body h3 { font-size: 15px; display: flex; align-items: center; gap: 8px; }
 .lcard-body p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
 .lcard-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.lcard-hint { font-size: 12.5px; }
+.lcard-status:empty { display: none; }
+.lcard-body .lcard-status { color: var(--ink); font-size: 13px; }
+.lcard.busy .lcard-thumb { opacity: 0.6; }
+.lcard-confirm { margin-top: 10px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line)); border-radius: 10px; background: var(--surface); }
+.lcard-confirm p { margin: 0 0 8px; color: var(--ink); font-size: 13px; }
+.lcard-confirm div { display: flex; flex-wrap: wrap; gap: 6px; }
+.thumb-missing { position: absolute; inset: 0; display: grid; place-items: center; padding: 12px; color: var(--muted); font-size: 12.5px; text-align: center; }
+.lcard .form-error { font-size: 13px; }
 .lcard-title { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
 .lcard-title h3 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lcard-title .rename { flex: 1; min-width: 0; min-height: 34px; padding: 4px 8px; font-size: 16px; font-weight: 600; }
