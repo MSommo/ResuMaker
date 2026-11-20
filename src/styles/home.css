@@ -129,7 +129,7 @@
 .table-wrap { position: relative; }
 .users-table { width: 100%; border-collapse: collapse; }
 .users-table th { text-align: left; font-size: 12px; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line); }
-.users-table td { padding: 12px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.users-table td { padding: 12px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 .users-table small { color: var(--muted); }
 .status { display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: 12px; font-weight: 600; white-space: nowrap; background: var(--bg); color: var(--muted); border: 1px solid var(--line); cursor: help; }
 .status.s-active { background: #e6f4ea; color: #1e6b34; border-color: transparent; }
@@ -137,8 +137,9 @@
 .status.s-locked { background: #fdf0d8; color: #8a5300; border-color: transparent; }
 .status.s-disabled { background: color-mix(in srgb, var(--danger) 9%, var(--surface)); color: var(--danger); border-color: transparent; }
 .users-table time { cursor: help; }
-.row-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
-.row-msg { flex-basis: 100%; margin: 4px 0 0; font-size: 13px; color: var(--muted); text-align: right; }
+.actions-cell { width: 1%; white-space: nowrap; }
+.row-actions { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.row-msg { margin: 6px 0 0; max-width: 32ch; margin-left: auto; white-space: normal; font-size: 13px; color: var(--muted); text-align: right; }
 .row-msg.form-error { color: var(--danger); }
 .row-actions .pop-panel { z-index: 20; }
 .users-table tr.confirming td { border-bottom: 0; }
@@ -151,13 +152,14 @@
   .users-table, .users-table tbody { display: block; }
   .users-table thead { display: none; }
   .users-table tr { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin-bottom: 12px; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
-  .users-table td { display: grid; gap: 2px; align-content: start; border: 0; padding: 0; }
+  .users-table td { display: grid; gap: 2px; align-content: start; justify-items: start; border: 0; padding: 0; }
   .users-table td[data-label]::before { content: attr(data-label); color: var(--muted); font-size: 12px; }
   .users-table td.person { grid-column: 1 / -1; display: block; }
   .users-table td.person::before { content: none; }
   .users-table td.person small { overflow-wrap: anywhere; }
-  .row-actions { grid-column: 1 / -1; display: flex; justify-content: flex-start; padding-top: 4px; }
-  .row-msg { text-align: left; }
+  .users-table td.actions-cell { grid-column: 1 / -1; width: auto; padding-top: 4px; }
+  .row-actions { justify-content: flex-start; }
+  .row-msg { text-align: left; margin-left: 0; max-width: none; }
   .users-table tr.confirming { margin-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
   .users-table .confirm-row { display: block; margin-top: -1px; border-top-left-radius: 0; border-top-right-radius: 0; }
   .users-table .confirm-row td { display: block; padding: 0; background: none; }

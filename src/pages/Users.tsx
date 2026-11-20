@@ -125,7 +125,7 @@ export default function Users() {
       <div className="page-head users-head">
         <div>
           <h1>People</h1>
-          <p className="lede">Accounts are created here: there is no sign-up. You manage accounts only: nobody, including you, can open another person’s CVs.</p>
+          <p className="lede">There is no sign-up: you create each account here. You manage accounts only; nobody, including you, can open another person’s CVs.</p>
         </div>
         {!adding && <button type="button" className="btn primary" onClick={() => setAdding(true)}><Plus /> Add person</button>}
       </div>
@@ -206,7 +206,8 @@ export default function Users() {
                         )}
                       </td>
                       <td data-label="Last sign-in">{u.lastLoginAt ? <time dateTime={u.lastLoginAt} title={new Date(u.lastLoginAt).toLocaleString()}>{timeAgo(u.lastLoginAt)}</time> : 'Never'}</td>
-                      <td className="row-actions" aria-busy={busyRow}>
+                      <td className="actions-cell" aria-busy={busyRow}>
+                        <div className="row-actions">
                         {self ? (
                           <Link to="/account" className="btn small">Your account</Link>
                         ) : (
@@ -224,6 +225,7 @@ export default function Users() {
                             </span>
                           </>
                         )}
+                        </div>
                         {msg && <p className={msg.error ? 'form-error row-msg' : 'row-msg'} role={msg.error ? 'alert' : 'status'}>{msg.text}</p>}
                       </td>
                     </tr>
