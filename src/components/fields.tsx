@@ -297,7 +297,7 @@ export function BulletsEditor({ value, onChange, improveContext }: { value: stri
   const id = useId()
   return (
     <div className="field" role="group" aria-labelledby={id}>
-      <span className="label" id={id}>Highlights</span>
+      <span className="label" id={id}>Bullets</span>
       <div className="bullets">
         {rows.map((r, i) => (
           <BulletRow

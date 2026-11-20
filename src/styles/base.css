@@ -224,3 +224,17 @@ input:disabled { background: var(--bg); color: var(--muted); }
 }
 
 @page { size: A4; margin: 0; }
+
+/* Short list rows (skills, links): the controls sit beside the fields, not in a row of their own above them. */
+.item.inline { display: flex; align-items: flex-start; gap: 6px; }
+.item.inline .item-body { order: 1; flex: 1; min-width: 0; }
+.item.inline .item-head { order: 2; margin: 0; }
+.item.inline .item-tools { padding-right: 0; }
+.item.inline .level-row .field { flex-basis: 96px; }
+.item.inline .level-row .field-head { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }  /* the name stays on the input for screen readers */
+.link-row { display: grid; gap: 8px; }
+.item.inline .level-picker { min-height: 38px; gap: 0; }
+.item.inline .level-picker span { display: none; }  /* the dots say it; each one still carries its name for screen readers */
+.item.inline .level-dots { gap: 4px; }
+.item.inline .level-dots button { width: 18px; height: 18px; }
+.form-note p + p { margin-top: 6px; }
