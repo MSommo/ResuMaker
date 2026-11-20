@@ -41,7 +41,7 @@ function Navbar() {
               </div>
               <MenuSep />
               <MenuItem icon={<User />} onSelect={() => go('/account')}>Account</MenuItem>
-              {me.role === 'admin' && <MenuItem icon={<Users />} onSelect={() => go('/users')}>Users <span className="badge">Admin</span></MenuItem>}
+              {me.role === 'admin' && <MenuItem icon={<Users />} onSelect={() => go('/users')}>People <span className="badge">Admin</span></MenuItem>}
               <MenuSep />
               <MenuItem icon={<SignOut />} onSelect={() => void logout()}>Sign out</MenuItem>
             </>

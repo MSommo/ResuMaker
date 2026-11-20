@@ -2,11 +2,19 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { createDraft, deleteUser, listUsers, patchUser, reissueInvite, signUserOut, type AdminUser, type Invite, type Role } from '../api/client'
 import { useMe } from '../auth/AuthContext'
-import { Back, Lock, Refresh, SignOut, Trash, User } from '../components/icons'
+import { Back, Lock, Plus, Refresh, SignOut, Trash, User } from '../components/icons'
 import { PasswordConfirm } from '../components/PasswordConfirm'
 import { Menu, MenuItem, MenuSep } from '../components/Popover'
+import { timeAgo } from '../model/relativeTime'
 
-const STATUS: Record<AdminUser['status'], string> = { draft: 'Draft: no link sent', invited: 'Invited: waiting for them', active: 'Active', locked: 'Locked (too many wrong passwords)', disabled: 'Disabled' }
+/** Short badge label, and what it means (on hover and for screen readers). */
+const STATUS: Record<AdminUser['status'], [string, string]> = {
+  draft: ['Draft', 'No invite link generated yet'],
+  invited: ['Invited', 'Invite link sent, waiting for them to set a password'],
+  active: ['Active', 'Can sign in'],
+  locked: ['Locked', 'Too many wrong passwords: a reset link unlocks the account'],
+  disabled: ['Disabled', 'Sign-in turned off by an administrator'],
+}
 
 const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
@@ -71,6 +79,14 @@ export default function Users() {
   const [deleting, setDeleting] = useState<string | null>(null)
   const [form, setForm] = useState({ login: '', firstName: '', lastName: '', role: 'user' as Role })
   const [busy, setBusy] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const firstField = useRef<HTMLInputElement>(null)
+  useEffect(() => { if (adding) firstField.current?.focus() }, [adding])
+  const closeForm = () => {
+    setAdding(false)
+    setFormError('')
+    setForm({ login: '', firstName: '', lastName: '', role: 'user' })
+  }
 
   const load = useCallback(async () => {
     try {
@@ -106,40 +122,52 @@ export default function Users() {
   return (
     <div className="container page">
       <Link to="/" className="back"><Back /> My CVs</Link>
-      <h1>Users</h1>
-      <p className="lede">There is no sign-up: you prepare each persona, then send its owner a one-time invite link. Administrators manage accounts only: nobody, including you, can open another person’s CVs.</p>
+      <div className="page-head users-head">
+        <div>
+          <h1>People</h1>
+          <p className="lede">Accounts are created here: there is no sign-up. You manage accounts only: nobody, including you, can open another person’s CVs.</p>
+        </div>
+        {!adding && <button type="button" className="btn primary" onClick={() => setAdding(true)}><Plus /> Add person</button>}
+      </div>
       {invite && <InviteBox invite={invite} onClose={() => setInvite(null)} />}
 
-      <section className="panelbox" aria-labelledby="add-h">
-        <h2 id="add-h">Prepare a persona</h2>
-        <p className="lede">A name and the email they’ll sign in with. Nobody can sign in yet: generate the invite link when you’re ready. They choose their own password and fill in the rest of their details themselves.</p>
-        <form
-          className="form user-add"
-          onSubmit={async (e) => {
-            e.preventDefault()
-            setBusy(true)
-            setFormError('')
-            try {
-              await createDraft(form)
-              setForm({ login: '', firstName: '', lastName: '', role: 'user' })
-              await load()
-            } catch (err) {
-              setFormError(err instanceof Error ? err.message : 'Something went wrong.')
-            } finally {
-              setBusy(false)
-            }
-          }}
-        >
-          <div className="field"><label htmlFor="u-first">First name</label><input id="u-first" required value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} /></div>
-          <div className="field"><label htmlFor="u-last">Last name</label><input id="u-last" value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} /></div>
-          <div className="field"><label htmlFor="u-login">Email</label><input id="u-login" type="email" required value={form.login} onChange={(e) => setForm({ ...form, login: e.target.value })} /></div>
-          <div className="field"><label htmlFor="u-role">Role</label>
-            <select id="u-role" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}><option value="user">Person</option><option value="admin">Administrator</option></select>
-          </div>
-          <div className="form-actions"><button type="submit" className="btn primary" disabled={busy}>{busy ? 'Saving…' : 'Save draft'}</button></div>
-          {formError && <p className="form-error user-add-error" role="alert">{formError}</p>}
-        </form>
-      </section>
+      {adding && (
+        <section className="panelbox" aria-labelledby="add-h">
+          <h2 id="add-h">Add a person</h2>
+          <p className="lede">Their name and the email they’ll sign in with. Nobody can sign in until you generate their invite link; they choose their own password.</p>
+          <form
+            className="form user-add"
+            onSubmit={async (e) => {
+              e.preventDefault()
+              setBusy(true)
+              setFormError('')
+              try {
+                const u = await createDraft(form)
+                closeForm()
+                await load()
+                setRowMsg({ id: u.id, text: `${u.firstName} was added. Generate their invite link when you’re ready.` })
+              } catch (err) {
+                setFormError(err instanceof Error ? err.message : 'Something went wrong.')
+              } finally {
+                setBusy(false)
+              }
+            }}
+            onKeyDown={(e) => { if (e.key === 'Escape' && !busy) closeForm() }}
+          >
+            <div className="field"><label htmlFor="u-first">First name</label><input ref={firstField} id="u-first" required value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} /></div>
+            <div className="field"><label htmlFor="u-last">Last name</label><input id="u-last" value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} /></div>
+            <div className="field"><label htmlFor="u-login">Email</label><input id="u-login" type="email" required value={form.login} onChange={(e) => setForm({ ...form, login: e.target.value })} /></div>
+            <div className="field"><label htmlFor="u-role">Role</label>
+              <select id="u-role" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}><option value="user">Person</option><option value="admin">Administrator</option></select>
+            </div>
+            <div className="form-actions">
+              <button type="submit" className="btn primary" disabled={busy}>{busy ? 'Adding…' : 'Add person'}</button>
+              <button type="button" className="btn" disabled={busy} onClick={closeForm}>Cancel</button>
+            </div>
+            {formError && <p className="form-error user-add-error" role="alert">{formError}</p>}
+          </form>
+        </section>
+      )}
 
       {!users ? (
         loadError
@@ -147,7 +175,7 @@ export default function Users() {
           : <div className="state-box" aria-busy="true"><p>Loading…</p></div>
       ) : (
         <div className="table-wrap">
-          <table className="users-table">
+          <table className="users-table" aria-label={`${users.length} ${users.length === 1 ? 'person' : 'people'}`}>
             <thead><tr><th>Person</th><th>Status</th><th>CVs</th><th>AI</th><th>Last sign-in</th><th><span className="sr-only">Actions</span></th></tr></thead>
             <tbody>
               {users.map((u) => {
@@ -166,8 +194,8 @@ export default function Users() {
                 return (
                   <Fragment key={u.id}>
                     <tr className={deleting === u.id ? 'confirming' : undefined}>
-                      <td data-label="Person"><strong>{who}</strong>{self && ' (you)'}<br /><small>{u.login ?? 'no sign-in email'}{u.role === 'admin' ? ' · administrator' : ''}</small></td>
-                      <td data-label="Status">{STATUS[u.status]}</td>
+                      <td data-label="Person" className="person"><strong>{who}</strong>{self && ' (you)'}<br /><small>{u.login ?? 'no sign-in email'}{u.role === 'admin' ? ' · administrator' : ''}</small></td>
+                      <td data-label="Status"><span className={`status s-${u.status}`} title={STATUS[u.status][1]}>{STATUS[u.status][0]}<span className="sr-only">: {STATUS[u.status][1]}</span></span></td>
                       <td data-label="CVs">{u.resumeCount}</td>
                       <td data-label="AI">
                         {u.role === 'admin' ? <small title="Administrators always have AI">Always</small> : (
@@ -177,7 +205,7 @@ export default function Users() {
                           </label>
                         )}
                       </td>
-                      <td data-label="Last sign-in">{u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : 'Never'}</td>
+                      <td data-label="Last sign-in">{u.lastLoginAt ? <time dateTime={u.lastLoginAt} title={new Date(u.lastLoginAt).toLocaleString()}>{timeAgo(u.lastLoginAt)}</time> : 'Never'}</td>
                       <td className="row-actions" aria-busy={busyRow}>
                         {self ? (
                           <Link to="/account" className="btn small">Your account</Link>
