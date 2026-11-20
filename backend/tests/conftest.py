@@ -21,6 +21,7 @@ import httpx
 import pytest
 import pytest_asyncio
 
+from app.services.cv_import import ImportedCV
 from app.agent.graph import AgentPlan, Critique, Decomposition, Memo, Route
 from app.agent.llm import LLMError
 from app.agent.prompts import ANSWER_SYSTEM
@@ -47,6 +48,8 @@ class FakeLLM:
         self.critiques: list[Critique | Exception] = []  # unscripted: the critic approves
         self.decompose_calls = 0
         self.embed_calls = 0
+        self.imports: list = []  # scripted ImportedCV results; unscripted: an empty CV
+        self.import_inputs: list = []  # what the import call was shown
         self.memos: list = []  # scripted Memo results for the `remember` node; unscripted: a preference echoing the message
         self.critic_calls = 0
         self.specs: list[JobSpec | Exception] = []  # unscripted: a plain spec
@@ -81,6 +84,12 @@ class FakeLLM:
             self.route_calls += 1
             self.fast_flags.append(fast)
             nxt = self.routes.pop(0) if self.routes else Route(intent="edit", reason="test default")
+            if isinstance(nxt, Exception):
+                raise nxt
+            return nxt
+        if schema is ImportedCV:
+            self.import_inputs.append(contents)
+            nxt = self.imports.pop(0) if self.imports else ImportedCV()
             if isinstance(nxt, Exception):
                 raise nxt
             return nxt
@@ -162,7 +171,7 @@ async def client(infra):
     llm = infra.llm
     llm.plans.clear(), llm.routes.clear(), llm.decompositions.clear(), llm.specs.clear(), llm.seen.clear(), llm.critiques.clear(), llm.answers.clear(), llm.text_calls.clear(), llm.fast_flags.clear()
     llm.json_calls = llm.route_calls = llm.answer_calls = llm.decompose_calls = llm.critic_calls = llm.embed_calls = 0
-    llm.memos.clear()
+    llm.memos.clear(), llm.imports.clear(), llm.import_inputs.clear()
     infra.pdf.renders = 0
     infra.settings.ai_rate_limit_per_min = 1000
     await infra.redis.flushdb()

@@ -29,8 +29,13 @@ class LLM(Protocol):
         ...
 
 
+def _part(p: Any) -> types.Part:
+    # A part is text, or {"mime": ..., "data": bytes} for a file (e.g. a PDF the model reads directly).
+    return types.Part.from_bytes(data=p["data"], mime_type=p["mime"]) if isinstance(p, dict) else types.Part(text=p)
+
+
 def _contents(items: list[dict[str, Any]]) -> list[types.Content]:
-    return [types.Content(role=i["role"], parts=[types.Part(text=t) for t in i["parts"]]) for i in items]
+    return [types.Content(role=i["role"], parts=[_part(t) for t in i["parts"]]) for i in items]
 
 
 class GeminiLLM:
@@ -39,7 +44,7 @@ class GeminiLLM:
         self.dims = dims
         self.model = model
         self.fast_model = fast_model or model
-        self.client = genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=60_000, api_version="v1beta"))
+        self.client = genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=110_000, api_version="v1beta"))
 
     async def _generate(self, *, system: str, contents: Any, fast: bool = False, **config: Any) -> types.GenerateContentResponse:
         model = self.fast_model if fast else self.model

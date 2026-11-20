@@ -5,7 +5,7 @@ import json
 import logging
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,8 @@ from ..infra import Infra
 from ..services import personas as people
 from ..services import resumes as repo
 from ..services import versions as vers
+from ..services.cv_import import parse_cv
+from ..services.importers import MAX_BYTES, ImportRejected
 from ..services.chat import ProposalGone, decide, run_chat, stream_chat
 from ..services import memory as mem
 from ..services.tailor import stream_tailor
@@ -119,6 +121,23 @@ async def create_resume(persona_id: str, body: sc.CreateResumeIn, s: AsyncSessio
     await _persona(s, persona_id)
     row, persona = await repo.create_resume(s, parse_id(persona_id), resume=body.resume, layout_id=body.layoutId, template=body.template)
     return sc.ResumeOut.of(row, persona)
+
+
+@router.post("/personas/{persona_id}/imports/cv", response_model=sc.ImportOut, dependencies=[Depends(rate_limit)])
+async def import_cv(persona_id: str, file: UploadFile = File(...), infra: Infra = Depends(get_infra)):
+    """Read a CV from a PDF, DOCX or HTML file (up to 10 MB) into our format. Saves nothing: it returns a preview with warnings to
+    review, and the CV is created with the normal POST /personas/{id}/resumes. The file is processed in memory and not kept."""
+    _ai(infra)
+    async with infra.session() as s:
+        await _persona(s, persona_id)
+    data = await file.read(MAX_BYTES + 1)
+    try:
+        p = await parse_cv(infra.llm, data)
+    except ImportRejected as e:
+        raise HTTPException(e.status, str(e)) from None
+    except LLMError as e:
+        raise HTTPException(e.status, str(e)) from e
+    return sc.ImportOut(resume=p.resume, kind=p.kind, language=p.language, warnings=p.warnings, stats=p.stats)
 
 
 # ------------------------------------------------------------------ memory

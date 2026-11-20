@@ -162,3 +162,13 @@ class MemoryOut(BaseModel):
     kind: str
     text: str
     createdAt: datetime  # noqa: N815
+
+
+class ImportOut(BaseModel):
+    """A CV read from a file. Nothing is saved: review it, then create it with POST /personas/{id}/resumes."""
+
+    resume: Resume  # includes the personal details found in the file (the persona's own are used when the CV is created)
+    kind: str  # "pdf" | "docx" | "html"
+    language: str = ""
+    warnings: list[str] = []
+    stats: dict[str, int] = {}  # items per section
