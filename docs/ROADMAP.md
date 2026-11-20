@@ -23,7 +23,7 @@ Get a posting into the tailor flow without pasting. Researched options:
   - The fetched page is untrusted: only the extracted spec reaches the editing agent, and the extracted text is shown before tailoring.
   - Tests: private IPs, redirects to private IPs, DNS rebinding, oversize; saved real-page fixtures for each extraction path.
 
-## Phase 7: Import a CV from HTML, DOCX or PDF
+## Phase 7: Import a CV from HTML, DOCX or PDF, done
 
 Upload a file, get a CV in our JSON, reviewed before it is created.
 - **Formats:** PDF (text or scanned; Gemini reads PDFs directly, so layout and scans work without a separate OCR step), DOCX (`python-docx`, text and structure), HTML (strip to text with structure). Legacy `.doc` is not supported directly; ask for a DOCX or PDF export. Size cap, file type checked by content and not just extension, files processed in memory and not kept.

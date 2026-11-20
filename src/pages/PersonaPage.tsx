@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { createResume, deletePersona, deleteResume, getPersona, getResume, updatePersona, type Persona, type ResumeDoc, type ResumeSummary } from '../api/client'
 import { Avatar } from '../components/Avatar'
 import { PageThumb } from '../components/CvView'
+import { ImportDialog } from '../ai/ImportDialog'
 import { PersonaForm } from '../components/PersonaForm'
 import { Back, Trash } from '../components/icons'
 import { layouts } from '../layouts/registry'
@@ -55,6 +56,7 @@ export default function PersonaPage() {
   const [error, setError] = useState('')
   const [editing, setEditing] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [importing, setImporting] = useState(false)
   const samples = useMemo(() => layouts.map((l) => ({ l, r: sampleResume(l.id) })), [])
 
   const load = useCallback(async () => {
@@ -157,6 +159,7 @@ export default function PersonaPage() {
         <div className="section-head">
           <h2 id="new-h">{cvs.length ? 'Create another CV' : 'Create a CV'}</h2>
           <p>Choose a layout. You can switch later without losing anything.</p>
+          <button type="button" className="btn" onClick={() => setImporting(true)}>Import a CV from a file (PDF, DOCX, HTML)</button>
         </div>
         <div className="lgrid">
           {samples.map(({ l, r }) => (
@@ -176,6 +179,8 @@ export default function PersonaPage() {
           ))}
         </div>
       </section>
+
+      {importing && persona && <ImportDialog persona={persona} onClose={() => setImporting(false)} />}
     </div>
   )
 }

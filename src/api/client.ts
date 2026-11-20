@@ -195,6 +195,32 @@ export const decideProposal = (id: string, runId: string, accept: 'all' | 'none'
 export const chatHistory = (id: string) => json<ChatMessage[]>('GET', `/resumes/${id}/chat`)
 export const clearChat = async (id: string) => void (await request('DELETE', `/resumes/${id}/chat`))
 
+/** A CV read from a file. Nothing is saved: review it, then create it with `createResume(personaId, { resume })`. */
+export interface ImportPreview {
+  resume: Resume
+  kind: 'pdf' | 'docx' | 'html'
+  language: string
+  warnings: string[]
+  stats: Record<string, number>
+}
+export async function importCv(personaId: string, file: File, signal?: AbortSignal): Promise<ImportPreview> {
+  const body = new FormData()
+  body.append('file', file)
+  let res: Response
+  try {
+    // No content-type header: the browser adds the multipart boundary itself.
+    res = await fetch(`/api/personas/${personaId}/imports/cv`, { method: 'POST', headers: { 'x-resumaker': '1' }, body, signal })
+  } catch (e) {
+    if ((e as Error).name === 'AbortError') throw e
+    throw new ApiError('Can’t reach the ResuMaker API.', 0)
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => null)
+    throw new ApiError(data?.error ?? `Import failed (${res.status})`, res.status, data)
+  }
+  return res.json()
+}
+
 // Memory: what the assistant remembers about a person (preferences and facts they confirmed)
 export interface Memory {
   id: string
