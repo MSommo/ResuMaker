@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Before a push: the backend suite, if the scratch stack's Postgres (localhost:5434) is up.
+# Skipped with a notice when it isn't, so pushing never needs Docker; CI runs the suite regardless.
+set -e
+cd "$(git rev-parse --show-toplevel)"
+
+if ! (exec 3<>/dev/tcp/localhost/5434) 2>/dev/null; then
+	echo "⚠️  Scratch Postgres is not running (make infra): skipping backend tests, CI will run them."
+	exit 0
+fi
+
+echo "🔍 Running backend tests..."
+make test-local
