@@ -9,6 +9,7 @@ import EditorPage from './pages/Editor'
 import Login from './pages/Login'
 import PersonaPage from './pages/PersonaPage'
 import Preview from './pages/Preview'
+import Splash from './pages/Splash'
 import Users from './pages/Users'
 import { LAST_KEY, ResumeProvider } from './state/ResumeContext'
 
@@ -45,13 +46,18 @@ function AdminOnly({ children }: { children: ReactNode }) {
   return useMe().role === 'admin' ? <>{children}</> : <Navigate to="/" replace />
 }
 
-/** Nothing but the sign-in and invite pages exists until you are signed in. The server enforces it too: this is only the front door. */
+/**
+ * Nothing but the splash, sign-in and invite pages exists until you are signed in. The server enforces it too: this is only
+ * the front door. `/` introduces ResuMaker; any other address (a link to a CV, say) goes straight to sign-in and opens
+ * once you are in.
+ */
 export default function App() {
   const { state } = useAuth()
   if (state.status === 'loading') return <div className="state-box" aria-busy="true"><p>Loading…</p></div>
   if (state.status === 'anon')
     return (
       <Routes>
+        <Route index element={<Splash />} />
         <Route path="accept" element={<Accept />} />
         <Route path="*" element={<Login />} />
       </Routes>

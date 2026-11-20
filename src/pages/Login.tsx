@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { signIn } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 
@@ -41,6 +42,7 @@ export default function Login() {
         {error && <p className="form-error" role="alert">{error}</p>}
         <button type="submit" className="btn primary large" disabled={busy || !login || !password}>{busy ? 'Signing in…' : 'Sign in'}</button>
         <p className="auth-note">No account yet, or forgot your password? Ask the person who runs this ResuMaker for a link.</p>
+        <Link to="/" className="auth-back">What is ResuMaker?</Link>
       </form>
     </div>
   )
