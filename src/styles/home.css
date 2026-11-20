@@ -128,12 +128,16 @@
 .users-table td { padding: 12px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .users-table small { color: var(--muted); }
 .row-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.row-msg { flex-basis: 100%; margin: 4px 0 0; font-size: 13px; color: var(--muted); text-align: right; }
+.row-msg.form-error { color: var(--danger); }
+.form-hint { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
 @media (max-width: 720px) {
   .users-table thead { display: none; }
   .users-table tr { display: block; padding: 10px 0; border-bottom: 1px solid var(--line); }
   .users-table td { display: flex; justify-content: space-between; gap: 12px; border: 0; padding: 4px 0; }
   .users-table td[data-label]::before { content: attr(data-label); color: var(--muted); font-size: 12px; }
   .row-actions { justify-content: flex-start; }
+  .row-msg { text-align: left; }
 }
 
 /* on/off switch (admin: AI per user) */
