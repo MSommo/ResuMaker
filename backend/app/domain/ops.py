@@ -13,7 +13,7 @@ from typing import Any, Callable
 import pycountry
 from pydantic import BaseModel, Field
 
-from .catalog import get_layout, get_template, LAYOUTS, new_id
+from .catalog import LAYOUTS, accepts, get_layout, get_template, new_id
 from .models import (
     Entry,
     EntriesSection,
@@ -66,15 +66,16 @@ class OpError(Exception):
 # ---------------------------------------------------------------- layout helpers
 
 
-def zone_accepts(layout_id: str, zone: str, kind: str) -> bool:
+def zone_accepts(layout_id: str, zone: str, kind: str, icon: str = "none") -> bool:
     z = next((z for z in get_layout(layout_id).zones if z.id == zone), None)
-    return bool(z and kind in z.accepts)
+    return bool(z and accepts(z, kind, icon))
 
 
-def pick_zone(layout_id: str, kind: str, prefer: str | None = None) -> str | None:
-    if prefer and zone_accepts(layout_id, prefer, kind):
+def pick_zone(layout_id: str, kind: str, prefer: str | None = None, icon: str = "none") -> str | None:
+    """The preferred zone if it fits, else the first that does. The header is never picked automatically."""
+    if prefer and zone_accepts(layout_id, prefer, kind, icon):
         return prefer
-    return next((z.id for z in get_layout(layout_id).zones if kind in z.accepts), None)
+    return next((z.id for z in get_layout(layout_id).zones if z.id != "header" and accepts(z, kind, icon)), None)
 
 
 def place_at(sections: list[Section], sec: Section, zone: str, position: int | None = None) -> list[Section]:
@@ -94,8 +95,8 @@ def with_layout(r: Resume, layout_id: str) -> None:
     layout = get_layout(layout_id)
     r.layoutId = layout.id
     for s in r.sections:
-        if s.zone is not None and not zone_accepts(layout.id, s.zone, s.kind):
-            s.zone = pick_zone(layout.id, s.kind)
+        if s.zone is not None and not zone_accepts(layout.id, s.zone, s.kind, s.icon):
+            s.zone = pick_zone(layout.id, s.kind, icon=s.icon)
 
 
 # ---------------------------------------------------------------- patch sanitising
@@ -219,7 +220,7 @@ def apply_ops(resume: Resume, ops: list[Op]) -> ApplyResult:
         t = get_template(op.template or "")
         if not t:
             raise OpError(f"unknown template “{op.template}”")
-        zone = op.zone if op.zone and zone_accepts(r.layoutId, op.zone, t.kind) else pick_zone(r.layoutId, t.kind, t.zone)
+        zone = op.zone if op.zone and zone_accepts(r.layoutId, op.zone, t.kind, t.icon) else pick_zone(r.layoutId, t.kind, t.zone, t.icon)
         if not zone:
             raise OpError("no column can hold it")
         sid = fresh(op.sectionId)
@@ -242,7 +243,7 @@ def apply_ops(resume: Resume, ops: list[Op]) -> ApplyResult:
 
     def move_section(op: Op) -> str:
         s = need(op.sectionId)
-        if not op.zone or not zone_accepts(r.layoutId, op.zone, s.kind):
+        if not op.zone or not zone_accepts(r.layoutId, op.zone, s.kind, s.icon):
             raise OpError("that column cannot hold it")
         r.sections = place_at(r.sections, s, op.zone, op.position)
         label = next((z.label for z in get_layout(r.layoutId).zones if z.id == op.zone), op.zone)

@@ -32,3 +32,12 @@
   .pg-page:last-of-type { break-after: auto; page-break-after: auto; }
   .pg-measure { display: none; }
 }
+
+/* Sections placed in the header zone (Profile, Personal details) */
+.hx { margin-top: 4mm; display: grid; gap: 2.5mm; }
+.hx-p { margin: 0; font-size: 9pt; line-height: 1.45; }
+.hx-p + .hx-p { margin-top: 1.5mm; }
+.hx-facts { display: flex; flex-wrap: wrap; gap: 0.5mm 4mm; font-size: 8.4pt; }
+.tm .hx { text-align: center; }
+.tm .hx-facts { justify-content: center; }
+.hx-facts b { font-weight: 600; margin-right: 0.6mm; }

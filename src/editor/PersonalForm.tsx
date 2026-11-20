@@ -1,23 +1,20 @@
-import { TextField } from '../components/fields'
+import { Hint } from '../components/Hint'
 import { personalOf } from '../model/types'
 import { useResume } from '../state/ResumeContext'
 import { PersonalFields } from './PersonalFields'
 
+/** Your profile: the details every one of your CVs shares. (The headline, which is per CV, is in the Header card on Sections.) */
 export function PersonalForm() {
   const { resume, setBasics } = useResume()
-  const b = resume.basics
   return (
-    <div className="form">
-      <fieldset>
-        <legend>This CV</legend>
-        <TextField label="Headline" hint="Only on this CV, e.g. the role it targets: “Senior Software Engineer”" value={b.headline} onChange={(v) => setBasics({ headline: v })} improve={{ kind: 'headline' }} />
-      </fieldset>
-
-      <PersonalFields value={personalOf(b)} onChange={setBasics} />
-      <p className="form-note">
-        Everything above except the headline belongs to <b>{b.firstName || 'this person'}</b> and is shared by all of their CVs. It appears in the header
-        and in any <b>Personal details</b> component you place in the CV.
+    <div className="form pi">
+      <p className="pi-sub">
+        Shared by all your CVs
+        <Hint label="About these details">
+          Fill these in once: a change here updates every CV you have. They appear in the header and in the Personal details block, wherever you place it. The headline is the only part that belongs to a single CV: edit it in Header.
+        </Hint>
       </p>
+      <PersonalFields value={personalOf(resume.basics)} onChange={setBasics} />
     </div>
   )
 }

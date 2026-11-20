@@ -43,10 +43,17 @@ class Layout:
 
 _SIDE = Zone("side", "Sidebar", frozenset({"details", "text", "levels", "links"}))
 _MAIN = Zone("main", "Main column", frozenset({"text", "entries"}))
+# The header only takes a few pre-determined components. An accept entry is a section kind ("details") or `kind:icon` ("text:user"
+# = the Profile text block, recognised by its person icon). Keep it LAST in a layout's zones: nothing is auto-placed into it.
+_HEADER = Zone("header", "Header", frozenset({"details", "text:user"}))
+
+
+def accepts(zone: Zone, kind: str, icon: str = "none") -> bool:
+    return kind in zone.accepts or f"{kind}:{icon}" in zone.accepts
 
 LAYOUTS: dict[str, Layout] = {
-    "sidebar": Layout("sidebar", "Sidebar", (_SIDE, _MAIN)),
-    "timeline": Layout("timeline", "Timeline", (_SIDE, _MAIN)),
+    "sidebar": Layout("sidebar", "Sidebar", (_SIDE, _MAIN, _HEADER)),
+    "timeline": Layout("timeline", "Timeline", (_SIDE, _MAIN, _HEADER)),
 }
 DEFAULT_LAYOUT = "sidebar"
 

@@ -143,12 +143,14 @@ export function ImportPanel({ persona, incoming }: { persona: Persona; incoming?
               ) : (
                 <div className="dz-idle">
                   <span className="dz-icon"><Upload /></span>
-                  <strong>{drag ? 'Drop it to import' : 'Drag a CV here'}</strong>
-                  <span>or <u>choose a file</u></span>
+                  {/* Touch screens can't drag files: there the box is simply a file picker. */}
+                  <strong className="dz-say-drag">{drag ? 'Drop it to import' : 'Drag a CV here'}</strong>
+                  <span className="dz-say-or">or <u>choose a file</u></span>
+                  <strong className="dz-say-tap">Choose a CV file to import</strong>
                   <span className="dz-types"><b>PDF</b><b>DOCX</b><b>HTML</b><em>up to {MAX_MB} MB</em></span>
                 </div>
               )}
-              <input type="file" accept=".pdf,.docx,.html,.htm,application/pdf" disabled={stage === 'reading'} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void read(f) }} />
+              <input type="file" aria-label={`Choose a CV file to import: PDF, DOCX or HTML, up to ${MAX_MB} MB`} accept=".pdf,.docx,.html,.htm,application/pdf" disabled={stage === 'reading'} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void read(f) }} />
             </label>
             {error && <p className="imp-error" role="alert">{error}</p>}
             <small className="ai-note">I’ll turn it into an editable CV and show you what I found before anything is created. The file’s text is sent to an AI service to read it; it is not stored.</small>

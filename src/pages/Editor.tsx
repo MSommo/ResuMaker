@@ -1,8 +1,7 @@
 import {
-  DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor, closestCenter, pointerWithin, useSensor, useSensors,
-  type CollisionDetection, type DragEndEvent, type DragOverEvent, type DragStartEvent,
+  DndContext, DragOverlay, KeyboardSensor, MeasuringStrategy, MouseSensor, TouchSensor, closestCenter, pointerWithin, useSensor, useSensors,
+  type CollisionDetection, type DragEndEvent, type DragMoveEvent, type DragStartEvent,
 } from '@dnd-kit/core'
-import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useCaps } from '../api/Caps'
@@ -12,26 +11,31 @@ import { Menu, MenuItem, MenuSep } from '../components/Popover'
 import { PdfButton } from '../components/PdfButton'
 import { Back, Close, Download, Expand, Layers, Layout, Plus, Print, Upload } from '../components/icons'
 import { Drawer } from '../editor/Drawer'
-import { type DragData, resolveOver } from '../editor/dnd'
+import { type Active, type DragData, type DragState, type Slot, listEl, sameSlot, slotIndex } from '../editor/dnd'
 import { PersonalForm } from '../editor/PersonalForm'
 import { SectionEditor } from '../editor/SectionEditor'
-import { CardFace, ZoneBox } from '../editor/Structure'
+import { CardFace, HeaderBlock, ZoneBox, type Landing } from '../editor/Structure'
+import { HeaderEditor } from '../editor/HeaderEditor'
 import { layouts, getLayout } from '../layouts/registry'
 import { fullName } from '../model/format'
 import { zoneSections, stashed } from '../model/sections'
 import { TEMPLATES, getTemplate, type Template } from '../model/templates'
-import type { Resume, Section, SectionKind } from '../model/types'
+import type { Resume, Section } from '../model/types'
 import { pickZone, place, stash, zoneAccepts } from '../state/ops'
 import { parseImport } from '../state/storage'
 import { useResume } from '../state/ResumeContext'
 
 const SAVE_LABEL = { saved: 'Saved', saving: 'Saving…', error: 'Couldn’t save. Retrying on your next edit', conflict: 'Reloaded: this CV changed elsewhere' } as const
 
-// Prefer the element under the pointer; fall back to the nearest one (keyboard dragging).
+// Only columns and the drawer are drop targets (where in a column is worked out from the card's position, see dnd.ts).
+// Prefer the one under the pointer; fall back to the nearest one (keyboard dragging).
 const collide: CollisionDetection = (args) => {
   const hits = pointerWithin(args)
   return hits.length ? hits : closestCenter(args)
 }
+
+// Columns grow and shrink while a gap moves through them: keep their drop areas measured.
+const MEASURING = { droppable: { strategy: MeasuringStrategy.Always } }
 
 /** Renders its children only once it scrolls into view, so a gallery with many layouts doesn't lay out every CV at once. */
 function WhenVisible({ children }: { children: ReactNode }) {
@@ -85,8 +89,8 @@ function LayoutPicker({ resume, onPick }: { resume: Resume; onPick: (id: string)
   const [open, setOpen] = useState(false)
   return (
     <>
-      <button type="button" className="btn small" onClick={() => setOpen(true)} aria-haspopup="dialog" title="Change layout">
-        <Layout /> {getLayout(resume.layoutId).name}
+      <button type="button" className="btn small tb-layout" onClick={() => setOpen(true)} aria-haspopup="dialog" title="Change layout">
+        <Layout /> <span className="tb-ellipsis">{getLayout(resume.layoutId).name}</span>
       </button>
       {open && <LayoutGallery resume={resume} onPick={onPick} onClose={() => setOpen(false)} />}
     </>
@@ -98,11 +102,15 @@ export default function EditorPage() {
   const caps = useCaps()
   const layout = getLayout(resume.layoutId)
   const [tab, setTab] = useState<'info' | 'sections'>('sections')
+  useEffect(() => { if (tab !== 'sections') setDrawer(false) }, [tab]) // the drawer holds section components: it belongs to the Sections tab
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [drawer, setDrawer] = useState(false)
   const [view, setView] = useState<'edit' | 'preview'>('edit')
-  const [active, setActive] = useState<DragData | null>(null)
-  const [overZone, setOverZone] = useState<string | null>(null)
+  const [drag, setDragState] = useState<DragState | null>(null)
+  const dragRef = useRef<DragState | null>(null) // the same, read synchronously by the drag handlers
+  const setDrag = (d: DragState | null) => ((dragRef.current = d), setDragState(d))
+  const landing: Landing = useRef(null)
+  const active = drag?.data ?? null
   const [notice, setNotice] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -117,44 +125,73 @@ export default function EditorPage() {
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(KeyboardSensor),
   )
 
   const selected = resume.sections.find((s) => s.id === selectedId) ?? null
+  const headerOpen = selectedId === '@header'
   const removed = useMemo(() => stashed(resume), [resume])
 
-  const kindOf = (d: DragData | null): SectionKind | null => {
-    if (!d) return null
-    if (d.type === 'template') return getTemplate(d.tid)?.kind ?? null
-    return resume.sections.find((s) => s.id === d.id)?.kind ?? null
+  const infoOf = (d: DragData): Active | null => {
+    const s = d.type === 'template' ? getTemplate(d.tid)?.make() : resume.sections.find((x) => x.id === d.id)
+    return s ? { id: d.type === 'template' ? null : s.id, kind: s.kind, icon: s.icon, from: d.type === 'section' ? s.zone : null } : null
   }
 
-  const onDragStart = (e: DragStartEvent) => setActive((e.active.data.current as DragData) ?? null)
-  const onDragOver = (e: DragOverEvent) => {
-    const t = e.over ? resolveOver(String(e.over.id), resume.sections) : null
-    setOverZone(t ? ('drawer' in t && t.drawer ? 'drawer' : (t as { zone: string }).zone) : null)
+  const onDragStart = (e: DragStartEvent) => {
+    const data = e.active.data.current as DragData | undefined
+    const info = data && infoOf(data)
+    if (!data || !info) return
+    const list = info.from ? zoneSections(resume, info.from) : []
+    const origin: Slot | null = info.from ? { zone: info.from, index: list.findIndex((s) => s.id === info.id) } : null
+    // The gap is as tall as the card being moved; a new one is as tall as the cards already in the columns.
+    const height = data.type === 'section' ? e.active.rect.current.initial?.height ?? 50 : document.querySelector<HTMLElement>('.zone-list [data-slot]')?.offsetHeight ?? 50
+    setDrag({ data, info, origin, at: origin, overDrawer: false, height })
+  }
+  const onDragMove = (e: DragMoveEvent) => {
+    const d = dragRef.current
+    if (!d) return
+    const over = e.over ? String(e.over.id) : null
+    const zone = over?.startsWith('zone:') ? over.slice(5) : null
+    let at: Slot | null = d.origin // not over a column that takes it: it would go back where it was
+    const box = e.active.rect.current.translated
+    const list = zone && zoneAccepts(layout, zone, d.info.kind, d.info.icon) ? listEl(zone) : null
+    if (over === 'drawer') at = null
+    else if (zone && list && box) at = { zone, index: slotIndex(list, box.top + box.height / 2) }
+    const overDrawer = over === 'drawer'
+    if (!sameSlot(at, d.at) || overDrawer !== d.overDrawer) setDrag({ ...d, at, overDrawer })
   }
   const onDragEnd = (e: DragEndEvent) => {
-    const data = e.active.data.current as DragData | undefined
-    setActive(null)
-    setOverZone(null)
-    if (!data || !e.over) return
-    const target = resolveOver(String(e.over.id), resume.sections)
-    if (!target) return
+    const d = dragRef.current
+    const box = e.active.rect.current.translated
+    setDrag(null)
+    if (!d) return
+    if (d.overDrawer) {
+      if (d.data.type === 'section') setResume((r) => ({ ...r, sections: stash(r.sections, (d.data as { id: string }).id) }))
+      return
+    }
+    const at = d.at
+    if (!at) return
+    const sec = d.data.type === 'template' ? getTemplate(d.data.tid)?.make() : resume.sections.find((s) => s.id === (d.data as { id: string }).id)
+    if (!sec || !zoneAccepts(layout, at.zone, sec.kind, sec.icon)) return
+    // The card glides from where it was let go into its place (also when that place is where it came from).
+    if (box) {
+      landing.current = { id: sec.id, left: box.left, top: box.top }
+      setTimeout(() => (landing.current = null), 500)
+    }
+    if (sameSlot(at, d.origin)) return
     setResume((r) => {
-      if ('drawer' in target && target.drawer) return data.type === 'section' ? { ...r, sections: stash(r.sections, data.id) } : r
-      const { zone, overId } = target as { zone: string; overId: string | null }
-      if (overId && data.type !== 'template' && overId === data.id) return r
-      const sec = data.type === 'template' ? getTemplate(data.tid)?.make() : r.sections.find((s) => s.id === data.id)
-      if (!sec || !zoneAccepts(layout, zone, sec.kind)) return r
-      return { ...r, sections: place(r.sections, sec, zone, overId) }
+      const rest = r.sections.filter((s) => s.zone === at.zone && s.id !== sec.id)
+      return { ...r, sections: place(r.sections, sec, at.zone, rest[at.index]?.id ?? null) }
     })
   }
 
-  // Clicking a part of the rendered CV opens that section (the header opens Personal info).
+  // Clicking a part of the rendered CV opens that section (the header opens the Header card, personal details open Personal info).
   const openFromPreview = (id: string) => {
     const sec = resume.sections.find((x) => x.id === id)
-    if (id === '@info' || sec?.kind === 'details') {
+    if (id === '@info') {
+      setTab('sections')
+      setSelectedId('@header')
+    } else if (sec?.kind === 'details') {
       setSelectedId(null)
       setTab('info')
     } else if (sec) {
@@ -165,13 +202,14 @@ export default function EditorPage() {
   }
 
   const addTemplate = (t: Template) => {
-    const zone = pickZone(layout, t.kind, t.zone)
-    if (zone) setResume((r) => ({ ...r, sections: place(r.sections, t.make(), zone, null) }))
+    const made = t.make()
+    const zone = pickZone(layout, made.kind, t.zone, made.icon)
+    if (zone) setResume((r) => ({ ...r, sections: place(r.sections, made, zone, null) }))
   }
   const addRemoved = (id: string) =>
     setResume((r) => {
       const sec = r.sections.find((s) => s.id === id)
-      const zone = sec && pickZone(layout, sec.kind)
+      const zone = sec && pickZone(layout, sec.kind, undefined, sec.icon)
       return sec && zone ? { ...r, sections: place(r.sections, sec, zone, null) } : r
     })
   const stashOne = (id: string) => setResume((r) => ({ ...r, sections: stash(r.sections, id) }))
@@ -214,10 +252,14 @@ export default function EditorPage() {
   })()
 
   return (
-    <DndContext sensors={sensors} collisionDetection={collide} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd} onDragCancel={() => (setActive(null), setOverZone(null))}>
+    <DndContext sensors={sensors} collisionDetection={collide} measuring={MEASURING} onDragStart={onDragStart} onDragMove={onDragMove} onDragEnd={onDragEnd} onDragCancel={() => setDrag(null)}>
       <div className="editor" data-view={view} data-drawer={drawer ? "open" : "closed"}>
         <aside className="ed-panel no-print">
-          {selected && tab === 'sections' ? (
+          {headerOpen && tab === 'sections' ? (
+            <div className="ed-body">
+              <HeaderEditor onBack={() => setSelectedId(null)} goInfo={() => (setSelectedId(null), setTab('info'))} />
+            </div>
+          ) : selected && tab === 'sections' ? (
             <div className="ed-body">
               <SectionEditor sec={selected} onBack={() => setSelectedId(null)} goInfo={() => (setSelectedId(null), setTab('info'))} />
             </div>
@@ -226,17 +268,20 @@ export default function EditorPage() {
               <div className="ed-tabs" role="tablist">
                 <button role="tab" aria-selected={tab === 'info'} onClick={() => setTab('info')}>Personal info</button>
                 <button role="tab" aria-selected={tab === 'sections'} onClick={() => setTab('sections')}>Sections</button>
-                <button type="button" className={`btn small ${drawer ? 'primary' : ''}`} onClick={() => setDrawer((d) => !d)} aria-expanded={drawer}>
-                  <Plus /> Components
-                </button>
+                {tab === 'sections' && (
+                  <button type="button" className={`btn small ${drawer ? 'primary' : ''}`} onClick={() => setDrawer((d) => !d)} aria-expanded={drawer}>
+                    <Plus /> Components
+                  </button>
+                )}
               </div>
               <div className="ed-body">
                 {tab === 'info' ? (
                   <PersonalForm />
                 ) : (
                   <div className="zones">
-                    {layout.zones.map((z) => (
-                      <ZoneBox key={z.id} zone={z} sections={zoneSections(resume, z.id)} activeKind={kindOf(active)} overZone={overZone} onSelect={setSelectedId} onStash={stashOne} />
+                    <HeaderBlock zone={layout.zones.find((z) => z.id === 'header')} sections={zoneSections(resume, 'header')} drag={drag} landing={landing} onSelectHeader={() => setSelectedId('@header')} onSelect={setSelectedId} onStash={stashOne} />
+                    {layout.zones.filter((z) => z.id !== 'header').map((z) => (
+                      <ZoneBox key={z.id} zone={z} sections={zoneSections(resume, z.id)} drag={drag} landing={landing} onSelect={setSelectedId} onStash={stashOne} />
                     ))}
                     {removed.length > 0 && (
                       <p className="zones-note">
@@ -254,12 +299,12 @@ export default function EditorPage() {
 
         <section className="ed-stage">
           <div className="ed-toolbar no-print">
-            <Link className="btn small" to={`/p/${personaId}`} title="All of this person’s CVs"><Back /> {resume.basics.firstName || 'CVs'}</Link>
+            <Link className="btn small soft" to={`/p/${personaId}`} title="Back to all of your CVs"><Back /> <span className="tb-label">All CVs</span></Link>
             <LayoutPicker resume={resume} onPick={setLayout} />
             <span className="tb-grow" />
             {notice && <span className="tb-notice" role="status">{notice}</span>}
             <span className={`save-state ${saveState}`} role="status">{SAVE_LABEL[saveState]}</span>
-            <Link className="btn small" to={`/preview/${id}`}><Expand /> Full preview</Link>
+            <Link className="btn small" to={`/preview/${id}`} title="Full preview"><Expand /> <span className="tb-label">Full preview</span></Link>
             <PdfButton />
             <Menu>
               <MenuItem icon={<Print />} onSelect={() => window.print()}>Print…</MenuItem>
@@ -270,7 +315,7 @@ export default function EditorPage() {
             </Menu>
             <input ref={fileRef} type="file" accept="application/json" hidden onChange={(e) => importJson(e.target.files?.[0])} />
           </div>
-          <CvViewport resume={resume} className="ed-viewport" onSelectSection={openFromPreview} activeSection={tab === 'info' ? '@info' : selectedId} />
+          <CvViewport resume={resume} className="ed-viewport" onSelectSection={openFromPreview} activeSection={headerOpen ? '@info' : tab === 'info' ? resume.sections.find((s) => s.kind === 'details' && s.zone !== null)?.id : selectedId} />
         </section>
 
         <nav className="mobile-tabs no-print" aria-label="Editor view">

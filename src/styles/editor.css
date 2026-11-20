@@ -2,9 +2,12 @@
 
 /* left panel */
 .ed-panel { display: flex; flex-direction: column; min-height: 0; background: var(--surface); border-right: 1px solid var(--line); }
-.ed-tabs { display: flex; align-items: center; gap: 4px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
-.ed-tabs [role='tab'] { padding: 7px 12px; border: 0; background: none; border-radius: 8px; font-weight: 600; color: var(--muted); }
-.ed-tabs [role='tab'][aria-selected='true'] { background: var(--bg); color: var(--ink); }
+.ed-tabs, .ed-toolbar { --bar-h: 52px; box-sizing: border-box; min-height: var(--bar-h); }  /* the two bars side by side share one height */
+.ed-tabs { display: flex; align-items: center; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--line); }
+.ed-tabs [role='tab'] { align-self: stretch; margin-bottom: -1px; padding: 0 14px; border: 0; border-bottom: 2px solid transparent; background: none; border-radius: 0; font-weight: 600; color: var(--muted); cursor: pointer; }
+.ed-tabs [role='tab']:hover { color: var(--ink); }
+.ed-tabs [role='tab']:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; border-radius: 6px; }
+.ed-tabs [role='tab'][aria-selected='true'] { color: var(--ink); border-bottom-color: var(--accent); }
 .ed-tabs .btn { margin-left: auto; }
 .ed-body { flex: 1; min-height: 0; min-width: 0; overflow-x: hidden; overflow-y: auto; padding: 16px; }
 .back { display: inline-flex; align-items: center; gap: 4px; margin-bottom: 8px; padding: 6px 8px 6px 2px; border: 0; background: none; color: var(--muted); font-weight: 600; }
@@ -19,13 +22,12 @@
 .zone.over { background: var(--accent-soft); border-color: var(--accent); }
 .zone.reject { background: #fbeceb; border-color: var(--danger); }
 .zone.reject header p { color: var(--danger); }
-.zone-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; min-height: 48px; }
+.zone-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }  /* an empty column's height comes from .zone-empty */
 .zone-empty { display: grid; place-items: center; min-height: 48px; border-radius: 8px; color: var(--muted); font-size: 12.5px; }
 .zones-note { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; }
 
 .card, .dcard { display: flex; align-items: center; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 9px; }
-.card.dragging { opacity: 0.35; }
-.card.overlay { padding: 10px 14px; box-shadow: var(--shadow); border-color: var(--accent); cursor: grabbing; min-width: 220px; }
+.card.overlay { box-sizing: border-box; height: 100%; padding: 10px 14px; border-color: var(--accent); cursor: grabbing; min-width: 220px; }
 .grip { display: grid; place-items: center; width: 30px; align-self: stretch; border: 0; background: none; color: var(--muted); font-size: 18px; cursor: grab; touch-action: none; border-radius: 9px 0 0 9px; }
 .grip:hover { color: var(--ink); background: var(--bg); }
 .card-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 10px 4px; border: 0; background: none; text-align: left; }
@@ -61,8 +63,18 @@
 .drawer.over .drawer-drop { display: grid; }
 
 /* stage: toolbar + CV */
-.ed-stage { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-.ed-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.ed-stage { display: flex; flex-direction: column; min-width: 0; min-height: 0; container: stage / inline-size; }
+/* One row, always: when the stage gets narrow (components drawer open, small window) the buttons drop their words and keep
+   their icons (the words stay for screen readers and in the tooltip), and the layout name shortens. */
+.ed-toolbar { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; padding: 6px 12px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.ed-toolbar > * { flex: none; }
+.ed-toolbar > .tb-layout { flex: 0 1 auto; min-width: 0; }
+.ed-toolbar .tb-ellipsis { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@container stage (max-width: 640px) {
+  .ed-toolbar .tb-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .ed-toolbar .btn:has(.tb-label) { gap: 0; }
+  .ed-toolbar .tb-notice { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 0 1 auto; }
+}
 .tb-grow { flex: 1; }
 .tb-notice { font-size: 12.5px; color: var(--muted); }
 .ed-viewport { flex: 1; min-height: 0; }
@@ -110,9 +122,34 @@ dialog.gallery::backdrop { background: rgba(20, 20, 10, 0.5); }
   .mobile-tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; height: var(--tabs-h); display: grid; grid-template-columns: 1fr 1fr; background: var(--surface); border-top: 1px solid var(--line); }
   .mobile-tabs button { border: 0; background: none; font-weight: 600; color: var(--muted); }
   .mobile-tabs button[aria-pressed='true'] { color: var(--accent); box-shadow: inset 0 -3px 0 var(--accent); }
-  .ed-toolbar { flex-wrap: wrap; }
 }
 @media (prefers-reduced-motion: reduce) { .zone { transition: none; } }
 
 .save-state { font-size: 12.5px; color: var(--muted); }
 .save-state.error, .save-state.conflict { color: var(--danger); }
+
+/* Personal info tab */
+.pi-sub { display: flex; align-items: center; gap: 4px; margin: 0 0 6px; font-size: 12.5px; color: var(--muted); }
+
+/* (i) with a tooltip bubble: hover, keyboard focus or tap */
+.hint { position: relative; display: inline-flex; }
+.hint-btn { display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--muted); cursor: help; }
+.hint-btn:hover, .hint-btn:focus-visible { color: var(--ink); background: var(--bg); }
+.hint-tip { position: absolute; z-index: 30; top: calc(100% + 6px); left: -8px; width: 260px; padding: 9px 11px; border-radius: 10px; background: var(--ink); color: #fff; font-size: 12px; line-height: 1.45; font-weight: 400; box-shadow: var(--shadow);
+  opacity: 0; visibility: hidden; transform: translateY(-2px); transition: opacity 0.12s, transform 0.12s; pointer-events: none; }
+.hint:hover .hint-tip, .hint:focus-within .hint-tip { opacity: 1; visibility: visible; transform: none; }
+@media (prefers-reduced-motion: reduce) { .hint-tip { transition: none; } }
+
+/* One column look for Header, Sidebar and Main column (see editor/Structure.tsx) */
+.zone .lead { margin-bottom: 6px; min-height: 0; }
+.zone .drops.collapsed { display: none; }
+
+/* Dragging (see editor/Structure.tsx): a column that can take the component gets an accent border; the one it would land in
+   opens a gap the size of the card, and the other cards slide aside to make room. */
+.zone-list.drops { position: relative; }  /* the cards' offsetTop is measured against the list */
+.zone.offer { border-color: color-mix(in srgb, var(--accent) 55%, var(--line-strong)); }
+.card.is-source { position: absolute; left: 0; width: 100%; box-sizing: border-box; visibility: hidden; pointer-events: none; }
+.drop-gap { list-style: none; box-sizing: border-box; overflow: hidden; border-radius: 9px; border: 1.5px dashed color-mix(in srgb, var(--accent) 55%, transparent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.drop-gap.closing { pointer-events: none; }
+.card.overlay { box-shadow: 0 2px 4px rgba(20, 20, 10, 0.08), 0 14px 32px rgba(20, 20, 10, 0.18); transform: rotate(-1.2deg); }
+body:has(.card.overlay) { cursor: grabbing; }

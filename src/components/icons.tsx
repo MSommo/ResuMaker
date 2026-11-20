@@ -55,3 +55,8 @@ export const Target = (p: P) => <I {...p}><circle cx="12" cy="12" r="8" /><circl
 export const Copy = (p: P) => <I {...p}><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></I>
 export const Edit = (p: P) => <I {...p}><path d="M4 20h4L19 9l-4-4L4 16zM13.500 6.500l4 4" /></I>
 export const Layout = (p: P) => <I {...p}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16M9 11h12" /></I>
+export const Info = (p: P) => <I {...p}><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></I>
+export const User = (p: P) => <I {...p}><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7" /></I>
+export const Users = (p: P) => <I {...p}><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6M16 4.5a3.5 3.5 0 0 1 0 7M18.5 14.4c1.8.8 3 2.9 3 5.6" /></I>
+export const SignOut = (p: P) => <I {...p}><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10" /></I>
+export const Caret = (p: P) => <I {...p}><path d="M7 10l5 5 5-5" /></I>

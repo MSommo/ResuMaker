@@ -5,7 +5,7 @@ import { zoneSections } from '../../model/sections'
 import type { Basics, Entry, Leveled, Resume, Section } from '../../model/types'
 import { SECTION_ICONS } from '../icons'
 import { Paginated, type Unit } from '../Paginated'
-import { Rich, entryLine, paragraphs, parseBullets } from '../shared'
+import { Rich, entryLine, paragraphs, parseBullets, HeaderExtras } from '../shared'
 import './timeline.css'
 
 const Dot = () => <span className="tm-dot" />
@@ -182,6 +182,7 @@ export function TimelineLayout({ resume: r }: { resume: Resume }) {
           </span>
         )}
       </div>
+      <HeaderExtras resume={r} />
     </header>
   )
 

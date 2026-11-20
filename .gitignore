@@ -11,3 +11,6 @@ stable.env
 __pycache__/
 .pytest_cache/
 .ruff_cache/
+
+# Impeccable design-review artifacts (critique snapshots, live-mode sessions)
+.impeccable/

@@ -39,8 +39,8 @@ export function PdfButton({ className = 'btn small primary' }: { className?: str
 
   return (
     <>
-      <button type="button" className={className} onClick={download} disabled={busy} aria-busy={busy}>
-        <Download /> {busy ? 'Preparing PDF…' : 'Download PDF'}
+      <button type="button" className={className} onClick={download} disabled={busy} aria-busy={busy} title="Download PDF">
+        <Download /> <span className="tb-label">{busy ? 'Preparing PDF…' : 'Download PDF'}</span>
       </button>
       {error && <span className="tb-notice err" role="alert">{error}</span>}
     </>

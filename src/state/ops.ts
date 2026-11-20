@@ -1,13 +1,15 @@
-import { getLayout, type LayoutDef } from '../layouts/registry'
+import { accepts, getLayout, type LayoutDef } from '../layouts/registry'
 import type { Resume, Section, SectionKind } from '../model/types'
 
-export const zoneAccepts = (layout: LayoutDef, zone: string, kind: SectionKind) =>
-  !!layout.zones.find((z) => z.id === zone)?.accepts.includes(kind)
+export const zoneAccepts = (layout: LayoutDef, zone: string, kind: SectionKind, icon = 'none') => {
+  const z = layout.zones.find((x) => x.id === zone)
+  return !!z && accepts(z, kind, icon)
+}
 
-/** First zone that can hold `kind`, preferring `prefer`. */
-export function pickZone(layout: LayoutDef, kind: SectionKind, prefer?: string): string | null {
-  if (prefer && zoneAccepts(layout, prefer, kind)) return prefer
-  return layout.zones.find((z) => z.accepts.includes(kind))?.id ?? null
+/** First zone that can hold `kind`, preferring `prefer`. The header is never picked automatically. */
+export function pickZone(layout: LayoutDef, kind: SectionKind, prefer?: string, icon = 'none'): string | null {
+  if (prefer && zoneAccepts(layout, prefer, kind, icon)) return prefer
+  return layout.zones.find((z) => z.id !== 'header' && accepts(z, kind, icon))?.id ?? null
 }
 
 /**
@@ -19,12 +21,9 @@ export function place(list: Section[], sec: Section, zone: string, overId: strin
   const without = list.filter((s) => s.id !== sec.id)
   let idx: number
   if (overId) {
+    // Always lands before the card it was dropped on (the landing line is drawn there); the end of a column is overId = null.
     const oi = without.findIndex((s) => s.id === overId)
-    let after = false
-    // Dragging downwards inside the same zone lands after the target, like a normal sortable list.
-    const zoneIds = list.filter((s) => s.zone === zone).map((s) => s.id)
-    if (list.find((s) => s.id === sec.id)?.zone === zone) after = zoneIds.indexOf(sec.id) < zoneIds.indexOf(overId)
-    idx = oi < 0 ? without.length : oi + (after ? 1 : 0)
+    idx = oi < 0 ? without.length : oi
   } else {
     let last = -1
     without.forEach((s, i) => {
@@ -41,8 +40,8 @@ export const stash = (list: Section[], id: string): Section[] => list.map((s) =>
 export function withLayout(r: Resume, layoutId: string): Resume {
   const layout = getLayout(layoutId)
   const sections = r.sections.map((s) => {
-    if (s.zone === null || zoneAccepts(layout, s.zone, s.kind)) return s
-    return { ...s, zone: pickZone(layout, s.kind) } as Section
+    if (s.zone === null || zoneAccepts(layout, s.zone, s.kind, s.icon)) return s
+    return { ...s, zone: pickZone(layout, s.kind, undefined, s.icon) } as Section
   })
   return { ...r, layoutId: layout.id, sections }
 }
