@@ -23,7 +23,7 @@ protected = APIRouter(dependencies=[Depends(current)])
 admin = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
 
 BAD_LOGIN = "Wrong email or password."  # one message for unknown account, wrong password, locked and unclaimed
-DISABLED = "Your account has been turned off. Contact your administrator to get access again."
+DISABLED = "You can't sign in right now. Contact the administrator."
 
 
 async def _count(s: AsyncSession, user_id: uuid.UUID) -> int:
