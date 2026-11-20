@@ -24,6 +24,7 @@ the paused run is stored in Postgres and resumes (even after an API restart) whe
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import logging
 import operator
@@ -33,7 +34,9 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send, interrupt
 from pydantic import BaseModel, Field
 
+from .. import usage
 from ..domain.catalog import LAYOUTS, TEMPLATES
+from ..observability import tracing
 from ..domain.diff import diff_resumes
 from ..domain.models import Resume
 from ..domain.ops import OP_NAMES, Op, apply_ops
@@ -297,6 +300,22 @@ def _route_contents(state: AgentState) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------- graph
 
 
+def _instrumented(name: str, fn: Any) -> Any:
+    """Every model call a node makes is attributed to it (usage log, metrics), and the node gets its own trace span."""
+
+    @functools.wraps(fn)
+    async def node(state: Any) -> Any:
+        token = usage.in_node(name)
+        usage.count_node(name)
+        try:
+            with tracing.span(f"agent.{name}", op="ai.node"):
+                return await fn(state)
+        finally:
+            usage.out_of_node(token)
+
+    return node
+
+
 def build_graph(llm: LLM | None, checkpointer: Any = None, use_decompose: bool = True, use_critic: bool = True):
     """`checkpointer` makes runs durable: required for `review` to pause and resume (propose mode).
     `use_decompose=False` / `use_critic=False` switch those steps off (used by the evals to compare)."""
@@ -305,6 +324,7 @@ def build_graph(llm: LLM | None, checkpointer: Any = None, use_decompose: bool =
     async def route(state: AgentState) -> AgentState:
         try:
             r = await llm.json(system=ROUTER_SYSTEM, contents=_route_contents(state), schema=Route, temperature=0.0, fast=True)
+            usage.set_intent(r.intent)  # before folding off_topic into answer: the usage log keeps the router's own verdict
             if r.intent == "off_topic":  # reuses the answer node (and its "quiet" handling) with a canned refusal: no expensive LLM call
                 return {"intent": "answer", "off_topic": True}
             return {"intent": r.intent, "off_topic": False}
@@ -497,7 +517,7 @@ def build_graph(llm: LLM | None, checkpointer: Any = None, use_decompose: bool =
 
     g = StateGraph(AgentState)
     for name, fn in (("route", route), ("answer", answer), ("remember", remember), ("decompose", decompose), ("plan", plan), ("write", write), ("merge", merge), ("critic", critic), ("revise", revise), ("apply", apply), ("repair", repair), ("review", review), ("finalize", finalize)):
-        g.add_node(name, fn)
+        g.add_node(name, _instrumented(name, fn))
     g.add_edge(START, "route")
     g.add_conditional_edges("route", after_route, {"answer": "answer", "remember": "remember", "decompose": "decompose"})
     g.add_edge("remember", END)

@@ -28,6 +28,7 @@ from app.agent.graph import AgentPlan, Critique, Decomposition, Memo, Route
 from app.agent.llm import LLMError
 from app.agent.prompts import ANSWER_SYSTEM
 from app.agent.tailor import JobSpec
+from app import usage
 from app.config import get_settings
 from app.infra import Infra
 from app.main import create_app
@@ -59,6 +60,9 @@ HEADERS = {"x-resumaker": "1"}
 PASSWORD = "correct horse battery staple"
 
 
+FAKE_TOKENS = (100, 20)  # (input, output) the fake "uses" per call
+
+
 class FakeLLM:
     """Scripted stand-in for Gemini: records calls and replays queued plans, routes and answers.
 
@@ -87,6 +91,7 @@ class FakeLLM:
         self.fast_flags: list[bool] = []
 
     async def text(self, *, system: str, prompt: str, temperature: float = 0.5, fast: bool = False) -> str:
+        usage.report_tokens(*FAKE_TOKENS)  # like Gemini's usage metadata, so the usage log has something to add up
         if system == ANSWER_SYSTEM:
             self.answer_calls += 1
             return self.answers.pop(0) if self.answers else "Here is some advice."
@@ -96,6 +101,7 @@ class FakeLLM:
     async def embed(self, texts, *, query=False):
         """Deterministic stand-in: hashed bag of words, normalised. Texts sharing words are close, unrelated texts are far."""
         self.embed_calls += 1
+        usage.report_tokens(FAKE_TOKENS[0], 0)
         out = []
         for t in texts:
             v = [0.0] * 768
@@ -106,6 +112,7 @@ class FakeLLM:
         return out
 
     async def json(self, *, system, contents, schema, temperature=0.3, fast=False):
+        usage.report_tokens(*FAKE_TOKENS)
         if schema is Route:
             self.route_calls += 1
             self.fast_flags.append(fast)

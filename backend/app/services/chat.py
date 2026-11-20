@@ -14,6 +14,7 @@ from typing import Any, AsyncIterator
 
 from langgraph.types import Command
 
+from .. import usage
 from ..agent.graph import needs_repair
 from ..agent.llm import AI_NOT_INCLUDED, LLMError
 from ..db import UserRow
@@ -133,6 +134,7 @@ async def _commit(infra: Infra, s: Any, rid: uuid.UUID, row: repo.ResumeRow, per
         if proposed is not None and len(applied) != proposed:  # the user accepted only some of the proposed changes
             reply = f"Applied {len(applied)} of {_plural(proposed, 'proposed change')}." if applied else "Okay, I didn’t apply any of the proposed changes."
 
+    usage.set_ops(len(applied), len(skipped))
     changes: list[str] = []
     undo_id = None
     if applied:  # only write when something really changed; the optimistic lock guards against a concurrent save
@@ -194,6 +196,7 @@ async def stream_chat(infra: Infra, rid: uuid.UUID, message: str, mode: str = "a
             raise LLMError(AI_NOT_INCLUDED, 403)
 
         if paused is not None:
+            usage.set_ops(len(paused["items"]), len(paused["skipped"]))  # proposed; what's accepted is in the chat history
             proposed_cv = Resume.model_validate(final["resume"])
             yield {
                 "type": "proposal", "runId": run_id, "reply": paused["reply"], "items": paused["items"], "skipped": paused["skipped"],

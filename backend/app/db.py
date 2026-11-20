@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -179,3 +179,35 @@ class UserTokenRow(Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AiUsageRow(Base):
+    """One thing a person asked the AI to do (a chat turn, Improve, tailoring, an import, a memory added by hand; from the
+    web app or MCP), or a refused attempt. Metadata only: never the prompt, the CV or the chat text. Kept for
+    AI_USAGE_RETENTION_DAYS (90), then deleted. Written by services/ai_usage.py, read by the admin Users page."""
+
+    __tablename__ = "ai_usage"
+    __table_args__ = (Index("ix_ai_usage_user_created", "user_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
+    resume_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("resumes.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    request_id: Mapped[str | None] = mapped_column(String(64), nullable=True)  # matches logs and error reports
+    feature: Mapped[str] = mapped_column(String(20))  # chat | improve | tailor | import | memory
+    source: Mapped[str] = mapped_column(String(10), default="web")  # web | mcp
+    intent: Mapped[str | None] = mapped_column(String(20), nullable=True)  # the router's: edit | answer | remember | off_topic
+    status: Mapped[str] = mapped_column(String(10))  # ok | error | rejected
+    reason: Mapped[str | None] = mapped_column(String(20), nullable=True)  # llm_error | conflict | error | rate_limit | daily_limit | not_entitled
+    model: Mapped[str | None] = mapped_column(String(80), nullable=True)  # the model that did most of the work
+    models: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)  # {model: {calls, input, output, errors}}
+    calls: Mapped[int] = mapped_column(Integer, default=0)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cost_usd: Mapped[float] = mapped_column(Float, default=0.0)  # estimated when it happened, from AI_PRICES
+    latency_ms: Mapped[int] = mapped_column(Integer, default=0)
+    ops_applied: Mapped[int] = mapped_column(Integer, default=0)
+    ops_rejected: Mapped[int] = mapped_column(Integer, default=0)
+    guard_rejections: Mapped[int] = mapped_column(Integer, default=0)  # contact guard: links/emails/phones nobody provided
+    repairs: Mapped[int] = mapped_column(Integer, default=0)
+    critic_rounds: Mapped[int] = mapped_column(Integer, default=0)

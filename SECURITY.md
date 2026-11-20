@@ -88,12 +88,27 @@ start without one.
   bodies. No passwords, tokens, CV content or sign-in emails. Invite tokens travel in the URL fragment, so no access
   log ever sees them.
 
+## Telemetry and the AI usage log
+
+All of it is described in [docs/observability.md](docs/observability.md). In short:
+
+- **Off unless configured.** Without `SENTRY_DSN` nothing is sent anywhere; without `METRICS_TOKEN`, `/api/metrics`
+  is a 404. Tests and a fresh checkout send nothing.
+- **Error reports** (Sentry) carry stack frames, the route, the request id and the user's *id*. Request bodies, query
+  strings, cookies, headers, local variables, log arguments, span data and exception messages are removed before
+  sending, except the fixed messages of our own exception types. Browser errors go through the API, which redacts
+  emails and phone-like numbers. The browser never talks to a third party, and the CSP is unchanged.
+- **Metrics** have no user ids and no raw paths (route templates only), and need a bearer token compared in constant time.
+- **The AI usage log** (`ai_usage`) stores metadata only, never prompt, CV or chat text. Only administrators can read
+  it (`require_admin`; `tests/test_ai_usage.py` checks both), and rows are deleted after 90 days.
+
 ## Limits (re-checked for this deployment)
 
 | What | Limit |
 |---|---|
 | Sign-in / accept-invite | 20 attempts per client address per 10 min; an account locks for 15 min after 5 wrong passwords |
-| AI endpoints | 30 calls per user per minute (`AI_RATE_LIMIT_PER_MIN`), checked after the entitlement check |
+| AI endpoints | 30 calls per user per minute (`AI_RATE_LIMIT_PER_MIN`) and 300 per day (`AI_DAILY_LIMIT`), checked after the entitlement check; refusals are logged per user |
+| Browser error reports | 10 per user per minute, capped sizes |
 | CV import upload | 10 MB in the API (it reads at most 10 MB + 1 byte), 12 MB at nginx; other API bodies 5 MB |
 | Sessions | 7 days idle, 30 days absolute; replaced at sign-in; all others end on a password change |
 | PDF render session | 2 minutes, read-only, revoked right after the render |

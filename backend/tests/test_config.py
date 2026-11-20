@@ -45,6 +45,7 @@ def test_a_safe_production_configuration_starts():
     (dict(database_url="postgresql://app@db/resumaker"), "DATABASE_URL"),
     (dict(redis_url="redis://redis:6379/0"), "REDIS_URL"),
     (dict(cors_origins=["http://other.example.org"]), "CORS_ORIGINS"),
+    (dict(metrics_token="short"), "METRICS_TOKEN"),
 ])
 def test_production_refuses_unsafe_settings(bad, words):
     s = make(**bad)

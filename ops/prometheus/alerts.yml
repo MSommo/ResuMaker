@@ -1,0 +1,66 @@
+# Alert rules for ResuMaker's /api/metrics (Prometheus, Grafana Cloud, or anything that reads Prometheus rules).
+# Thresholds are starting points for a small deployment: tune them after a week of real traffic. See docs/observability.md.
+groups:
+  - name: resumaker
+    rules:
+      - alert: ResuMakerDown
+        # The scrape itself failing: the API is down, or the token / address changed.
+        expr: up{job="resumaker"} == 0
+        for: 3m
+        labels: { severity: critical }
+        annotations:
+          summary: ResuMaker's API can't be scraped
+          description: "/api/metrics has failed for 3 minutes. Check the Railway deploy and its logs."
+
+      - alert: ResuMakerDependencyDown
+        expr: min by (component) (resumaker_up{component=~"db|cache"}) == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "ResuMaker can't reach its {{ $labels.component }}"
+          description: "resumaker_up{component=\"{{ $labels.component }}\"} has been 0 for 2 minutes."
+
+      - alert: ResuMakerErrorRateHigh
+        # More than 5% of requests answered 5xx, with at least some traffic (a lone failure at 3am isn't a spike).
+        expr: |
+          (sum(rate(resumaker_http_requests_total{status=~"5.."}[5m])) / sum(rate(resumaker_http_requests_total[5m])) > 0.05)
+          and sum(rate(resumaker_http_requests_total[5m])) > 0.05
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "ResuMaker: {{ $value | humanizePercentage }} of requests fail"
+          description: "Look at the error reports (Sentry) and the API logs; X-Request-ID ties them together."
+
+      - alert: ResuMakerLLMFailureRateHigh
+        expr: |
+          (sum(rate(resumaker_ai_calls_total{outcome="error"}[10m])) / sum(rate(resumaker_ai_calls_total[10m])) > 0.2)
+          and sum(rate(resumaker_ai_calls_total[10m])) > 0.01
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "ResuMaker: {{ $value | humanizePercentage }} of Gemini calls fail"
+          description: "Gemini outage, quota or key problem. The API logs say which (\"Gemini API error\")."
+
+      - alert: ResuMakerSlowRequests
+        # p95 of ordinary requests. The AI streams and PDF rendering are long by design and are watched separately below.
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(resumaker_http_request_duration_seconds_bucket{route!~".*/(stream|pdf|chat|decide|improve|imports/cv|memories)$"}[10m]))) > 2
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "ResuMaker: p95 latency {{ $value | humanizeDuration }}"
+
+      - alert: ResuMakerSlowAI
+        expr: histogram_quantile(0.95, sum by (le) (rate(resumaker_ai_request_duration_seconds_bucket[30m]))) > 60
+        for: 30m
+        labels: { severity: warning }
+        annotations:
+          summary: "ResuMaker: p95 AI request takes {{ $value | humanizeDuration }}"
+
+      - alert: ResuMakerDailyAISpendHigh
+        # Estimated from AI_PRICES, over the last 24 hours. Set the threshold to what you're willing to spend in a day.
+        expr: sum(increase(resumaker_ai_cost_usd_total[24h])) > 5
+        labels: { severity: warning }
+        annotations:
+          summary: "ResuMaker: ~${{ $value | printf \"%.2f\" }} of AI in the last 24 hours"
+          description: "The admin Users page shows who (AI use column, sort by cost)."

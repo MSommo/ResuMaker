@@ -43,6 +43,9 @@ server {
         # ONE address, the one worked out above. Overwritten, never appended: whatever the client sent is not passed on.
         proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header X-Real-IP $remote_addr;
+        # nginx's own id for this request (whatever the client sent is replaced): the API uses it in its logs, error
+        # reports and the AI usage log, and returns it as X-Request-ID.
+        proxy_set_header X-Request-ID $request_id;
         proxy_read_timeout 120s;              # AI calls and PDF rendering can take a while
         client_max_body_size 12m;             # CV import uploads (the API itself enforces 10 MB)
         proxy_buffering off;                  # the assistant streams progress as Server-Sent Events: pass chunks through immediately

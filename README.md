@@ -90,6 +90,8 @@ Everything in place, and what production refuses to start without, is listed in 
 - **PDFs.** Headless Chrome gets a 2-minute, read-only session for that one render, revoked immediately; it never sees the user's own cookie.
 - **MCP.** The MCP server acts as **one user**, identified by `RESUMAKER_TOKEN` (`make mcp-token LOGIN=you@example.com`; hashed in the database, expires in a year) and refuses to start without it. Every tool is scoped to that user's CVs. Add it to the client config `env`.
 
+- **AI use per person.** Admins see on the Users page how much each person uses the AI: requests today against the daily limit, the last 7 and 30 days, tokens, estimated cost, failures, refusals and off-topic share, with a per-day chart and the latest requests. Only counts and timings are stored (`ai_usage`, 90 days), never what anyone typed. See [docs/observability.md](docs/observability.md), which also covers request ids, JSON logs, Prometheus metrics, Sentry, and the dashboard and alert rules in `ops/`.
+
 Out of scope for now: e-mailed invites / resets (an admin shares the link), 2FA, per-token scopes.
 
 ## The agent
@@ -180,6 +182,9 @@ Postgres **must have pgvector** (memories): the plain Railway Postgres image doe
 | `PUBLIC_URL` | `https://${{web.RAILWAY_PUBLIC_DOMAIN}}` (or your custom domain): invite links, and cookies are `Secure` |
 | `FRONTEND_URL` | `http://${{web.RAILWAY_PRIVATE_DOMAIN}}:${{web.PORT}}`: headless Chrome loads the app from here to render PDFs |
 | `GEMINI_API_KEY` | your key (without it the app runs, with AI off) |
+| `SENTRY_DSN` | optional: error reports and traces, scrubbed (see [docs/observability.md](docs/observability.md)) |
+| `METRICS_TOKEN` | optional: a long random string; Prometheus metrics at `/api/metrics` with `Authorization: Bearer …` |
+| `AI_PRICES` | optional: USD per million tokens per model, for the estimated AI cost (defaults are on the high side) |
 
 *web*
 

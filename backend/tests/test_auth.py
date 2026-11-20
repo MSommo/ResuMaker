@@ -14,7 +14,8 @@ from app.services import auth
 from tests.conftest import HEADERS, PASSWORD, make_user
 from tests.test_api import create
 
-PUBLIC = {("GET", "/api/status"), ("POST", "/api/auth/login"), ("POST", "/api/auth/accept"), ("POST", "/api/auth/logout")}
+# /api/metrics needs no session but its own bearer token (METRICS_TOKEN), and is a 404 without one: tests/test_telemetry.py.
+PUBLIC = {("GET", "/api/status"), ("GET", "/api/metrics"), ("POST", "/api/auth/login"), ("POST", "/api/auth/accept"), ("POST", "/api/auth/logout")}
 
 
 # ---------------------------------------------------------------- secure by default
@@ -365,7 +366,9 @@ async def test_the_admin_listing_exposes_no_cv_content(make_client, client):
     rows = (await boss.get("/api/admin/users")).json()
     mine = next(u for u in rows if u["id"] == str(client.user.id))
     assert mine["resumeCount"] == 1
-    assert set(mine) == {"id", "login", "firstName", "lastName", "role", "isActive", "aiEnabled", "status", "resumeCount", "lastLoginAt", "createdAt"}
+    assert set(mine) == {"id", "login", "firstName", "lastName", "role", "isActive", "aiEnabled", "status", "resumeCount", "lastLoginAt", "createdAt", "aiUsage"}
+    # AI usage is counts only (tests/test_ai_usage.py checks nothing typed is stored either)
+    assert set(mine["aiUsage"]) == {"today", "week", "month", "tokens", "costUsd", "errors", "rejected", "offTopicShare", "lastUsedAt", "dailyLimit"}
 
 
 # ---------------------------------------------------------------- access tokens and the MCP server
