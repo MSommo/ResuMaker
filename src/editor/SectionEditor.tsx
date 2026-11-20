@@ -1,7 +1,7 @@
 import { BulletsEditor, CheckField, IconPicker, LevelPicker, ListEditor, MonthField, RichTextField, TextField } from '../components/fields'
 import { Back } from '../components/icons'
 import { getLayout } from '../layouts/registry'
-import { KIND_LABEL, emptyEntry, uid, type Entry, type IconId, type Section } from '../model/types'
+import { KIND_LABEL, emptyEntry, personalOf, uid, type Entry, type IconId, type Section } from '../model/types'
 import { entryDates } from '../model/dates'
 import { useResume } from '../state/ResumeContext'
 
@@ -9,20 +9,42 @@ function EntryForm({ en, up, section }: { en: Entry; up: (p: Partial<Entry>) => 
   const ctx = { role: en.title, organisation: en.organisation, section }
   return (
     <>
-      <div className="grid2">
-        <TextField label="Title / role" value={en.title} onChange={(v) => up({ title: v })} />
-        <TextField label="Organisation" value={en.organisation} onChange={(v) => up({ organisation: v })} />
-      </div>
+      <TextField label="Title / role" value={en.title} onChange={(v) => up({ title: v })} />
+      <TextField label="Organisation" value={en.organisation} onChange={(v) => up({ organisation: v })} />
       <TextField label="Location" value={en.location} onChange={(v) => up({ location: v })} placeholder="City, Country" />
       <div className="grid2">
         <MonthField label="Start" value={en.start} onChange={(v) => up({ start: v })} />
-        <MonthField label="End" value={en.end} onChange={(v) => up({ end: v })} disabled={en.current} />
+        <MonthField label="End" value={en.end} onChange={(v) => up({ end: v })} disabled={en.current} error={!en.current && en.start && en.end && /^\d{4}-\d{2}$/.test(en.start) && /^\d{4}-\d{2}$/.test(en.end) && en.end < en.start ? 'Ends before it starts' : undefined} />
       </div>
       <CheckField label="Ongoing (shows “Present”)" checked={en.current} onChange={(v) => up({ current: v })} />
-      <TextField label="Highlight line" hint="Optional bold line, e.g. a grade or qualification level" value={en.note} onChange={(v) => up({ note: v })} improve={{ kind: 'note', context: ctx }} />
+      <TextField label="Bold line" hint="Optional, shown in bold under the dates: a grade or qualification level, say" value={en.note} onChange={(v) => up({ note: v })} improve={{ kind: 'note', context: ctx }} />
       <RichTextField label="Description" value={en.description} onChange={(v) => up({ description: v })} improve={{ kind: 'description', context: ctx }} />
       <BulletsEditor value={en.bullets} onChange={(v) => up({ bullets: v })} improveContext={ctx} />
     </>
+  )
+}
+
+/** Says what the Details block shows right now: it draws whatever is filled in on Personal info, and skips the rest. */
+function DetailsNote({ goInfo }: { goInfo: () => void }) {
+  const { resume } = useResume()
+  const b = personalOf(resume.basics)
+  const a = b.address
+  const fields: [string, boolean][] = [
+    ['Email', !!b.email.trim()],
+    ['Phone', !!b.phone.trim()],
+    ['Address', !!(a.street.trim() || a.city.trim() || a.postcode.trim() || a.country)],
+    ['Date of birth', !!b.birthDate],
+    ['Place of birth', !!b.birthPlace.trim()],
+    ['Nationality', !!b.nationality.trim()],
+  ]
+  const shown = fields.filter(([, on]) => on).map(([n]) => n)
+  const missing = fields.filter(([, on]) => !on).map(([n]) => n)
+  return (
+    <div className="form-note">
+      <p>Shows what you fill in on <button type="button" className="link" onClick={goInfo}>Personal info</button>, the same on all your CVs.</p>
+      <p><b>Showing:</b> {shown.join(', ') || 'nothing yet'}.</p>
+      {missing.length > 0 && <p><b>Left out (empty):</b> {missing.join(', ')}.</p>}
+    </div>
   )
 }
 
@@ -39,11 +61,7 @@ export function SectionEditor({ sec, onBack, goInfo }: { sec: Section; onBack: (
         {showIcons && sec.zone !== 'header' && <IconPicker label="Icon" value={sec.icon} onChange={(v: IconId) => up({ icon: v })} />}
         {sec.kind !== 'text' && sec.kind !== 'details' && KIND_LABEL[sec.kind].toLowerCase() !== sec.title.trim().toLowerCase() && <p className="kind-tag">{KIND_LABEL[sec.kind]}</p>}
 
-        {sec.kind === 'details' && (
-          <p className="form-note">
-            This block shows your address and personal details, which are the same on all your CVs. Edit them in <button type="button" className="link" onClick={goInfo}>Personal info</button>.
-          </p>
-        )}
+        {sec.kind === 'details' && <DetailsNote goInfo={goInfo} />}
 
         {sec.kind === 'text' && <RichTextField label="Content" rows={sec.zone === 'side' ? 6 : 8} value={sec.text} onChange={(v) => up({ text: v } as Partial<Section>)} improve={{ kind: sec.icon === 'user' ? 'summary' : 'text', context: { section: sec.title } }} />}
 
@@ -55,6 +73,7 @@ export function SectionEditor({ sec, onBack, goInfo }: { sec: Section; onBack: (
               onChange={(items) => up({ items } as Partial<Section>)}
               create={emptyEntry}
               addLabel="Add entry"
+              itemName="entry"
               summary={(e) => [e.title, e.organisation].filter(Boolean).join(' · ')}
               detail={(e) => entryDates(e)}
               render={(en, u) => <EntryForm en={en} up={u} section={sec.title} />}
@@ -69,6 +88,7 @@ export function SectionEditor({ sec, onBack, goInfo }: { sec: Section; onBack: (
             onChange={(items) => up({ items } as Partial<Section>)}
             create={() => ({ id: uid(), name: '', level: 3 })}
             addLabel="Add item"
+            itemName="item"
             summary={(s) => s.name}
             render={(s, u) => (
               <div className="level-row">
@@ -86,11 +106,12 @@ export function SectionEditor({ sec, onBack, goInfo }: { sec: Section; onBack: (
             onChange={(items) => up({ items } as Partial<Section>)}
             create={() => ({ id: uid(), label: '', url: '' })}
             addLabel="Add link"
+            itemName="link"
             summary={(l) => l.label}
             render={(l, u) => (
-              <div className="grid2">
+              <div className="link-row">
                 <TextField label="Label" value={l.label} onChange={(v) => u({ label: v })} placeholder="LinkedIn" />
-                <TextField label="URL" type="url" value={l.url} onChange={(v) => u({ url: v })} placeholder="https://…" inputMode="url" />
+                <TextField label="URL" type="url" value={l.url} onChange={(v) => u({ url: v })} placeholder="https://…" inputMode="url" error={l.url.trim() && !/^(https?:\/\/|mailto:)\S+\.\S+|^mailto:/i.test(l.url.trim()) ? 'Start with https:// (or mailto:)' : undefined} />
               </div>
             )}
           />

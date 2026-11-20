@@ -116,7 +116,7 @@ export function PhoneField({ label, hint, className = '', value, onChange, defau
             />
           )}
         </Popover>
-        <input id={id} type="tel" inputMode="tel" autoComplete="tel-national" value={national} onChange={(e) => edit(e.target.value)} placeholder={iso ? '333 1234567' : '+44 7000 000000'} />
+        <input id={id} type="tel" inputMode="tel" autoComplete="tel-national" value={national} onChange={(e) => edit(e.target.value)} placeholder={iso ? '333 1234567' : 'Start with the country code, e.g. +39 333 1234567'} />
       </div>
       {hint && <small>{hint}</small>}
     </div>

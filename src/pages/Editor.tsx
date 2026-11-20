@@ -212,7 +212,37 @@ export default function EditorPage() {
       const zone = sec && pickZone(layout, sec.kind, undefined, sec.icon)
       return sec && zone ? { ...r, sections: place(r.sections, sec, zone, null) } : r
     })
-  const stashOne = (id: string) => setResume((r) => ({ ...r, sections: stash(r.sections, id) }))
+  // Removing a card is one click: offer to take it back for a few seconds. (It is also kept in Components.)
+  const [undo, setUndo] = useState<{ sec: Section; index: number } | null>(null)
+  const undoBtn = useRef<HTMLButtonElement>(null)
+  const [restored, setRestored] = useState<string | null>(null)
+  useEffect(() => {
+    if (!undo) return
+    undoBtn.current?.focus() // the card the keyboard was on is gone: move to the next thing the user may want
+    const t = setTimeout(() => setUndo(null), 10000)
+    return () => clearTimeout(t)
+  }, [undo])
+  useEffect(() => {
+    if (restored === null) return
+    document.querySelector<HTMLElement>(`[data-flip="${restored}"] .card-main`)?.focus()
+    setRestored(null)
+  }, [restored])
+  const stashOne = (id: string) => {
+    const index = resume.sections.findIndex((x) => x.id === id)
+    if (index >= 0) setUndo({ sec: resume.sections[index], index })
+    setResume((r) => ({ ...r, sections: stash(r.sections, id) }))
+  }
+  const undoStash = () => {
+    if (!undo) return
+    const { sec, index } = undo
+    setResume((r) => {
+      const rest = r.sections.filter((x) => x.id !== sec.id)
+      rest.splice(Math.min(index, rest.length), 0, sec)
+      return { ...r, sections: rest }
+    })
+    setUndo(null)
+    setRestored(sec.id)
+  }
   const deleteOne = (id: string) => {
     const s = resume.sections.find((x) => x.id === id)
     if (s && window.confirm(`Delete “${s.title}” and its content permanently?`)) {
@@ -278,7 +308,12 @@ export default function EditorPage() {
                     {layout.zones.filter((z) => z.id !== 'header').map((z) => (
                       <ZoneBox key={z.id} zone={z} sections={zoneSections(resume, z.id)} drag={drag} landing={landing} onSelect={setSelectedId} onStash={stashOne} />
                     ))}
-                    {removed.length > 0 && (
+                    {undo && (
+                      <p className="zones-note" role="status">
+                        Removed “{undo.sec.title || 'Untitled'}”. <button type="button" className="link" ref={undoBtn} onClick={undoStash}>Undo</button>
+                      </p>
+                    )}
+                    {removed.length > 0 && !undo && (
                       <p className="zones-note">
                         <Layers /> {removed.length} removed {removed.length === 1 ? 'section is' : 'sections are'} kept in <button type="button" className="link" onClick={() => setDrawer(true)}>Components</button>.
                       </p>

@@ -12,10 +12,13 @@ function Item({ id, data, kind, title, blurb, onAdd, onDelete }: {
   onAdd: () => void
   onDelete?: () => void
 }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id, data })
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({ id, data })
   return (
-    <li ref={setNodeRef} className={`dcard ${isDragging ? 'dragging' : ''}`} {...attributes} {...listeners}>
-      <Grip className="dcard-grip" />
+    <li ref={setNodeRef} className={`dcard ${isDragging ? 'dragging' : ''}`} onPointerDown={listeners?.onPointerDown as React.PointerEventHandler<HTMLLIElement> | undefined}>
+      {/* The whole card can be dragged with a pointer; the grip is the one keyboard and screen-reader control for it. */}
+      <button type="button" ref={setActivatorNodeRef} className="grip dcard-grip" {...attributes} {...listeners} aria-label={`Move ${title}. Press space, then use arrow keys.`}>
+        <Grip />
+      </button>
       <KindIcon kind={kind} className="card-kind" />
       <span className="card-text">
         <strong>{title}</strong>
@@ -62,7 +65,8 @@ export function Drawer({ open, onClose, removed, onAddTemplate, onAddRemoved, on
         )}
         <h3>Add new</h3>
         <ul>
-          {TEMPLATES.map((t) => (
+          {/* A removed section of the same name is listed above, with its content: don't offer an empty twin. */}
+          {TEMPLATES.filter((t) => !removed.some((s) => s.kind === t.kind && s.title.trim().toLowerCase() === t.label.trim().toLowerCase())).map((t) => (
             <Item key={t.id} id={`tpl:${t.id}`} data={{ type: 'template', tid: t.id }} kind={t.kind} title={t.label} blurb={t.blurb} onAdd={() => onAddTemplate(t)} />
           ))}
         </ul>
