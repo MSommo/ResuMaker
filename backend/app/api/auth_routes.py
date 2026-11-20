@@ -165,7 +165,7 @@ async def update_user(user_id: str, body: sc.AdminUserPatch, who: Principal = De
     if user.id == who.id and (body.isActive is False or body.role == "user"):
         raise HTTPException(409, "You can't lock yourself out. Ask another administrator.")
     try:
-        user = await auth.update_user(s, user, role=body.role, is_active=body.isActive, login=body.login)
+        user = await auth.update_user(s, user, role=body.role, is_active=body.isActive, login=body.login, ai_enabled=body.aiEnabled)
     except auth.LastAdmin:
         raise HTTPException(409, "That would leave no administrator.") from None
     except auth.LoginTaken:

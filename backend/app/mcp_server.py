@@ -30,6 +30,7 @@ from .domain.diff import diff_resumes
 from .domain.models import PersonalDetails, Resume
 from .domain.ops import Op, apply_ops
 from .infra import Infra
+from .db import UserRow
 from .services import auth
 from .services import personas as people
 from .services import resumes as repo
@@ -85,6 +86,18 @@ def infra() -> Infra:
 def me() -> uuid.UUID:
     assert _user_id is not None, "server not started"
     return _user_id
+
+
+async def _require_ai() -> None:
+    """Same gate as the web API: the server needs AI, and the acting user must be entitled to it. Read fresh on every call,
+    so an administrator switching AI off takes effect without restarting this server."""
+    i = infra()
+    if i.llm is None:
+        raise ValueError("AI is not configured on this ResuMaker server.")
+    async with i.session() as s:
+        user = await s.get(UserRow, me())
+    if user is None or not user.has_ai:
+        raise ValueError("AI features aren't included in this account.")
 
 
 async def _own(resume_id: str) -> uuid.UUID:
@@ -209,6 +222,7 @@ async def restore_version(resume_id: str, version_id: str) -> dict[str, Any]:
 @mcp.tool(name="improve_text")
 async def improve_text_tool(text: str, kind: str = "text", instruction: str = "") -> str:
     """Rewrite CV text to be clearer and more impactful without inventing facts. kind: headline | summary | description | bullet | subheading | note | text. Results are cached."""
+    await _require_ai()
     try:
         out, _ = await improve_text(infra(), kind=kind, text=text, instruction=instruction)
     except (LLMError, RuntimeError) as e:
@@ -221,6 +235,7 @@ async def ask_assistant(resume_id: str, instruction: str) -> dict[str, Any]:
     """Delegate a natural-language request to ResuMaker's own LangGraph agent (route → plan → apply → repair). It edits the CV
     directly and returns "undoVersionId" (pass it to restore_version to undo). Questions are answered without changing anything.
     To review changes before they are applied, use propose_changes instead."""
+    await _require_ai()
     rid = await _own(resume_id)
     try:
         out = await run_chat(infra(), rid, instruction)
@@ -236,6 +251,7 @@ async def propose_changes(resume_id: str, instruction: str) -> dict[str, Any]:
     """Like ask_assistant, but NOTHING is changed yet: the agent plans and validates the changes, then pauses. You get
     "runId" and a numbered list of "items". Show them to the user, then call decide_proposal with the ones to keep.
     If the request was only a question there is nothing to review and you get the answer in "reply" directly."""
+    await _require_ai()
     rid = await _own(resume_id)
     try:
         async for ev in stream_chat(infra(), rid, instruction, "propose"):
@@ -262,9 +278,8 @@ async def list_memories() -> list[dict[str, Any]]:
 async def remember(text: str, kind: str = "preference") -> dict[str, Any]:
     """Save one preference (how they want their CV written) or fact (something they confirmed about themselves). Only do this
     when the person asked you to remember it. Saying the same thing twice keeps one memory."""
+    await _require_ai()
     i = infra()
-    if i.llm is None:
-        raise ValueError("AI is not configured, so memory (which uses embeddings) is unavailable.")
     async with i.session() as s:
         try:
             row, created = await mem.add(s, i.llm, me(), kind, text)
@@ -290,6 +305,7 @@ async def tailor_to_posting(resume_id: str, posting: str) -> dict[str, Any]:
     and returns "variantResumeId", what the role needs ("spec": matched / gaps), and a numbered list of proposed "items".
     Nothing is applied yet: show the user, then call decide_proposal with resume_id=variantResumeId and the "runId".
     To discard the variant instead, ask the user to delete it in the app."""
+    await _require_ai()
     if len(posting.strip()) < 40:
         raise ValueError("Paste the full text of the job posting.")
     rid = await _own(resume_id)
@@ -314,6 +330,7 @@ async def tailor_to_posting(resume_id: str, posting: str) -> dict[str, Any]:
 async def decide_proposal(resume_id: str, run_id: str, accept: list[int] | str = "all") -> dict[str, Any]:
     """Apply a proposal from propose_changes. accept: "all", "none", or the list of item indices to keep (e.g. [0, 2]).
     A proposal can be decided once; if the CV changed in the meantime this fails and you should propose again."""
+    await _require_ai()
     if isinstance(accept, str) and accept not in ("all", "none"):
         raise ValueError('accept must be "all", "none" or a list of item indices.')
     rid = await _own(resume_id)

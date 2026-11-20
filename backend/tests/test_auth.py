@@ -348,7 +348,7 @@ async def test_the_admin_listing_exposes_no_cv_content(make_client, client):
     rows = (await boss.get("/api/admin/users")).json()
     mine = next(u for u in rows if u["id"] == str(client.user.id))
     assert mine["resumeCount"] == 1
-    assert set(mine) == {"id", "login", "firstName", "lastName", "role", "isActive", "status", "resumeCount", "lastLoginAt", "createdAt"}
+    assert set(mine) == {"id", "login", "firstName", "lastName", "role", "isActive", "aiEnabled", "status", "resumeCount", "lastLoginAt", "createdAt"}
 
 
 # ---------------------------------------------------------------- access tokens and the MCP server

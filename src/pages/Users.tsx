@@ -88,7 +88,7 @@ export default function Users() {
       {!users ? <div className="state-box" aria-busy="true"><p>Loading…</p></div> : (
         <div className="table-wrap">
           <table className="users-table">
-            <thead><tr><th>Person</th><th>Status</th><th>CVs</th><th>Last sign-in</th><th><span className="sr-only">Actions</span></th></tr></thead>
+            <thead><tr><th>Person</th><th>Status</th><th>CVs</th><th>AI</th><th>Last sign-in</th><th><span className="sr-only">Actions</span></th></tr></thead>
             <tbody>
               {users.map((u) => {
                 const self = u.id === me.persona.id
@@ -97,6 +97,14 @@ export default function Users() {
                     <td data-label="Person"><strong>{u.firstName} {u.lastName}</strong>{self && ' (you)'}<br /><small>{u.login ?? 'no sign-in email'}{u.role === 'admin' ? ' · administrator' : ''}</small></td>
                     <td data-label="Status">{STATUS[u.status]}</td>
                     <td data-label="CVs">{u.resumeCount}</td>
+                    <td data-label="AI">
+                      {u.role === 'admin' ? <small title="Administrators always have AI">Always</small> : (
+                        <label className="switch">
+                          <input type="checkbox" role="switch" checked={u.aiEnabled} onChange={(e) => void act(() => patchUser(u.id, { aiEnabled: e.target.checked }))} aria-label={`AI features for ${u.firstName}`} />
+                          <span>{u.aiEnabled ? 'On' : 'Off'}</span>
+                        </label>
+                      )}
+                    </td>
                     <td data-label="Last sign-in">{u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : 'Never'}</td>
                     <td className="row-actions">
                       {deleting === u.id ? (

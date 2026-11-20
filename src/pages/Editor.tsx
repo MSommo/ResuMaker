@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useCaps } from '../api/Caps'
 import { ChatBubble } from '../ai/ChatBubble'
+import { LockedAssistant } from '../ai/Upgrade'
 import { CvViewport, PageThumb } from '../components/CvView'
 import { Menu, MenuItem, MenuSep } from '../components/Popover'
 import { PdfButton } from '../components/PdfButton'
@@ -324,7 +325,7 @@ export default function EditorPage() {
         </nav>
       </div>
       <DragOverlay dropAnimation={null}>{overlay}</DragOverlay>
-      {caps.ai && <ChatBubble />}
+      {caps.ai ? <ChatBubble /> : caps.aiLocked && <LockedAssistant />}
     </DndContext>
   )
 }

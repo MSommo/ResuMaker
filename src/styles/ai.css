@@ -180,3 +180,24 @@
 .imp-panel .imp-pick, .imp-panel .imp-review { margin-top: 0; }
 .imp-panel .imp-review { padding: 18px 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
 .imp-panel .dropzone { min-height: 112px; padding: 16px 20px; border-radius: 14px; }
+
+/* AI not included in this account: features stay visible, locked, and explain how to get them (the future paywall plugs in here) */
+.ai-btn.locked { color: var(--muted); }
+.ai-btn.locked:hover, .ai-btn.locked.on { background: var(--accent-soft); color: var(--accent); }
+.ai-fab.locked { position: relative; background: var(--surface); color: var(--accent); border: 1px solid var(--line-strong); }
+.ai-fab.locked.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+.ai-fab .fab-lock {
+  position: absolute; right: -2px; bottom: -2px; width: 20px; height: 20px; padding: 3px; border-radius: 50%;
+  background: var(--ink); color: #fff; font-size: 14px;
+}
+.upgrade-pop { width: min(320px, calc(100vw - 32px)); padding: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); animation: dial-in 0.14s ease-out; }
+.upgrade-note { display: grid; gap: 8px; justify-items: start; padding: 16px 18px; border: 1px dashed var(--line-strong); border-radius: 12px; background: var(--surface); }
+.upgrade-note.compact { padding: 0; border: 0; background: none; }
+.upgrade-note p { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--muted); max-width: 62ch; }
+.upgrade-note p strong { color: var(--ink); font-weight: 600; }
+.upgrade-note small { color: var(--muted); font-size: 12px; }
+.upgrade-badge {
+  display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 99px;
+  background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 600;
+}
+@media (prefers-reduced-motion: reduce) { .upgrade-pop { animation: none; } }

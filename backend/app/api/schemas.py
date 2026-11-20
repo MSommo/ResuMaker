@@ -187,11 +187,12 @@ class MeOut(BaseModel):
 
     login: str
     role: Literal["user", "admin"]
+    ai: bool  # this account may use the AI features (the server must also have AI: see /status)
     persona: PersonaOut
 
     @classmethod
     def of(cls, u: UserRow, resume_count: int = 0) -> "MeOut":
-        return cls(login=u.login or "", role=u.role, persona=PersonaOut.of(u, resume_count))  # type: ignore[arg-type]
+        return cls(login=u.login or "", role=u.role, ai=u.has_ai, persona=PersonaOut.of(u, resume_count))  # type: ignore[arg-type]
 
 
 class PasswordIn(BaseModel):
@@ -217,6 +218,7 @@ class AdminUserOut(BaseModel):
     lastName: str  # noqa: N815
     role: Literal["user", "admin"]
     isActive: bool  # noqa: N815
+    aiEnabled: bool  # noqa: N815  # the stored flag; administrators have AI regardless
     status: Literal["draft", "invited", "active", "locked", "disabled"]  # draft: prepared by an admin, no link sent yet
     resumeCount: int  # noqa: N815
     lastLoginAt: datetime | None  # noqa: N815
@@ -228,7 +230,7 @@ class AdminUserOut(BaseModel):
 
         status = "disabled" if not u.is_active else "locked" if is_locked(u) else "active" if u.password_hash else "invited" if invited else "draft"
         return cls(
-            id=str(u.id), login=u.login, firstName=u.first_name, lastName=u.last_name, role=u.role, isActive=u.is_active,  # type: ignore[arg-type]
+            id=str(u.id), login=u.login, firstName=u.first_name, lastName=u.last_name, role=u.role, isActive=u.is_active, aiEnabled=u.ai_enabled,  # type: ignore[arg-type]
             status=status, resumeCount=resume_count, lastLoginAt=u.last_login_at, createdAt=u.created_at,
         )
 
@@ -245,6 +247,7 @@ class AdminUserIn(BaseModel):
 class AdminUserPatch(BaseModel):
     role: Literal["user", "admin"] | None = None
     isActive: bool | None = None  # noqa: N815
+    aiEnabled: bool | None = None  # noqa: N815
     login: str | None = Field(default=None, min_length=3, max_length=254)
 
 

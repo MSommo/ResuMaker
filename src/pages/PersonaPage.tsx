@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { createResume, deleteResume, getPersona, getResume, saveResume, updatePersona, type Persona, type ResumeDoc, type ResumeSummary } from '../api/client'
 import { PageThumb } from '../components/CvView'
 import { ImportPanel } from '../ai/ImportPanel'
+import { UpgradeNote } from '../ai/Upgrade'
+import { useCaps } from '../api/Caps'
 import { PersonaForm } from '../components/PersonaForm'
 import { Back, Copy, Edit, More, Trash, Upload } from '../components/icons'
 import { Menu, MenuItem, MenuSep } from '../components/Popover'
@@ -158,6 +160,8 @@ export default function PersonaPage() {
   const [busy, setBusy] = useState(false)
   const [incoming, setIncoming] = useState<{ file: File; n: number } | undefined>()
   const [dragging, setDragging] = useState(false)
+  const caps = useCaps()
+  const canImport = caps.ai
   // Sample thumbnails show this person's own details, so the choice looks like their CV.
   const samples = useMemo(() => {
     if (!persona) return []
@@ -169,7 +173,9 @@ export default function PersonaPage() {
   }, [persona])
 
   // Drop a CV file anywhere on this page to import it. Only real file drags count (not dragged text or links).
+  // Importing reads the file with AI, so without AI there is nothing to drop onto.
   useEffect(() => {
+    if (!canImport) return
     let depth = 0
     const files = (e: DragEvent) => !!e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')
     const enter = (e: DragEvent) => { if (files(e)) { depth++; setDragging(true) } }
@@ -185,7 +191,7 @@ export default function PersonaPage() {
     }
     window.addEventListener('dragenter', enter); window.addEventListener('dragleave', leave); window.addEventListener('dragover', over); window.addEventListener('drop', drop)
     return () => { window.removeEventListener('dragenter', enter); window.removeEventListener('dragleave', leave); window.removeEventListener('dragover', over); window.removeEventListener('drop', drop) }
-  }, [])
+  }, [canImport])
 
   const load = useCallback(async () => {
     try {
@@ -273,12 +279,15 @@ export default function PersonaPage() {
         <div className="section-head">
           <h2 id="new-h">{fresh ? 'Start your first CV' : 'Create another CV'}</h2>
           <p>
-            {fresh
-              ? 'Import a CV you already have and it’s ready to edit in a minute, or start from a layout. You can switch layouts later without losing anything.'
-              : 'Import a CV you already have, or start from a layout. You can switch layouts later without losing anything.'}
+            {/* Importing needs AI: without it on the server, only layouts are offered. */}
+            {!(caps.ai || caps.aiLocked)
+              ? 'Start from a layout. You can switch layouts later without losing anything.'
+              : fresh
+                ? 'Import a CV you already have and it’s ready to edit in a minute, or start from a layout. You can switch layouts later without losing anything.'
+                : 'Import a CV you already have, or start from a layout. You can switch layouts later without losing anything.'}
           </p>
         </div>
-        <ImportPanel persona={persona} incoming={incoming} />
+        {caps.ai ? <ImportPanel persona={persona} incoming={incoming} /> : caps.aiLocked && <UpgradeNote feature="Importing a CV" />}
         <h3 className="sub-head">Start from a layout</h3>
         {createError && <p className="form-error" role="alert">{createError}</p>}
         <div className="lgrid">
