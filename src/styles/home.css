@@ -163,16 +163,21 @@
   .users-table .confirm-row td { display: block; padding: 0; background: none; }
 }
 
-/* on/off switch (admin: AI per user) */
-.switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; }
+/* on/off switch (admin: AI per user). It resets the global input box (min-height 38px, padding, border),
+   which otherwise stretched it into a tall oval with the knob stuck at the top. */
+.switch { display: inline-flex; align-items: center; gap: 8px; min-height: 24px; cursor: pointer; font-size: 13px; }
 .switch input {
-  appearance: none; position: relative; width: 32px; height: 18px; margin: 0; border-radius: 99px; background: var(--line-strong); cursor: pointer;
-  transition: background 0.15s;
+  appearance: none; flex: none; box-sizing: border-box; position: relative; width: 34px; height: 20px; min-height: 0; margin: 0; padding: 0;
+  border: 0; border-radius: 99px; background: var(--line-strong); cursor: pointer; transition: background 0.15s;
 }
-.switch input::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform 0.15s; }
+.switch input::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(20, 20, 10, 0.25); transition: transform 0.15s; }
 .switch input:checked { background: var(--accent); }
 .switch input:checked::after { transform: translateX(14px); }
+.switch input:hover:not(:disabled) { filter: brightness(0.95); }
 .switch input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.switch input:disabled { opacity: 0.55; cursor: progress; }
+.switch input:checked + span { color: var(--ink); font-weight: 600; }
+.switch span { min-width: 2ch; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { .switch input, .switch input::after { transition: none; } }
 
 .auth-back { margin-top: 6px; font-size: 13px; color: var(--accent); }
