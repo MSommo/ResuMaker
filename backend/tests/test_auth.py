@@ -119,7 +119,20 @@ async def test_a_disabled_user_cannot_sign_in_and_loses_their_session(client, ma
     assert (await client.get("/api/auth/me")).status_code == 200
     assert (await boss.patch(f"/api/admin/users/{client.user.id}", json={"isActive": False})).status_code == 200
     assert (await client.get("/api/auth/me")).status_code == 401
-    assert (await client.post("/api/auth/login", json={"login": client.user.login, "password": PASSWORD})).status_code == 401
+    r = await client.post("/api/auth/login", json={"login": client.user.login, "password": PASSWORD})
+    assert r.status_code == 403 and "administrator" in r.json()["error"]
+    await boss.patch(f"/api/admin/users/{client.user.id}", json={"isActive": True})
+    assert (await client.post("/api/auth/login", json={"login": client.user.login, "password": PASSWORD})).status_code == 200
+
+
+
+async def test_a_disabled_account_only_says_so_to_the_right_password_and_never_locks(client, make_client, infra):
+    boss = await make_client(role="admin")
+    await boss.patch(f"/api/admin/users/{client.user.id}", json={"isActive": False})
+    wrong = await client.post("/api/auth/login", json={"login": client.user.login, "password": "not the password"})
+    assert wrong.status_code == 401 and "administrator" not in wrong.json()["error"]  # no hint for someone guessing
+    for _ in range(infra.settings.login_max_failures + 1):
+        assert (await client.post("/api/auth/login", json={"login": client.user.login, "password": PASSWORD})).status_code == 403
     await boss.patch(f"/api/admin/users/{client.user.id}", json={"isActive": True})
     assert (await client.post("/api/auth/login", json={"login": client.user.login, "password": PASSWORD})).status_code == 200
 

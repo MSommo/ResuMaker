@@ -118,34 +118,68 @@
 .confirm-inline { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
 .confirm-inline label { display: grid; gap: 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
 .confirm-inline .form-error { flex-basis: 100%; }
+.users-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; margin-bottom: 24px; }
+.users-head .lede { margin: 4px 0 0; max-width: 62ch; }
+.users-head .btn { flex: none; }
 .invite-box { margin-bottom: 24px; }
 .invite-box input { width: 100%; font-family: ui-monospace, monospace; font-size: 13px; }
 .user-add { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0 14px; align-items: end; }
 .user-add .form-actions { margin: 0 0 0 0; }
-.table-wrap { overflow-x: auto; }
+/* No overflow clipping: the row ⋯ menus must be able to open past the table's edge. Phones get cards instead (below). */
+.table-wrap { position: relative; }
 .users-table { width: 100%; border-collapse: collapse; }
 .users-table th { text-align: left; font-size: 12px; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line); }
-.users-table td { padding: 12px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.users-table td { padding: 12px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 .users-table small { color: var(--muted); }
-.row-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.status { display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: 12px; font-weight: 600; white-space: nowrap; background: var(--bg); color: var(--muted); border: 1px solid var(--line); cursor: help; }
+.status.s-active { background: #e6f4ea; color: #1e6b34; border-color: transparent; }
+.status.s-invited { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.status.s-locked { background: #fdf0d8; color: #8a5300; border-color: transparent; }
+.status.s-disabled { background: color-mix(in srgb, var(--danger) 9%, var(--surface)); color: var(--danger); border-color: transparent; }
+.users-table time { cursor: help; }
+.actions-cell { width: 1%; white-space: nowrap; }
+.row-actions { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.row-msg { margin: 6px 0 0; max-width: 32ch; margin-left: auto; white-space: normal; font-size: 13px; color: var(--muted); text-align: right; }
+.row-msg.form-error { color: var(--danger); }
+.row-actions .pop-panel { z-index: 20; }
+.users-table tr.confirming td { border-bottom: 0; }
+.users-table .confirm-row td { padding: 4px 14px 16px; background: color-mix(in srgb, var(--danger) 5%, var(--surface)); }
+.confirm-row p { margin: 10px 0; }
+.user-add-error { grid-column: 1 / -1; }
+.form-hint { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
+/* Phones: each person is a card. Name on top, the facts in two columns, actions along the bottom. */
 @media (max-width: 720px) {
+  .users-table, .users-table tbody { display: block; }
   .users-table thead { display: none; }
-  .users-table tr { display: block; padding: 10px 0; border-bottom: 1px solid var(--line); }
-  .users-table td { display: flex; justify-content: space-between; gap: 12px; border: 0; padding: 4px 0; }
+  .users-table tr { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin-bottom: 12px; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+  .users-table td { display: grid; gap: 2px; align-content: start; justify-items: start; border: 0; padding: 0; }
   .users-table td[data-label]::before { content: attr(data-label); color: var(--muted); font-size: 12px; }
+  .users-table td.person { grid-column: 1 / -1; display: block; }
+  .users-table td.person::before { content: none; }
+  .users-table td.person small { overflow-wrap: anywhere; }
+  .users-table td.actions-cell { grid-column: 1 / -1; width: auto; padding-top: 4px; }
   .row-actions { justify-content: flex-start; }
+  .row-msg { text-align: left; margin-left: 0; max-width: none; }
+  .users-table tr.confirming { margin-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+  .users-table .confirm-row { display: block; margin-top: -1px; border-top-left-radius: 0; border-top-right-radius: 0; }
+  .users-table .confirm-row td { display: block; padding: 0; background: none; }
 }
 
-/* on/off switch (admin: AI per user) */
-.switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; }
+/* on/off switch (admin: AI per user). It resets the global input box (min-height 38px, padding, border),
+   which otherwise stretched it into a tall oval with the knob stuck at the top. */
+.switch { display: inline-flex; align-items: center; gap: 8px; min-height: 24px; cursor: pointer; font-size: 13px; }
 .switch input {
-  appearance: none; position: relative; width: 32px; height: 18px; margin: 0; border-radius: 99px; background: var(--line-strong); cursor: pointer;
-  transition: background 0.15s;
+  appearance: none; flex: none; box-sizing: border-box; position: relative; width: 34px; height: 20px; min-height: 0; margin: 0; padding: 0;
+  border: 0; border-radius: 99px; background: var(--line-strong); cursor: pointer; transition: background 0.15s;
 }
-.switch input::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform 0.15s; }
+.switch input::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(20, 20, 10, 0.25); transition: transform 0.15s; }
 .switch input:checked { background: var(--accent); }
 .switch input:checked::after { transform: translateX(14px); }
+.switch input:hover:not(:disabled) { filter: brightness(0.95); }
 .switch input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.switch input:disabled { opacity: 0.55; cursor: progress; }
+.switch input:checked + span { color: var(--ink); font-weight: 600; }
+.switch span { min-width: 2ch; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { .switch input, .switch input::after { transition: none; } }
 
 .auth-back { margin-top: 6px; font-size: 13px; color: var(--accent); }

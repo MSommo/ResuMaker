@@ -22,7 +22,8 @@ public = APIRouter(prefix="/auth", tags=["auth"])
 protected = APIRouter(dependencies=[Depends(current)])
 admin = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
 
-BAD_LOGIN = "Wrong email or password."  # one message for unknown account, wrong password, disabled and locked
+BAD_LOGIN = "Wrong email or password."  # one message for unknown account, wrong password, locked and unclaimed
+DISABLED = "You can't sign in right now. Contact the administrator."
 
 
 async def _count(s: AsyncSession, user_id: uuid.UUID) -> int:
@@ -41,6 +42,9 @@ async def login(body: sc.LoginIn, request: Request, response: Response, infra: I
     except auth.AuthError:
         log.warning("failed sign-in from %s", client_ip(request))
         raise HTTPException(401, BAD_LOGIN) from None
+    except auth.AccountDisabled:
+        log.info("sign-in to a disabled account from %s", client_ip(request))
+        raise HTTPException(403, DISABLED) from None
     # A fresh token on every sign-in: a cookie planted before login (session fixation) never becomes authenticated.
     if old := request.cookies.get(COOKIE):
         await auth.revoke_session(s, old)
@@ -102,7 +106,7 @@ async def _check_own_password(s: AsyncSession, infra: Infra, user: UserRow, pass
     try:
         await auth.authenticate(s, infra.settings, user.login or "", password)
         return True
-    except auth.AuthError:
+    except (auth.AuthError, auth.AccountDisabled):  # a disabled user has no session to get here with, but never say yes
         return False
 
 
