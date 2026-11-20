@@ -153,3 +153,5 @@ dialog.gallery::backdrop { background: rgba(20, 20, 10, 0.5); }
 .drop-gap.closing { pointer-events: none; }
 .card.overlay { box-shadow: 0 2px 4px rgba(20, 20, 10, 0.08), 0 14px 32px rgba(20, 20, 10, 0.18); transform: rotate(-1.2deg); }
 body:has(.card.overlay) { cursor: grabbing; }
+.field .field-error { color: var(--danger, #b3261e); font-weight: 600; }
+.dcard-grip { width: 26px; cursor: grab; }

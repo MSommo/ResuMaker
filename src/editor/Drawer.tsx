@@ -12,10 +12,13 @@ function Item({ id, data, kind, title, blurb, onAdd, onDelete }: {
   onAdd: () => void
   onDelete?: () => void
 }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id, data })
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({ id, data })
   return (
-    <li ref={setNodeRef} className={`dcard ${isDragging ? 'dragging' : ''}`} {...attributes} {...listeners}>
-      <Grip className="dcard-grip" />
+    <li ref={setNodeRef} className={`dcard ${isDragging ? 'dragging' : ''}`} onPointerDown={listeners?.onPointerDown as React.PointerEventHandler<HTMLLIElement> | undefined}>
+      {/* The whole card can be dragged with a pointer; the grip is the one keyboard and screen-reader control for it. */}
+      <button type="button" ref={setActivatorNodeRef} className="grip dcard-grip" {...attributes} {...listeners} aria-label={`Move ${title}. Press space, then use arrow keys.`}>
+        <Grip />
+      </button>
       <KindIcon kind={kind} className="card-kind" />
       <span className="card-text">
         <strong>{title}</strong>

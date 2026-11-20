@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { LEVEL_LABEL, uid, type Id } from '../model/types'
 import { NATIONALITIES, countries } from '../model/countries'
 import { useImprove, type ImproveContext, type ImproveSpec } from '../ai/improve'
@@ -28,12 +28,12 @@ function Wrap({ label, hint, className = '', id, action, below, children }: Fiel
   )
 }
 
-export function TextField({ label, hint, className, value, onChange, improve, ...rest }: FieldProps & { value: string; onChange: (v: string) => void; improve?: ImproveSpec } & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>) {
+export function TextField({ label, hint, className, value, onChange, improve, error, ...rest }: FieldProps & { value: string; onChange: (v: string) => void; improve?: ImproveSpec; error?: string } & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>) {
   const id = useId()
   const ai = useImprove(improve, value, onChange)
   return (
-    <Wrap {...{ label, hint, className, id }} action={ai.trigger} below={ai.panel}>
-      <input id={id} value={value} onChange={(e) => onChange(e.target.value)} {...rest} />
+    <Wrap {...{ label, hint, className, id }} action={ai.trigger} below={<>{ai.panel}{error && <small className="field-error" id={`${id}-err`} role="alert">{error}</small>}</>}>
+      <input id={id} value={value} onChange={(e) => onChange(e.target.value)} aria-invalid={!!error || undefined} aria-describedby={error ? `${id}-err` : undefined} {...rest} />
     </Wrap>
   )
 }
@@ -73,13 +73,13 @@ export function NationalityField({ label, hint, className, value, onChange }: Fi
   )
 }
 
-export function MonthField({ label, className, value, onChange, disabled }: FieldProps & { value: string; onChange: (v: string) => void; disabled?: boolean }) {
+export function MonthField({ label, className, value, onChange, disabled, error }: FieldProps & { value: string; onChange: (v: string) => void; disabled?: boolean; error?: string }) {
   const id = useId()
   // <input type="month"> only accepts YYYY-MM; legacy free text shows blank until edited.
   const valid = /^\d{4}-\d{2}$/.test(value) ? value : ''
   return (
-    <Wrap {...{ label, className, id }}>
-      <input id={id} type="month" value={valid} onChange={(e) => onChange(e.target.value)} disabled={disabled} />
+    <Wrap {...{ label, className, id }} below={error && <small className="field-error" id={`${id}-err`} role="alert">{error}</small>}>
+      <input id={id} type="month" value={valid} onChange={(e) => onChange(e.target.value)} disabled={disabled} aria-invalid={!!error || undefined} aria-describedby={error ? `${id}-err` : undefined} />
     </Wrap>
   )
 }
@@ -137,10 +137,11 @@ export function RichTextField({ label, hint, className, value, onChange, rows = 
 
 /** Picks a section icon by showing the icons themselves (names are tooltips). */
 export function IconPicker({ label, hint, className, value, onChange }: FieldProps & { value: IconId; onChange: (v: IconId) => void }) {
+  const id = useId()
   return (
     <div className={`field ${className ?? ''}`}>
-      <div className="field-head"><label id="icon-label">{label}</label></div>
-      <div className="icon-picker" role="radiogroup" aria-labelledby="icon-label">
+      <div className="field-head"><span className="label" id={id}>{label}</span></div>
+      <div className="icon-picker" role="radiogroup" aria-labelledby={id}>
         {(Object.keys(ICON_LABEL) as IconId[]).map((k) => (
           <button key={k} type="button" role="radio" aria-checked={value === k} aria-label={ICON_LABEL[k]} title={ICON_LABEL[k]} className={value === k ? 'on' : ''} onClick={() => onChange(k)}>
             {SECTION_ICONS[k]}
@@ -166,11 +167,13 @@ export function LevelPicker({ value, onChange, label = 'Level' }: { value: numbe
 }
 
 /** Reorderable list; each item is a collapsible card. New items open automatically. */
-export function ListEditor<T extends { id: Id }>({ items, onChange, create, addLabel, summary, detail, render, inline }: {
+export function ListEditor<T extends { id: Id }>({ items, onChange, create, addLabel, itemName = 'item', summary, detail, render, inline }: {
   items: T[]
   onChange: (items: T[]) => void
   create: () => T
   addLabel: string
+  /** What one item is called, for button names: "entry", "link"… */
+  itemName?: string
   summary: (item: T) => string
   /** Second, quieter line under the summary (e.g. dates). */
   detail?: (item: T) => string
@@ -187,17 +190,32 @@ export function ListEditor<T extends { id: Id }>({ items, onChange, create, addL
     ;[next[i], next[j]] = [next[j], next[i]]
     onChange(next)
   }
+  const root = useRef<HTMLDivElement>(null)
+  const [focusNew, setFocusNew] = useState<Id | null>(null)
+  // After "Add", put the cursor in the new item's first field.
+  useEffect(() => {
+    if (focusNew === null) return
+    root.current?.querySelector<HTMLElement>(`[data-item="${focusNew}"] .item-body input, [data-item="${focusNew}"] .item-body [contenteditable]`)?.focus()
+    setFocusNew(null)
+  }, [focusNew])
   const add = () => {
     const it = create()
     onChange([...items, it])
     setOpen((s) => new Set(s).add(it.id))
+    setFocusNew(it.id)
+  }
+  const remove = (it: T) => {
+    const name = summary(it).trim()
+    // Only ask when there is something to lose; a blank item just added by mistake goes quietly.
+    if (name && !window.confirm(`Remove “${name}”?`)) return
+    onChange(items.filter((x) => x.id !== it.id))
   }
   return (
-    <div className="list">
+    <div className="list" ref={root}>
       {items.map((it, i) => {
         const isOpen = inline || open.has(it.id)
         return (
-          <div key={it.id} className={`item ${isOpen ? 'open' : ''} ${inline ? 'inline' : ''}`}>
+          <div key={it.id} data-item={it.id} className={`item ${isOpen ? 'open' : ''} ${inline ? 'inline' : ''}`}>
             <div className="item-head">
               {!inline && (
                 <button type="button" className="item-title" aria-expanded={isOpen} onClick={() => toggle(it.id)}>
@@ -209,9 +227,9 @@ export function ListEditor<T extends { id: Id }>({ items, onChange, create, addL
                 </button>
               )}
               <span className="item-tools">
-                <button type="button" onClick={() => move(i, -1)} disabled={i === 0} aria-label="Move up"><Up /></button>
-                <button type="button" onClick={() => move(i, 1)} disabled={i === items.length - 1} aria-label="Move down"><Down /></button>
-                <button type="button" onClick={() => onChange(items.filter((x) => x.id !== it.id))} aria-label="Remove"><Trash /></button>
+                <button type="button" onClick={() => move(i, -1)} disabled={i === 0} aria-label={`Move ${summary(it) || itemName} up`} title="Move up"><Up /></button>
+                <button type="button" onClick={() => move(i, 1)} disabled={i === items.length - 1} aria-label={`Move ${summary(it) || itemName} down`} title="Move down"><Down /></button>
+                <button type="button" onClick={() => remove(it)} aria-label={`Remove ${summary(it) || itemName}`} title="Remove"><Trash /></button>
               </span>
             </div>
             {isOpen && <div className="item-body">{render(it, (patch) => onChange(items.map((x) => (x.id === it.id ? { ...x, ...patch } : x))))}</div>}
@@ -276,9 +294,10 @@ export function BulletsEditor({ value, onChange, improveContext }: { value: stri
     onChange(next)
   }
   // Rows are keyed by index so typing never remounts the editor.
+  const id = useId()
   return (
-    <div className="field">
-      <label>Highlights</label>
+    <div className="field" role="group" aria-labelledby={id}>
+      <span className="label" id={id}>Highlights</span>
       <div className="bullets">
         {rows.map((r, i) => (
           <BulletRow
