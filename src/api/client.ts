@@ -104,6 +104,8 @@ export type Role = 'user' | 'admin'
 export interface Me {
   login: string
   role: Role
+  /** This account may use the AI features (the server must also have AI: see Caps). */
+  ai: boolean
   persona: Persona
 }
 export const getMe = () => json<Me>('GET', '/auth/me')
@@ -122,6 +124,8 @@ export interface AdminUser {
   lastName: string
   role: Role
   isActive: boolean
+  /** The stored flag; administrators have AI regardless. */
+  aiEnabled: boolean
   status: 'draft' | 'invited' | 'active' | 'locked' | 'disabled'
   resumeCount: number
   lastLoginAt: string | null
@@ -135,7 +139,7 @@ export interface Invite {
 export const listUsers = () => json<AdminUser[]>('GET', '/admin/users')
 /** Prepare a persona: a name and the email they will sign in with. No password, no link yet. */
 export const createDraft = (body: { firstName: string; lastName: string; login: string; role: Role }) => json<AdminUser>('POST', '/admin/users', body)
-export const patchUser = (id: string, body: { role?: Role; isActive?: boolean; login?: string }) => json<AdminUser>('PATCH', `/admin/users/${id}`, body)
+export const patchUser = (id: string, body: { role?: Role; isActive?: boolean; login?: string; aiEnabled?: boolean }) => json<AdminUser>('PATCH', `/admin/users/${id}`, body)
 export const reissueInvite = (id: string) => json<Invite>('POST', `/admin/users/${id}/invite`)
 export const signUserOut = async (id: string) => void (await request('POST', `/admin/users/${id}/sign-out`))
 export const deleteUser = async (id: string, password: string) => void (await request('POST', `/admin/users/${id}/delete`, { password }))

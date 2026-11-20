@@ -125,6 +125,19 @@ def own_persona(persona_id: str, me: Principal = Depends(current)) -> uuid.UUID:
     return pid
 
 
+AI_NOT_CONFIGURED = "AI is not configured. Ask the administrator to set it up."
+AI_NOT_INCLUDED = "AI features aren't included in your account."
+
+
+def require_ai(infra: Infra = Depends(get_infra), me: Principal = Depends(current)) -> None:
+    """Gate for every AI endpoint: the server must have AI (501 otherwise) and this account must be entitled to it (403).
+    Runs before `rate_limit`, so a refused request doesn't use up the caller's AI quota."""
+    if infra.llm is None:
+        raise HTTPException(501, AI_NOT_CONFIGURED)
+    if not me.user.has_ai:
+        raise HTTPException(403, AI_NOT_INCLUDED)
+
+
 async def rate_limit(request: Request, infra: Infra = Depends(get_infra), me: Principal = Depends(current)) -> None:
     """Protects the Gemini key (and the household's quota) from runaway loops: N AI calls per minute per user."""
     n = await infra.cache.hit(window_key("ai", str(me.id)), 60)

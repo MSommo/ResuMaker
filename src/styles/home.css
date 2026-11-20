@@ -1,15 +1,19 @@
-.home { padding-top: 32px; padding-bottom: 72px; }
+/* My CVs is a centred column with room on both sides; the navbar above stays full width. */
+.container.home { max-width: calc(1040px + 2 * var(--page-pad)); padding-top: 40px; padding-bottom: 72px; }
 .hero { max-width: 720px; margin-bottom: 64px; }
 .hero h1 { font-size: clamp(30px, 5vw, 48px); line-height: 1.08; letter-spacing: -0.03em; font-weight: 750; text-wrap: balance; }
 .hero p { margin-top: 16px; font-size: 17px; color: var(--muted); max-width: 56ch; text-wrap: pretty; }
 .hero-actions { margin-top: 28px; display: flex; gap: 12px; flex-wrap: wrap; }
-.section-head { margin-bottom: 24px; }
-.section-head h2 { font-size: 22px; letter-spacing: -0.02em; }
+/* Type roles on My CVs: page title 28 > section 20 > sub-section and card titles 15 > body 14 > meta 13 > small 12 */
+.page-head { margin: 0 0 32px; }
+.page-head h1 { font-size: 28px; line-height: 1.2; letter-spacing: -0.02em; }
+.section-head { margin-bottom: 20px; }
+.section-head h2 { font-size: 20px; line-height: 1.25; letter-spacing: -0.015em; }
 .section-head p { margin-top: 4px; color: var(--muted); max-width: 65ch; }
-.sub-head { margin: 36px 0 16px; font-size: 16px; }
+.sub-head { margin: 36px 0 16px; font-size: 15px; font-weight: 650; }
 
-/* Cards keep a readable size whatever the window: they line up from the left instead of stretching to fill the row. */
-.lgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(196px, 228px)); gap: 32px 24px; }
+/* Cards share the column's row (4 across at full width), so the grid reads as a shelf, not a stub on the left. */
+.lgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 32px 24px; }
 @media (max-width: 560px) { .lgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 14px; } }
 .lcard { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .lcard-thumb { position: relative; display: block; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: #fff; box-shadow: var(--shadow); transition: transform 0.15s, box-shadow 0.15s; }
@@ -19,9 +23,18 @@
 .lcard-thumb:has(.thumb-hit:disabled) { opacity: 0.6; }
 .lcard-thumb:has(.thumb-hit:not(:disabled)):hover { transform: translateY(-3px); box-shadow: 0 2px 4px rgba(20, 20, 10, 0.08), 0 14px 32px rgba(20, 20, 10, 0.14); }
 .lcard.current .lcard-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
-.lcard-body h3 { font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.lcard-body h3 { font-size: 15px; font-weight: 650; display: flex; align-items: center; gap: 8px; }
 .lcard-body p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
 .lcard-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.lcard-hint { font-size: 12.5px; }
+.lcard-status:empty { display: none; }
+.lcard-body .lcard-status { color: var(--ink); font-size: 13px; }
+.lcard.busy .lcard-thumb { opacity: 0.6; }
+.lcard-confirm { margin-top: 10px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line)); border-radius: 10px; background: var(--surface); }
+.lcard-confirm p { margin: 0 0 8px; color: var(--ink); font-size: 13px; }
+.lcard-confirm div { display: flex; flex-wrap: wrap; gap: 6px; }
+.thumb-missing { position: absolute; inset: 0; display: grid; place-items: center; padding: 12px; color: var(--muted); font-size: 12.5px; text-align: center; }
+.lcard .form-error { font-size: 13px; }
 .lcard-title { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
 .lcard-title h3 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lcard-title .rename { flex: 1; min-width: 0; min-height: 34px; padding: 4px 8px; font-size: 16px; font-weight: 600; }
@@ -36,7 +49,8 @@
 }
 .thumb-open span { padding: 10px 26px; border-radius: 99px; background: var(--ink); color: #fff; font-weight: 650; font-size: 15px; box-shadow: var(--shadow); }
 .lcard-thumb:hover .thumb-open, .thumb-hit:focus-visible .thumb-open { opacity: 1; }
-.thumb-hit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.thumb-hit:focus-visible { outline: none; }
+.lcard-thumb:has(.thumb-hit:focus-visible) { outline: 2px solid var(--accent); outline-offset: 3px; }  /* on the frame: the preview clips anything drawn on the link itself */
 @media (hover: none) { .lcard-thumb:hover .thumb-open { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .thumb-open { transition: none; } }
 .badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); }
@@ -45,8 +59,13 @@
 .block { margin-bottom: 56px; }
 .lcard-body { flex: 1; display: flex; flex-direction: column; }
 .lcard-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: auto; padding-top: 14px; }  /* pinned to the bottom, so the buttons line up across cards */
-.lcard-actions .btn { width: 100%; justify-content: center; }
-.lcard-actions .link { padding: 4px 0; font-size: 13px; }
+.lcard-actions .btn { width: 100%; min-height: 40px; justify-content: center; }
+.lcard-actions .link { padding: 8px 0; margin-bottom: -8px; font-size: 13px; }
+/* Fingers need bigger targets than pointers; the visible size stays, the hit area grows */
+@media (pointer: coarse) {
+  .lcard-actions .btn { min-height: 44px; }
+  .lcard-actions .link, .persona-meta .link { padding: 12px 0; margin: -12px 0; }
+}
 .notice { margin: 0 0 32px; padding: 10px 14px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
 .state-box { display: grid; gap: 8px; justify-items: center; text-align: center; padding: 64px 20px; color: var(--muted); }
 .state-box.inline { margin-bottom: 40px; padding: 20px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
@@ -69,10 +88,9 @@
 .pcard.new:hover { color: var(--ink); border-color: var(--ink); box-shadow: none; }
 .avatar { display: inline-grid; place-items: center; flex: none; border-radius: 50%; color: #fff; font-weight: 650; letter-spacing: 0.02em; }
 .avatar.plus { width: 64px; height: 64px; background: var(--bg); color: var(--muted); font-size: 26px; border: 1.5px dashed var(--line-strong); }
-.persona-head { display: flex; align-items: center; gap: 16px; margin: 0 0 40px; }
-.persona-id { flex: 1; min-width: 0; }
-.persona-id h1 { font-size: clamp(22px, 3vw, 28px); line-height: 1.2; letter-spacing: -0.02em; overflow-wrap: anywhere; }
-.persona-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; margin-top: 2px; color: var(--muted); }
+.persona-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; margin-top: 6px; color: var(--muted); max-width: 75ch; }
+/* First run: the create section is the page, so it gets a little more presence */
+.first-run .section-head h2 { font-size: 22px; }
 .persona-meta span { overflow-wrap: anywhere; }
 .persona-meta .link { padding: 6px 0; margin: -6px 0; font-weight: 600; }
 .panelbox { margin-bottom: 40px; padding: 20px 22px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
@@ -117,6 +135,19 @@
   .users-table td[data-label]::before { content: attr(data-label); color: var(--muted); font-size: 12px; }
   .row-actions { justify-content: flex-start; }
 }
+
+/* on/off switch (admin: AI per user) */
+.switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; }
+.switch input {
+  appearance: none; position: relative; width: 32px; height: 18px; margin: 0; border-radius: 99px; background: var(--line-strong); cursor: pointer;
+  transition: background 0.15s;
+}
+.switch input::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform 0.15s; }
+.switch input:checked { background: var(--accent); }
+.switch input:checked::after { transform: translateX(14px); }
+.switch input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .switch input, .switch input::after { transition: none; } }
+
 .auth-back { margin-top: 6px; font-size: 13px; color: var(--accent); }
 
 /* splash: what a signed-out visitor sees first */

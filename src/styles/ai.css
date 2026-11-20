@@ -118,6 +118,7 @@
 .dropzone { position: relative; display: grid; place-items: center; min-height: 230px; padding: 24px; border: 2px dashed var(--line-strong); border-radius: 16px; text-align: center; cursor: pointer; color: var(--muted);
   background: radial-gradient(120% 120% at 50% 0%, color-mix(in srgb, var(--accent) 5%, transparent), transparent 70%); transition: border-color 0.15s, background 0.15s, transform 0.15s; }
 .dropzone:hover { border-color: var(--accent); }
+.dropzone:has(input[type="file"]:focus-visible) { border-style: solid; border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: 2px; }  /* the file input is invisible: show its focus on the box */
 .dropzone.over { border-style: solid; border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); transform: scale(1.012); }
 .dropzone.bad { border-color: var(--danger); }
 .dropzone.busy { cursor: progress; border-style: solid; border-color: var(--line); }
@@ -125,6 +126,8 @@
 .dropzone.busy input[type="file"] { pointer-events: none; }
 .dz-idle, .dz-reading { display: grid; justify-items: center; gap: 6px; pointer-events: none; }
 .dz-idle strong, .dz-reading strong { color: var(--ink); font-size: 17px; }
+.dz-say-tap { display: none; }
+@media (hover: none) and (pointer: coarse) { .dz-say-drag, .dz-say-or { display: none; } .dz-say-tap { display: block; } }
 .dz-icon { display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 4px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); }
 .dz-icon svg { width: 26px; height: 26px; }
 .dropzone.over .dz-icon { animation: dz-bob 0.7s ease-in-out infinite alternate; }
@@ -165,15 +168,36 @@
 .page-drop > div { display: grid; justify-items: center; gap: 6px; padding: 44px 56px; border: 2px dashed var(--accent); border-radius: 22px; background: var(--surface); box-shadow: var(--shadow); text-align: center; }
 .page-drop strong { font-size: 20px; }
 .page-drop span { color: var(--muted); }
-.imp-panel { max-width: 720px; scroll-margin-top: 80px; }
+.imp-panel { scroll-margin-top: 80px; }
 /* On My CVs the import box is one compact row: icon, what to do, accepted files (stacked again on narrow screens). */
 .imp-panel .ai-note { max-width: 70ch; font-size: 12px; }
 .imp-panel .dz-idle { grid-template-columns: auto auto; grid-template-areas: 'icon title' 'icon or' 'icon types'; justify-items: start; align-items: center; column-gap: 16px; row-gap: 2px; text-align: left; }
 .imp-panel .dz-idle > .dz-icon { grid-area: icon; width: 48px; height: 48px; margin: 0; }
 .imp-panel .dz-idle > .dz-icon svg { width: 22px; height: 22px; }
 .imp-panel .dz-idle > strong { grid-area: title; font-size: 15px; }
-.imp-panel .dz-idle > span:not(.dz-icon):not(.dz-types) { grid-area: or; }
+.imp-panel .dz-idle > .dz-say-or { grid-area: or; }
 .imp-panel .dz-idle > .dz-types { grid-area: types; margin-top: 4px; }
 .imp-panel .imp-pick, .imp-panel .imp-review { margin-top: 0; }
 .imp-panel .imp-review { padding: 18px 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
 .imp-panel .dropzone { min-height: 112px; padding: 16px 20px; border-radius: 14px; }
+
+/* AI not included in this account: features stay visible, locked, and explain how to get them (the future paywall plugs in here) */
+.ai-btn.locked { color: var(--muted); }
+.ai-btn.locked:hover, .ai-btn.locked.on { background: var(--accent-soft); color: var(--accent); }
+.ai-fab.locked { position: relative; background: var(--surface); color: var(--accent); border: 1px solid var(--line-strong); }
+.ai-fab.locked.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+.ai-fab .fab-lock {
+  position: absolute; right: -2px; bottom: -2px; width: 20px; height: 20px; padding: 3px; border-radius: 50%;
+  background: var(--ink); color: #fff; font-size: 14px;
+}
+.upgrade-pop { width: min(320px, calc(100vw - 32px)); padding: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); animation: dial-in 0.14s ease-out; }
+.upgrade-note { display: grid; gap: 8px; justify-items: start; padding: 16px 18px; border: 1px dashed var(--line-strong); border-radius: 12px; background: var(--surface); }
+.upgrade-note.compact { padding: 0; border: 0; background: none; }
+.upgrade-note p { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--muted); max-width: 62ch; }
+.upgrade-note p strong { color: var(--ink); font-weight: 600; }
+.upgrade-note small { color: var(--muted); font-size: 12px; }
+.upgrade-badge {
+  display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 99px;
+  background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 600;
+}
+@media (prefers-reduced-motion: reduce) { .upgrade-pop { animation: none; } }

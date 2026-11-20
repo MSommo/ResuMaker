@@ -226,7 +226,9 @@ async def pending_invites(s: AsyncSession) -> set[uuid.UUID]:
     return set(rows)
 
 
-async def update_user(s: AsyncSession, user: UserRow, *, role: str | None = None, is_active: bool | None = None, login: str | None = None) -> UserRow:
+async def update_user(
+    s: AsyncSession, user: UserRow, *, role: str | None = None, is_active: bool | None = None, login: str | None = None, ai_enabled: bool | None = None
+) -> UserRow:
     if (role is not None and role != "admin") or is_active is False:
         await _ensure_not_last_admin(s, user)
     if role is not None:
@@ -245,6 +247,8 @@ async def update_user(s: AsyncSession, user: UserRow, *, role: str | None = None
         user.is_active = is_active
         if not is_active:
             await revoke_sessions(s, user.id)
+    if ai_enabled is not None:
+        user.ai_enabled = ai_enabled
     await s.commit()
     return user
 

@@ -28,16 +28,12 @@ from ..services.pdf import render_pdf
 from ..services.tailor import stream_tailor
 from ..services.improve import improve_text
 from . import schemas as sc
-from .deps import Principal, current, get_infra, get_session, owned_resume, own_persona, parse_id, rate_limit
+from .deps import Principal, current, get_infra, get_session, owned_resume, own_persona, parse_id, rate_limit, require_ai
 
 # Every route here needs a signed-in user. The few public ones (status, sign-in) live in `public`.
 router = APIRouter(dependencies=[Depends(current)])
 public = APIRouter()
-
-
-def _ai(infra: Infra) -> None:
-    if infra.llm is None:
-        raise HTTPException(501, "AI is not configured. Ask the administrator to set it up.")
+AI = [Depends(require_ai), Depends(rate_limit)]  # every AI endpoint: entitled, then within the per-user quota
 
 
 async def _row(s: AsyncSession, resume_id: uuid.UUID):
@@ -102,11 +98,10 @@ async def create_resume(*, body: sc.CreateResumeIn, pid: uuid.UUID = Depends(own
     return sc.ResumeOut.of(row, persona)
 
 
-@router.post("/personas/{persona_id}/imports/cv", response_model=sc.ImportOut, dependencies=[Depends(rate_limit)])
+@router.post("/personas/{persona_id}/imports/cv", response_model=sc.ImportOut, dependencies=AI)
 async def import_cv(*, pid: uuid.UUID = Depends(own_persona), file: UploadFile = File(...), infra: Infra = Depends(get_infra)):
     """Read a CV from a PDF, DOCX or HTML file (up to 10 MB) into our format. Saves nothing: it returns a preview with warnings to
     review, and the CV is created with the normal POST /personas/{id}/resumes. The file is processed in memory and not kept."""
-    _ai(infra)
     data = await file.read(MAX_BYTES + 1)
     try:
         p = await parse_cv(infra.llm, data)
@@ -129,10 +124,9 @@ async def list_memories(pid: uuid.UUID = Depends(own_persona), s: AsyncSession =
     return [_memory_out(m) for m in await mem.list_memories(s, pid)]
 
 
-@router.post("/personas/{persona_id}/memories", response_model=sc.MemoryOut, status_code=201, dependencies=[Depends(rate_limit)])
+@router.post("/personas/{persona_id}/memories", response_model=sc.MemoryOut, status_code=201, dependencies=AI)
 async def add_memory(*, body: sc.MemoryIn, pid: uuid.UUID = Depends(own_persona), infra: Infra = Depends(get_infra)):
     """Save a preference or fact by hand (it is embedded with Gemini, so AI must be configured)."""
-    _ai(infra)
     async with infra.session() as s:
         try:
             row, _ = await mem.add(s, infra.llm, pid, body.kind, body.text)
@@ -242,9 +236,8 @@ async def restore_version(*, rid: uuid.UUID = Depends(owned_resume), version_id:
 # ------------------------------------------------------------------ AI
 
 
-@router.post("/ai/improve", response_model=sc.ImproveOut, dependencies=[Depends(rate_limit)])
+@router.post("/ai/improve", response_model=sc.ImproveOut, dependencies=AI)
 async def improve(body: sc.ImproveIn, infra: Infra = Depends(get_infra)):
-    _ai(infra)
     try:
         text, cached = await improve_text(infra, kind=body.kind, text=body.text, instruction=body.instruction, context=body.context)
     except LLMError as e:
@@ -252,9 +245,8 @@ async def improve(body: sc.ImproveIn, infra: Infra = Depends(get_infra)):
     return sc.ImproveOut(text=text, cached=cached)
 
 
-@router.post("/resumes/{resume_id}/chat", response_model=sc.ChatOut, dependencies=[Depends(rate_limit)])
+@router.post("/resumes/{resume_id}/chat", response_model=sc.ChatOut, dependencies=AI)
 async def chat(*, rid: uuid.UUID = Depends(owned_resume), body: sc.ChatIn, infra: Infra = Depends(get_infra)):
-    _ai(infra)
     try:
         out = await run_chat(infra, rid, body.message)
     except repo.NotFound:
@@ -277,11 +269,10 @@ def _sse(event: dict) -> str:
     return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
 
 
-@router.post("/resumes/{resume_id}/chat/stream", dependencies=[Depends(rate_limit)])
+@router.post("/resumes/{resume_id}/chat/stream", dependencies=AI)
 async def chat_stream(*, rid: uuid.UUID = Depends(owned_resume), body: sc.ChatStreamIn, infra: Infra = Depends(get_infra)):
     """The assistant turn as Server-Sent Events: `status` (what it is doing now), `step` (a graph node finished), then
     `done` with the result, or `proposal` (mode=propose: nothing is changed until you POST .../chat/{runId}/decide), or `error`."""
-    _ai(infra)
     async with infra.session() as s:
         await _row(s, rid)  # 404 as a normal JSON error before the stream starts
 
@@ -302,12 +293,11 @@ async def chat_stream(*, rid: uuid.UUID = Depends(owned_resume), body: sc.ChatSt
     return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
-@router.post("/resumes/{resume_id}/tailor/stream", dependencies=[Depends(rate_limit)])
+@router.post("/resumes/{resume_id}/tailor/stream", dependencies=AI)
 async def tailor_stream(*, rid: uuid.UUID = Depends(owned_resume), body: sc.TailorIn, infra: Infra = Depends(get_infra)):
     """Tailor this CV to a pasted job posting, as Server-Sent Events: `status`, `spec` (what the role needs, what your CV
     matches, what it lacks), `variant` (a NEW CV was created: the original is never touched), step/status, then `proposal`
     to accept or reject with POST /resumes/{variant id}/chat/{runId}/decide, or `error`."""
-    _ai(infra)
     async with infra.session() as s:
         await _row(s, rid)
 
@@ -324,10 +314,9 @@ async def tailor_stream(*, rid: uuid.UUID = Depends(owned_resume), body: sc.Tail
     return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
-@router.post("/resumes/{resume_id}/chat/{run_id}/decide", response_model=sc.ChatOut, dependencies=[Depends(rate_limit)])
+@router.post("/resumes/{resume_id}/chat/{run_id}/decide", response_model=sc.ChatOut, dependencies=AI)
 async def chat_decide(*, rid: uuid.UUID = Depends(owned_resume), run_id: str, body: sc.DecideIn, infra: Infra = Depends(get_infra)):
     """Accept all, none, or some of the changes in a proposal. Resumes the paused run (stored in Postgres)."""
-    _ai(infra)
     try:
         out = await decide(infra, rid, run_id, body.accept)
     except ProposalGone:

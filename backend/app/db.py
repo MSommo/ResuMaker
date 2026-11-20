@@ -52,6 +52,14 @@ class UserRow(Base):
     password_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # ---- entitlements (what this account may use; a future paywall flips these)
+    ai_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+    @property
+    def has_ai(self) -> bool:
+        """May this person use the AI features? Administrators always may. (The server must also have AI configured.)"""
+        return self.ai_enabled or self.role == "admin"
+
     @property
     def display_name(self) -> str:
         return f"{self.first_name} {self.last_name}".strip() or "Unnamed"
