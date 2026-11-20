@@ -235,6 +235,23 @@ async def test_the_critic_can_send_the_result_back_for_one_fix(client, infra):
     assert len(r["applied"]) == 4 and "Zig" in skill_names(r["resume"]) and infra.llm.critic_calls == 1  # reviewed once, never in a loop
 
 
+async def test_a_fix_to_something_already_edited_is_one_change_not_two(client, infra):
+    doc = await create(client)
+    skills = sec(doc, "Skills")["id"]
+    profile = sec(doc, "Profile")["id"]
+    infra.llm.decompositions.append(Decomposition(summary="Done.", tasks=[Task(instruction="a"), Task(instruction="b")]))
+    infra.llm.plans += [
+        plan("a", PlanOp(op="update_section", sectionId=profile, patch=Patch(text="First draft"))), plan("b", add_skill(skills, "Rust")),
+        plan("fix", PlanOp(op="update_section", sectionId=profile, patch=Patch(text="Final text"))),  # the reviewer's fix to the same section
+    ]
+    infra.llm.critiques.append(Critique(ok=False, problems=["Profile is weak"]))
+    events = await stream(client, doc["id"], "x", mode="propose")
+    proposal = events[-1]
+    assert [i["summary"] for i in proposal["items"]] == ["Updated section “Profile”", "Added “Rust” to “Skills”"]  # Profile listed once
+    out = (await client.post(f"/api/resumes/{doc['id']}/chat/{proposal['runId']}/decide", json={"accept": "all"})).json()
+    assert sec(out["resume"], "Profile")["text"] == "Final text" and "Rust" in skill_names(out["resume"])
+
+
 async def test_a_failing_critic_keeps_the_result(client, infra):
     doc = await create(client)
     await three_tasks(client, infra, sec(doc, "Skills")["id"])

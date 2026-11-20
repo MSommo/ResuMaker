@@ -144,6 +144,28 @@ class Decomposition(BaseModel):
 MAX_TASKS = 16
 
 
+def coalesce(ops: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Several updates to the same thing (the profile edited by a writer, then again by the reviewer's fix) become ONE change:
+    the later patch lands over the earlier one, at the earlier one's position. Keeps the review list honest."""
+    out: list[dict[str, Any]] = []
+    seen: dict[tuple, int] = {}
+    for o in ops:
+        if o.get("op") in ("update_basics", "update_section", "update_item"):
+            key = (o["op"], o.get("sectionId"), o.get("itemId"))
+            if key in seen:
+                prev = out[seen[key]]
+                out[seen[key]] = {**prev, "patch": {**prev.get("patch", {}), **o.get("patch", {})}}
+                continue
+            seen[key] = len(out)
+        out.append(o)
+    return out
+
+
+def _replay(original: dict[str, Any], ops: list[dict[str, Any]]):
+    """Apply coalesced ops to the CV as it was; if anything fails to apply, report that so callers can fall back."""
+    return apply_ops(Resume.model_validate(original), [Op(**o) for o in coalesce(ops)])
+
+
 def to_ops(plan: AgentPlan) -> list[Op]:
     return [Op(**{**o.model_dump(exclude={"patch"}), "patch": o.patch.model_dump(exclude_none=True)}) for o in plan.ops]
 
@@ -334,8 +356,7 @@ def build_graph(llm: LLM | None, checkpointer: Any = None, use_decompose: bool =
     async def merge(state: AgentState) -> AgentState:
         """Replay every writer's operations on the CV as it was, in task order, through the same validated engine."""
         results = sorted(state["results"], key=lambda r: r["idx"])
-        ops = [Op(**o) for r in results for o in r["applied_ops"]]
-        res = apply_ops(Resume.model_validate(state["resume"]), ops)
+        res = _replay(state["resume"], [o for r in results for o in r["applied_ops"]])
         skipped = [*(x for r in results for x in r["skipped"]), *res.skipped]
         summary = state.get("summary", "")
         return {
@@ -367,15 +388,18 @@ def build_graph(llm: LLM | None, checkpointer: Any = None, use_decompose: bool =
         problems = "\n".join(f"- {x}" for x in state["critique"]["problems"])
         try:
             p = await llm.json(system=CHAT_SYSTEM, contents=_contents(state, REVISE_NOTE.format(problems=problems)), schema=AgentPlan, temperature=0.2)
-            res = apply_ops(Resume.model_validate(state["resume"]), to_ops(p))
+            fixes = [o.model_dump(exclude_none=True) for o in to_ops(p)]
+            # Replay everything on the original with repeated edits merged, so the proposal lists each change once.
+            res = _replay(state["original"], [*state.get("applied_ops", []), *fixes])
+            if res.failed or len(res.applied_ops) < len(coalesce([*state.get("applied_ops", []), *fixes])):
+                raise ValueError("coalesced replay did not apply cleanly")
         except Exception as e:  # noqa: BLE001
             log.warning("revise failed, keeping the merged result: %s", e)
             return {}
         return {
             "resume": res.resume.model_dump(mode="json"),
-            "applied": [*state.get("applied", []), *res.applied],
-            "applied_ops": [*state.get("applied_ops", []), *(o.model_dump(exclude_none=True) for o in res.applied_ops)],
-            "skipped": [*state.get("skipped", []), *res.skipped],
+            "applied": res.applied,
+            "applied_ops": [o.model_dump(exclude_none=True) for o in res.applied_ops],
         }
 
     async def apply(state: AgentState) -> AgentState:
