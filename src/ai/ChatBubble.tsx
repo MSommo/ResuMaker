@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { chatHistory, chatStream, clearChat, decideProposal, restoreVersion, type ChatResult, type Proposal } from '../api/client'
-import { Chat, Close, Send, Sparkle, Trash, Undo } from '../components/icons'
+import { Chat, Close, Send, Sparkle, Target, Trash, Undo } from '../components/icons'
+import { Menu, MenuItem } from '../components/Popover'
 import { useResume } from '../state/ResumeContext'
 import { MemoryDialog } from './MemoryDialog'
 import { TailorDialog } from './TailorDialog'
@@ -36,6 +37,8 @@ const SUGGESTIONS = [
 export function ChatBubble() {
   const { id, personaId, adopt, flush } = useResume()
   const [open, setOpen] = useState(false)
+  const [dial, setDial] = useState(false) // the launcher's two choices: Ask AI / Tailor to a job
+  const dialRef = useRef<HTMLDivElement>(null)
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -64,6 +67,19 @@ export function ChatBubble() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [open])
+
+  // The launcher closes on Escape and on a click anywhere else.
+  useEffect(() => {
+    if (!dial) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setDial(false)
+    const onPointer = (e: PointerEvent) => !dialRef.current?.contains(e.target as Node) && setDial(false)
+    window.addEventListener('keydown', onKey)
+    document.addEventListener('pointerdown', onPointer, true)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.removeEventListener('pointerdown', onPointer, true)
+    }
+  }, [dial])
 
   // The conversation lives in the database, so it survives reloads.
   useEffect(() => {
@@ -179,18 +195,31 @@ export function ChatBubble() {
   return (
     <>
       {!open && (
-        <button type="button" className="ai-fab no-print" onClick={() => setOpen(true)} aria-label="Open AI assistant">
-          <Chat /> <span>Ask AI</span>
-        </button>
+        <div className="ai-dial no-print" ref={dialRef}>
+          {dial && (
+            <div className="ai-dial-items" role="menu" aria-label="AI assistant">
+              <button type="button" role="menuitem" className="ai-dial-item" onClick={() => (setDial(false), setTailoring(true))}>
+                <Target /> Tailor to a job
+              </button>
+              <button type="button" role="menuitem" className="ai-dial-item" onClick={() => (setDial(false), setOpen(true))}>
+                <Chat /> Ask AI
+              </button>
+            </div>
+          )}
+          <button type="button" className={`ai-fab ${dial ? 'on' : ''}`} onClick={() => setDial((d) => !d)} aria-label="AI assistant" aria-expanded={dial} aria-haspopup="menu" title="AI assistant">
+            {dial ? <Close /> : <Sparkle />}
+          </button>
+        </div>
       )}
       {open && (
         <section className="chat no-print" role="dialog" aria-label="AI assistant">
           <header>
             <h2><Sparkle /> AI assistant</h2>
             <span className="tb-grow" />
-            <button type="button" className="btn small" onClick={() => setMemoryOpen(true)} title="What the assistant remembers about this person">Memory</button>
-            <button type="button" className="btn small" onClick={() => setTailoring(true)} title="Make a copy of this CV tailored to a job posting">Tailor to a job</button>
-            {msgs.length > 0 && <button type="button" className="icon-btn" onClick={() => void clear()} aria-label="Clear conversation" title="Clear conversation"><Trash /></button>}
+            <Menu label="Assistant settings" triggerClassName="icon-btn">
+              <MenuItem onSelect={() => setMemoryOpen(true)} icon={<Sparkle />}>What I remember about this person</MenuItem>
+              <MenuItem onSelect={() => void clear()} icon={<Trash />} disabled={msgs.length === 0}>Clear conversation</MenuItem>
+            </Menu>
             <button type="button" className="icon-btn" onClick={() => setOpen(false)} aria-label="Close assistant"><Close /></button>
           </header>
 

@@ -3,13 +3,14 @@ import {
   type CollisionDetection, type DragEndEvent, type DragOverEvent, type DragStartEvent,
 } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useCaps } from '../api/Caps'
 import { ChatBubble } from '../ai/ChatBubble'
-import { CvViewport } from '../components/CvView'
+import { CvViewport, PageThumb } from '../components/CvView'
+import { Menu, MenuItem, MenuSep } from '../components/Popover'
 import { PdfButton } from '../components/PdfButton'
-import { Back, Download, Expand, Layers, More, Plus, Print, Upload } from '../components/icons'
+import { Back, Close, Download, Expand, Layers, Layout, Plus, Print, Upload } from '../components/icons'
 import { Drawer } from '../editor/Drawer'
 import { type DragData, resolveOver } from '../editor/dnd'
 import { PersonalForm } from '../editor/PersonalForm'
@@ -19,7 +20,7 @@ import { layouts, getLayout } from '../layouts/registry'
 import { fullName } from '../model/format'
 import { zoneSections, stashed } from '../model/sections'
 import { TEMPLATES, getTemplate, type Template } from '../model/templates'
-import type { Section, SectionKind } from '../model/types'
+import type { Resume, Section, SectionKind } from '../model/types'
 import { pickZone, place, stash, zoneAccepts } from '../state/ops'
 import { parseImport } from '../state/storage'
 import { useResume } from '../state/ResumeContext'
@@ -30,6 +31,66 @@ const SAVE_LABEL = { saved: 'Saved', saving: 'Saving…', error: 'Couldn’t sav
 const collide: CollisionDetection = (args) => {
   const hits = pointerWithin(args)
   return hits.length ? hits : closestCenter(args)
+}
+
+/** Renders its children only once it scrolls into view, so a gallery with many layouts doesn't lay out every CV at once. */
+function WhenVisible({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const [seen, setSeen] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || seen) return
+    const io = new IntersectionObserver((e) => e.some((x) => x.isIntersecting) && (setSeen(true), io.disconnect()), { rootMargin: '200px' })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [seen])
+  return <span ref={ref} className="when-visible">{seen ? children : null}</span>
+}
+
+/** Full-size modal (90% of the window) to choose a layout: each card shows this CV rendered in that layout. Searchable, since the list will grow. */
+function LayoutGallery({ resume, onPick, onClose }: { resume: Resume; onPick: (id: string) => void; onClose: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null)
+  const [q, setQ] = useState('')
+  const current = getLayout(resume.layoutId)
+  useEffect(() => {
+    const d = ref.current
+    if (d && !d.open) d.showModal() // native modal: focus trap, Escape and inert background come with it
+  }, [])
+  const shown = layouts.filter((l) => `${l.name} ${l.description}`.toLowerCase().includes(q.trim().toLowerCase()))
+  return (
+    <dialog ref={ref} className="gallery" aria-labelledby="gallery-title" onClose={onClose} onClick={(e) => e.target === ref.current && ref.current?.close()}>
+      <header className="gallery-head">
+        <h2 id="gallery-title">Choose a layout</h2>
+        <input type="search" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && (e.preventDefault(), ref.current?.close())} placeholder="Search layouts…" aria-label="Search layouts" autoFocus />
+        <span className="tb-grow" />
+        <button type="button" className="icon-btn" onClick={() => ref.current?.close()} aria-label="Close"><Close /></button>
+      </header>
+      <div className="gallery-body">
+        <div className="gallery-grid" role="radiogroup" aria-label="Layouts">
+          {shown.map((l) => (
+            <button key={l.id} type="button" role="radio" aria-checked={l.id === current.id} className={`gl-item ${l.id === current.id ? 'on' : ''}`} onClick={() => (l.id !== current.id && onPick(l.id), ref.current?.close())}>
+              <span className="gl-thumb"><WhenVisible><PageThumb resume={{ ...resume, layoutId: l.id }} /></WhenVisible></span>
+              <span className="gl-name"><strong>{l.name}</strong>{l.id === current.id && <span className="badge">Current</span>}</span>
+              <small>{l.description}</small>
+            </button>
+          ))}
+          {!shown.length && <p className="empty">No layout matches “{q}”.</p>}
+        </div>
+      </div>
+    </dialog>
+  )
+}
+
+function LayoutPicker({ resume, onPick }: { resume: Resume; onPick: (id: string) => void }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <button type="button" className="btn small" onClick={() => setOpen(true)} aria-haspopup="dialog" title="Change layout">
+        <Layout /> {getLayout(resume.layoutId).name}
+      </button>
+      {open && <LayoutGallery resume={resume} onPick={onPick} onClose={() => setOpen(false)} />}
+    </>
+  )
 }
 
 export default function EditorPage() {
@@ -44,6 +105,14 @@ export default function EditorPage() {
   const [overZone, setOverZone] = useState<string | null>(null)
   const [notice, setNotice] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+
+  // Escape closes the components drawer (unless a popover or a drag already took it).
+  useEffect(() => {
+    if (!drawer) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !active && !document.querySelector('dialog[open]') && setDrawer(false)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [drawer, active])
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
@@ -80,6 +149,19 @@ export default function EditorPage() {
       if (!sec || !zoneAccepts(layout, zone, sec.kind)) return r
       return { ...r, sections: place(r.sections, sec, zone, overId) }
     })
+  }
+
+  // Clicking a part of the rendered CV opens that section (the header opens Personal info).
+  const openFromPreview = (id: string) => {
+    const sec = resume.sections.find((x) => x.id === id)
+    if (id === '@info' || sec?.kind === 'details') {
+      setSelectedId(null)
+      setTab('info')
+    } else if (sec) {
+      setTab('sections')
+      setSelectedId(id)
+    } else return
+    setView('edit')
   }
 
   const addTemplate = (t: Template) => {
@@ -133,7 +215,7 @@ export default function EditorPage() {
 
   return (
     <DndContext sensors={sensors} collisionDetection={collide} onDragStart={onDragStart} onDragOver={onDragOver} onDragEnd={onDragEnd} onDragCancel={() => (setActive(null), setOverZone(null))}>
-      <div className="editor" data-view={view}>
+      <div className="editor" data-view={view} data-drawer={drawer ? "open" : "closed"}>
         <aside className="ed-panel no-print">
           {selected && tab === 'sections' ? (
             <div className="ed-body">
@@ -144,11 +226,9 @@ export default function EditorPage() {
               <div className="ed-tabs" role="tablist">
                 <button role="tab" aria-selected={tab === 'info'} onClick={() => setTab('info')}>Personal info</button>
                 <button role="tab" aria-selected={tab === 'sections'} onClick={() => setTab('sections')}>Sections</button>
-                {tab === 'sections' && (
-                  <button type="button" className={`btn small ${drawer ? 'primary' : ''}`} onClick={() => setDrawer((d) => !d)} aria-expanded={drawer}>
-                    <Plus /> Components
-                  </button>
-                )}
+                <button type="button" className={`btn small ${drawer ? 'primary' : ''}`} onClick={() => setDrawer((d) => !d)} aria-expanded={drawer}>
+                  <Plus /> Components
+                </button>
               </div>
               <div className="ed-body">
                 {tab === 'info' ? (
@@ -175,29 +255,22 @@ export default function EditorPage() {
         <section className="ed-stage">
           <div className="ed-toolbar no-print">
             <Link className="btn small" to={`/p/${personaId}`} title="All of this person’s CVs"><Back /> {resume.basics.firstName || 'CVs'}</Link>
-            <label className="tb-layout">
-              <span>Layout</span>
-              <select value={resume.layoutId} onChange={(e) => setLayout(e.target.value)}>
-                {layouts.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </select>
-            </label>
+            <LayoutPicker resume={resume} onPick={setLayout} />
             <span className="tb-grow" />
             {notice && <span className="tb-notice" role="status">{notice}</span>}
             <span className={`save-state ${saveState}`} role="status">{SAVE_LABEL[saveState]}</span>
             <Link className="btn small" to={`/preview/${id}`}><Expand /> Full preview</Link>
             <PdfButton />
-            <details className="menu">
-              <summary className="btn small icon" aria-label="More actions"><More /></summary>
-              <div className="menu-pop">
-                <button type="button" onClick={() => window.print()}><Print /> Print…</button>
-                <button type="button" onClick={exportJson}><Download /> Export JSON</button>
-                <button type="button" onClick={() => fileRef.current?.click()}><Upload /> Import JSON</button>
-                <button type="button" className="danger" onClick={() => window.confirm('Clear all content and start with an empty CV?') && (reset(), setSelectedId(null))}>Start from empty CV</button>
-              </div>
-            </details>
+            <Menu>
+              <MenuItem icon={<Print />} onSelect={() => window.print()}>Print…</MenuItem>
+              <MenuItem icon={<Download />} onSelect={exportJson}>Export JSON</MenuItem>
+              <MenuItem icon={<Upload />} onSelect={() => fileRef.current?.click()}>Import JSON</MenuItem>
+              <MenuSep />
+              <MenuItem danger onSelect={() => window.confirm('Clear all content and start with an empty CV?') && (reset(), setSelectedId(null))}>Start from empty CV…</MenuItem>
+            </Menu>
             <input ref={fileRef} type="file" accept="application/json" hidden onChange={(e) => importJson(e.target.files?.[0])} />
           </div>
-          <CvViewport resume={resume} className="ed-viewport" />
+          <CvViewport resume={resume} className="ed-viewport" onSelectSection={openFromPreview} activeSection={tab === 'info' ? '@info' : selectedId} />
         </section>
 
         <nav className="mobile-tabs no-print" aria-label="Editor view">

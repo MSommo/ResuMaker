@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { createResume, deletePersona, deleteResume, getPersona, getResume, updatePersona, type Persona, type ResumeDoc, type ResumeSummary } from '../api/client'
+import { createResume, deletePersona, deleteResume, getPersona, getResume, saveResume, updatePersona, type Persona, type ResumeDoc, type ResumeSummary } from '../api/client'
 import { Avatar } from '../components/Avatar'
 import { PageThumb } from '../components/CvView'
 import { ImportDialog } from '../ai/ImportDialog'
 import { PersonaForm } from '../components/PersonaForm'
-import { Back, Trash } from '../components/icons'
+import { Back, Copy, Edit, More, Trash } from '../components/icons'
+import { Menu, MenuItem, MenuSep } from '../components/Popover'
 import { layouts } from '../layouts/registry'
 import { fullName } from '../model/format'
 import { sampleResume } from '../model/sample'
@@ -21,8 +22,13 @@ function ago(iso: string) {
   return rtf.format(-Math.round(s / 86400), 'day')
 }
 
-function CvCard({ cv, onDelete }: { cv: ResumeSummary; onDelete: () => void }) {
+function CvCard({ cv, onDelete, onChanged }: { cv: ResumeSummary; onDelete: () => void; onChanged: () => void }) {
   const [doc, setDoc] = useState<ResumeDoc | null>(null)
+  const [renaming, setRenaming] = useState(false)
+  const [name, setName] = useState(cv.title)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const input = useRef<HTMLInputElement>(null)
   useEffect(() => {
     let live = true
     getResume(cv.id).then((d) => live && setDoc(d)).catch(() => {})
@@ -30,18 +36,79 @@ function CvCard({ cv, onDelete }: { cv: ResumeSummary; onDelete: () => void }) {
       live = false
     }
   }, [cv.id, cv.version])
+  useEffect(() => {
+    if (renaming) input.current?.select()
+  }, [renaming])
+
+  // A CV's name is the headline written on it, so renaming edits that.
+  const rename = async () => {
+    const next = name.trim()
+    setRenaming(false)
+    if (!next || next === cv.title) return setName(cv.title)
+    setBusy(true)
+    try {
+      const fresh = await getResume(cv.id)
+      await saveResume(cv.id, { ...fresh.resume, basics: { ...fresh.resume.basics, headline: next } }, fresh.version)
+      setError('')
+      onChanged()
+    } catch (e) {
+      setName(cv.title)
+      setError(e instanceof Error ? e.message : 'Could not rename the CV.')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const duplicate = async () => {
+    setBusy(true)
+    try {
+      const fresh = await getResume(cv.id)
+      await createResume(cv.personaId, { resume: { ...fresh.resume, basics: { ...fresh.resume.basics, headline: `${cv.title} (copy)` } }, layoutId: cv.layoutId })
+      setError('')
+      onChanged()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not duplicate the CV.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
-    <article className="lcard">
+    <article className="lcard" aria-busy={busy}>
       <Link to={`/editor/${cv.id}`} className="lcard-thumb" aria-label={`Open ${cv.title}`}>
         {doc ? <PageThumb resume={doc.resume} /> : <div className="thumb" />}
+        <span className="thumb-open" aria-hidden><span>Open</span></span>
       </Link>
       <div className="lcard-body">
-        <h3>{cv.title}</h3>
-        <p>{layouts.find((l) => l.id === cv.layoutId)?.name ?? cv.layoutId} layout · edited {ago(cv.updatedAt)}</p>
-        <div className="lcard-actions">
-          <Link to={`/editor/${cv.id}`} className="btn">Open</Link>
-          <button type="button" className="btn" onClick={onDelete} aria-label={`Delete ${cv.title}`}><Trash /> Delete</button>
+        <div className="lcard-title">
+          {renaming ? (
+            <input
+              ref={input}
+              className="rename"
+              value={name}
+              maxLength={200}
+              aria-label="CV name"
+              autoFocus
+              onChange={(e) => setName(e.target.value)}
+              onBlur={() => void rename()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') e.currentTarget.blur()
+                else if (e.key === 'Escape') (setName(cv.title), setRenaming(false))
+              }}
+            />
+          ) : (
+            <h3 title={cv.title}>{cv.title}</h3>
+          )}
+          <Menu label={`Actions for ${cv.title}`} triggerClassName="icon-btn" trigger={<More />}>
+            <MenuItem icon={<Edit />} onSelect={() => (setName(cv.title), setRenaming(true))}>Rename</MenuItem>
+            <MenuItem icon={<Copy />} onSelect={() => void duplicate()}>Duplicate</MenuItem>
+            <MenuSep />
+            <MenuItem icon={<Trash />} danger onSelect={onDelete}>Delete…</MenuItem>
+          </Menu>
         </div>
+        <p>
+          <span className="badge">{layouts.find((l) => l.id === cv.layoutId)?.name ?? cv.layoutId}</span> edited {ago(cv.updatedAt)}
+        </p>
+        {error && <p className="form-error" role="alert">{error}</p>}
       </div>
     </article>
   )
@@ -57,7 +124,15 @@ export default function PersonaPage() {
   const [editing, setEditing] = useState(false)
   const [busy, setBusy] = useState(false)
   const [importing, setImporting] = useState(false)
-  const samples = useMemo(() => layouts.map((l) => ({ l, r: sampleResume(l.id) })), [])
+  // Sample thumbnails show this person's own details, so the choice looks like their CV.
+  const samples = useMemo(() => {
+    if (!persona) return []
+    const { id: _id, resumeCount: _n, createdAt: _c, updatedAt: _u, ...details } = persona
+    return layouts.map((l) => {
+      const r = sampleResume(l.id)
+      return { l, r: { ...r, basics: { ...r.basics, ...details } } }
+    })
+  }, [persona])
 
   const load = useCallback(async () => {
     try {
@@ -123,7 +198,9 @@ export default function PersonaPage() {
         </div>
         <div className="persona-actions">
           {!editing && <button type="button" className="btn" onClick={() => setEditing(true)}>Edit details</button>}
-          <button type="button" className="btn" onClick={() => void removePersona()}><Trash /> Delete persona</button>
+          <Menu label={`Actions for ${persona.firstName}`} triggerClassName="btn icon">
+            <MenuItem icon={<Trash />} danger onSelect={() => void removePersona()}>Delete persona…</MenuItem>
+          </Menu>
         </div>
       </header>
 
@@ -149,7 +226,7 @@ export default function PersonaPage() {
       <section className="block" aria-labelledby="cvs-h">
         <div className="section-head"><h2 id="cvs-h">{persona.firstName}’s CVs</h2></div>
         {cvs.length ? (
-          <div className="lgrid">{cvs.map((cv) => <CvCard key={cv.id} cv={cv} onDelete={() => void removeCv(cv)} />)}</div>
+          <div className="lgrid">{cvs.map((cv) => <CvCard key={cv.id} cv={cv} onDelete={() => void removeCv(cv)} onChanged={() => void load()} />)}</div>
         ) : (
           <p className="empty">No CVs yet. Pick a layout below to start one.</p>
         )}

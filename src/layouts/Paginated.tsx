@@ -5,6 +5,8 @@ import './paginated.css'
 export interface Unit {
   key: string
   node: ReactNode
+  /** Id of the CV section this unit belongs to; lets the editor open it when its rendered text is clicked. */
+  section?: string
   /** Extra spacing after the unit: end of a section, or a section followed by a rule. */
   end?: 'section' | 'rule'
 }
@@ -40,7 +42,7 @@ function fill(heights: { h: number; trail: number }[], first: number, rest: numb
 const Units = ({ units, idx }: { units: Unit[]; idx: number[] }) => (
   <>
     {idx.map((i) => units[i]).filter(Boolean).map((u) => (
-      <div key={u.key} className={`pg-unit ${u.end ? `end-${u.end}` : ''}`}>{u.node}</div>
+      <div key={u.key} className={`pg-unit ${u.end ? `end-${u.end}` : ''}`} data-sec={u.section}>{u.node}</div>
     ))}
   </>
 )
@@ -103,7 +105,7 @@ export function Paginated({ className = '', header, side, main }: Props) {
       <div className="pg-pages">
         {pages.map((p, n) => (
           <div className={`pg-page ${n > 0 ? 'pg-cont' : ''}`} key={n}>
-            {n === 0 && <div className="pg-header">{header}</div>}
+            {n === 0 && <div className="pg-header" data-sec="@info">{header}</div>}
             <div className="pg-body">
               <div className="pg-side"><Units units={side} idx={p.side} /></div>
               <div className="pg-main"><Units units={main} idx={p.main} /></div>

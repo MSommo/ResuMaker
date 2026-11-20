@@ -51,3 +51,7 @@ export const KindIcon = ({ kind, ...p }: { kind: SectionKind } & P) => {
     case 'links': return <I {...p}><path d="M10 14a4 4 0 0 0 5.700 0l3-3a4 4 0 0 0-5.700-5.700l-1 1M14 10a4 4 0 0 0-5.700 0l-3 3a4 4 0 0 0 5.700 5.700l1-1" /></I>
   }
 }
+export const Target = (p: P) => <I {...p}><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="4" /><circle cx="12" cy="12" r="0.6" /></I>
+export const Copy = (p: P) => <I {...p}><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" /></I>
+export const Edit = (p: P) => <I {...p}><path d="M4 20h4L19 9l-4-4L4 16zM13.500 6.500l4 4" /></I>
+export const Layout = (p: P) => <I {...p}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16M9 11h12" /></I>

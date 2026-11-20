@@ -70,6 +70,7 @@ function entryPieces(en: Entry): ReactNode[] {
 function section(key: string, title: string, items: ReactNode[], end: Unit['end']): Unit[] {
   return items.map((node, i) => ({
     key: `${key}-${i}`,
+    section: key,
     node: i === 0 ? (
       <>
         <Heading>{title}</Heading>

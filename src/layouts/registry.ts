@@ -16,6 +16,8 @@ export interface LayoutDef {
   name: string
   description: string
   zones: Zone[]
+  /** The layout draws an icon next to each section title, so the editor offers an icon picker. */
+  icons?: boolean
   Component: ComponentType<{ resume: Resume }>
 }
 
@@ -36,6 +38,7 @@ export const layouts: LayoutDef[] = [
     name: 'Timeline',
     description: 'Centered header, narrow centered sidebar and a timeline of dated entries.',
     zones: [SIDE, MAIN],
+    icons: true,
     Component: TimelineLayout,
   },
 ]

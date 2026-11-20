@@ -2,10 +2,11 @@ import { useId, useState, type ReactNode } from 'react'
 import { LEVEL_LABEL, uid, type Id } from '../model/types'
 import { NATIONALITIES, countries } from '../model/countries'
 import { useImprove, type ImproveContext, type ImproveSpec } from '../ai/improve'
-import { cycleHeading, insertLink, insertRule, toggleInline, toggleLines } from './markdown/format'
-import { Md } from './markdown/Markdown'
-import { useFormatting, type Transform } from './markdown/useFormatting'
-import { Bold, Chevron, Code, Down, Heading, Italic, LinkIcon, ListOl, ListUl, Plus, Quote, Rule, Strike, Task, Trash, Up } from './icons'
+import { SECTION_ICONS } from '../layouts/icons'
+import { ICON_LABEL, type IconId } from '../model/types'
+import { Chevron, Down, Plus, Trash, Up } from './icons'
+import { Menu, MenuItem, MenuSep } from './Popover'
+import { EditorSurface, LinkBar, RichToolbar, useMarkdownEditor } from './RichEditor'
 
 interface FieldProps {
   label: string
@@ -91,106 +92,63 @@ export function CheckField({ label, checked, onChange }: { label: string; checke
   )
 }
 
-/** Textarea with a small formatting toolbar. Stores `**bold**` / `*italic*` markers. */
-const MOD = typeof navigator !== 'undefined' && /mac|iphone|ipad/i.test(navigator.platform) ? '⌘' : 'Ctrl+'
-
-interface Tool {
-  label: string
-  shortcut?: string
-  icon: ReactNode
-  run: Transform
-}
-
-// Grouped: inline · blocks · insert. A `null` is a visual separator.
-const TOOLS: (Tool | null)[] = [
-  { label: 'Bold', shortcut: `${MOD}B`, icon: <Bold />, run: (v, s, e) => toggleInline(v, s, e, '**') },
-  { label: 'Italic', shortcut: `${MOD}I`, icon: <Italic />, run: (v, s, e) => toggleInline(v, s, e, '*') },
-  { label: 'Strikethrough', shortcut: `${MOD}⇧X`, icon: <Strike />, run: (v, s, e) => toggleInline(v, s, e, '~~') },
-  { label: 'Inline code', icon: <Code />, run: (v, s, e) => toggleInline(v, s, e, '`', 'code') },
-  null,
-  { label: 'Heading (click again for a smaller one)', icon: <Heading />, run: cycleHeading },
-  { label: 'Bulleted list', icon: <ListUl />, run: (v, s, e) => toggleLines(v, s, e, 'ul') },
-  { label: 'Numbered list', icon: <ListOl />, run: (v, s, e) => toggleLines(v, s, e, 'ol') },
-  { label: 'Task list', icon: <Task />, run: (v, s, e) => toggleLines(v, s, e, 'task') },
-  { label: 'Quote', icon: <Quote />, run: (v, s, e) => toggleLines(v, s, e, 'quote') },
-  null,
-  { label: 'Link', shortcut: `${MOD}K`, icon: <LinkIcon />, run: insertLink },
-  { label: 'Horizontal rule', icon: <Rule />, run: insertRule },
-]
-
 function MarkdownHelp() {
+  const mod = typeof navigator !== 'undefined' && /mac|iphone|ipad/i.test(navigator.platform) ? '⌘' : 'Ctrl+'
   return (
     <details className="md-help">
-      <summary>Markdown help</summary>
+      <summary>Typing shortcuts</summary>
       <div>
-        <p>Markdown works in every text box. A blank line starts a new paragraph; a single line break is kept as typed.</p>
+        <p>Text formats as you type, and what you see is what the CV shows. A blank line starts a new paragraph.</p>
         <dl>
           <dt><code>**bold**</code> <code>*italic*</code> <code>~~strike~~</code> <code>`code`</code></dt>
-          <dd>Inline styles</dd>
-          <dt><code>## Heading</code> <code>### Smaller</code></dt>
-          <dd>Headings (start the line with #)</dd>
-          <dt><code>- item</code> <code>1. item</code> <code>- [ ] task</code></dt>
-          <dd>Lists; indent two spaces to nest. Enter continues a list, Enter on an empty item ends it.</dd>
-          <dt><code>&gt; quote</code> <code>---</code></dt>
+          <dd>Inline styles ({mod}B, {mod}I)</dd>
+          <dt><code>## </code> <code>### </code> at the start of a line</dt>
+          <dd>Headings</dd>
+          <dt><code>- </code> <code>1. </code> <code>[ ] </code> at the start of a line</dt>
+          <dd>Lists; Enter continues a list, Enter on an empty item ends it</dd>
+          <dt><code>&gt; </code> <code>---</code></dt>
           <dd>Quote, horizontal rule</dd>
           <dt><code>[text](https://…)</code></dt>
-          <dd>Link (<code>{MOD}K</code>). Images and raw HTML are not shown.</dd>
-          <dt><code>| a | b |</code> + <code>|---|---|</code> rows</dt>
-          <dd>Tables</dd>
+          <dd>Link ({mod}K). Images and raw HTML are not shown.</dd>
         </dl>
       </div>
     </details>
   )
 }
 
-/** Markdown textarea: full toolbar, keyboard shortcuts, list continuation and a live preview. */
-export function RichTextField({ label, hint, className, value, onChange, rows = 4, improve }: FieldProps & { value: string; onChange: (v: string) => void; rows?: number; improve?: ImproveSpec }) {
+/** Rich text box: always shows the formatted text, formats as you type Markdown, and stores plain Markdown. */
+export function RichTextField({ label, hint, className, value, onChange, rows = 4, improve, placeholder }: FieldProps & { value: string; onChange: (v: string) => void; rows?: number; improve?: ImproveSpec; placeholder?: string }) {
   const id = useId()
-  const [mode, setMode] = useState<'write' | 'preview'>('write')
   const ai = useImprove(improve, value, onChange)
-  const { ref, apply, onKeyDown } = useFormatting(value, onChange)
-  const writing = mode === 'write'
-
+  const { editor, linkOpen, setLinkOpen } = useMarkdownEditor({ value, onChange, placeholder, label, id })
   return (
     <Wrap {...{ label, hint, className, id }} below={ai.panel}>
       <div className="rich">
-        <div className="rich-bar" role="toolbar" aria-label="Formatting">
-          <div className="rich-tools">
-            {TOOLS.map((t, i) =>
-              t ? (
-                <button
-                  key={t.label}
-                  type="button"
-                  disabled={!writing}
-                  // Keep the selection in the textarea while the button is pressed.
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => apply(t.run)}
-                  title={t.shortcut ? `${t.label} (${t.shortcut})` : t.label}
-                  aria-label={t.label}
-                >
-                  {t.icon}
-                </button>
-              ) : (
-                <span key={`sep${i}`} className="rich-sep" aria-hidden />
-              ),
-            )}
-          </div>
-          <div className="rich-mode" role="group" aria-label="Editor mode">
-            <button type="button" aria-pressed={writing} onClick={() => setMode('write')}>Write</button>
-            <button type="button" aria-pressed={!writing} onClick={() => setMode('preview')}>Preview</button>
-          </div>
+        <RichToolbar editor={editor} onLink={() => setLinkOpen((o) => !o)} linkOn={linkOpen}>
           {ai.trigger}
-        </div>
-        {writing ? (
-          <textarea id={id} ref={ref} rows={rows} value={value} onChange={(e) => onChange(e.target.value)} onKeyDown={onKeyDown} spellCheck />
-        ) : (
-          <div id={id} className="md-preview" aria-live="polite">
-            {value.trim() ? <div className="md"><Md source={value} /></div> : <p className="md-empty">Nothing to preview yet.</p>}
-          </div>
-        )}
+        </RichToolbar>
+        {linkOpen && editor && <LinkBar editor={editor} onClose={() => setLinkOpen(false)} />}
+        <EditorSurface editor={editor} minRows={rows} />
       </div>
       <MarkdownHelp />
     </Wrap>
+  )
+}
+
+/** Picks a section icon by showing the icons themselves (names are tooltips). */
+export function IconPicker({ label, hint, className, value, onChange }: FieldProps & { value: IconId; onChange: (v: IconId) => void }) {
+  return (
+    <div className={`field ${className ?? ''}`}>
+      <div className="field-head"><label id="icon-label">{label}</label></div>
+      <div className="icon-picker" role="radiogroup" aria-labelledby="icon-label">
+        {(Object.keys(ICON_LABEL) as IconId[]).map((k) => (
+          <button key={k} type="button" role="radio" aria-checked={value === k} aria-label={ICON_LABEL[k]} title={ICON_LABEL[k]} className={value === k ? 'on' : ''} onClick={() => onChange(k)}>
+            {SECTION_ICONS[k]}
+          </button>
+        ))}
+      </div>
+      {hint && <small>{hint}</small>}
+    </div>
   )
 }
 
@@ -208,12 +166,14 @@ export function LevelPicker({ value, onChange, label = 'Level' }: { value: numbe
 }
 
 /** Reorderable list; each item is a collapsible card. New items open automatically. */
-export function ListEditor<T extends { id: Id }>({ items, onChange, create, addLabel, summary, render, inline }: {
+export function ListEditor<T extends { id: Id }>({ items, onChange, create, addLabel, summary, detail, render, inline }: {
   items: T[]
   onChange: (items: T[]) => void
   create: () => T
   addLabel: string
   summary: (item: T) => string
+  /** Second, quieter line under the summary (e.g. dates). */
+  detail?: (item: T) => string
   render: (item: T, update: (patch: Partial<T>) => void) => ReactNode
   /** Items are short (one row): no collapsing. */
   inline?: boolean
@@ -241,7 +201,11 @@ export function ListEditor<T extends { id: Id }>({ items, onChange, create, addL
             <div className="item-head">
               {!inline && (
                 <button type="button" className="item-title" aria-expanded={isOpen} onClick={() => toggle(it.id)}>
-                  <Chevron className={isOpen ? 'rot' : ''} /> {summary(it) || <em>Untitled</em>}
+                  <Chevron className={isOpen ? 'rot' : ''} />
+                  <span className="item-title-text">
+                    <strong>{summary(it) || <em>Untitled</em>}</strong>
+                    {detail?.(it) && <small>{detail(it)}</small>}
+                  </span>
                 </button>
               )}
               <span className="item-tools">
@@ -259,27 +223,42 @@ export function ListEditor<T extends { id: Id }>({ items, onChange, create, addL
   )
 }
 
-/** One bullet or subheading row, with its own Improve button. */
-function BulletRow({ heading, text, context, onChange, onToggle, tools }: {
+/** One bullet or subheading row: marker, text, and a short action column (Improve + a menu), so the text gets the full width. */
+function BulletRow({ heading, text, context, onChange, onToggle, onMove, onRemove, first, last }: {
   heading: boolean
   text: string
   context?: ImproveContext
   onChange: (text: string) => void
   onToggle: () => void
-  tools: ReactNode
+  onMove: (dir: -1 | 1) => void
+  onRemove: () => void
+  first: boolean
+  last: boolean
 }) {
   const ai = useImprove({ kind: heading ? 'subheading' : 'bullet', context }, text, onChange)
-  const { ref, onKeyDown } = useFormatting(text, onChange, { lists: false }) // bold/italic/link shortcuts; a bullet is one line
+  const label = heading ? 'Subheading text' : 'Bullet text'
+  const { editor, linkOpen, setLinkOpen } = useMarkdownEditor({
+    value: text,
+    onChange,
+    inline: true,
+    label,
+    placeholder: heading ? 'Subheading' : 'What did you do or achieve?',
+  })
   return (
     <div className={`brow ${heading ? 'is-heading' : ''}`}>
-      <button type="button" className="btype" onClick={onToggle} title={heading ? 'Subheading (click to make a bullet)' : 'Bullet (click to make a subheading)'} aria-label={heading ? 'Subheading' : 'Bullet'}>
-        {heading ? 'H' : '•'}
-      </button>
-      <textarea ref={ref} rows={heading ? 1 : 2} value={text} placeholder={heading ? 'Subheading' : 'What did you do or achieve? Inline Markdown works: **bold**, *italic*, [link](https://…)'} onChange={(e) => onChange(e.target.value)} onKeyDown={onKeyDown} aria-label={heading ? 'Subheading text' : 'Bullet text'} />
-      <span className="item-tools">
+      <span className="bmark" aria-hidden title={heading ? 'Subheading' : 'Bullet'} />
+      <EditorSurface editor={editor} />
+      <span className="brow-actions">
         {ai.trigger}
-        {tools}
+        <Menu label={heading ? 'Subheading options' : 'Bullet options'} triggerClassName="icon-btn small-btn">
+          <MenuItem onSelect={onToggle}>{heading ? 'Make it a bullet' : 'Make it a subheading'}</MenuItem>
+          <MenuItem icon={<Up />} onSelect={() => onMove(-1)} disabled={first}>Move up</MenuItem>
+          <MenuItem icon={<Down />} onSelect={() => onMove(1)} disabled={last}>Move down</MenuItem>
+          <MenuSep />
+          <MenuItem icon={<Trash />} danger onSelect={onRemove}>Remove</MenuItem>
+        </Menu>
       </span>
+      {linkOpen && editor && <div className="brow-link"><LinkBar editor={editor} onClose={() => setLinkOpen(false)} /></div>}
       {ai.panel}
     </div>
   )
@@ -296,7 +275,7 @@ export function BulletsEditor({ value, onChange, improveContext }: { value: stri
     ;[next[i], next[j]] = [next[j], next[i]]
     onChange(next)
   }
-  // Rows are keyed by index so typing never remounts the textarea.
+  // Rows are keyed by index so typing never remounts the editor.
   return (
     <div className="field">
       <label>Highlights</label>
@@ -309,13 +288,10 @@ export function BulletsEditor({ value, onChange, improveContext }: { value: stri
             context={improveContext}
             onChange={(t) => set(i, r.heading, t)}
             onToggle={() => set(i, !r.heading, r.text)}
-            tools={
-              <>
-                <button type="button" onClick={() => move(i, -1)} disabled={i === 0} aria-label="Move up"><Up /></button>
-                <button type="button" onClick={() => move(i, 1)} disabled={i === rows.length - 1} aria-label="Move down"><Down /></button>
-                <button type="button" onClick={() => onChange(value.filter((_, k) => k !== i))} aria-label="Remove"><Trash /></button>
-              </>
-            }
+            onMove={(d) => move(i, d)}
+            onRemove={() => onChange(value.filter((_, k) => k !== i))}
+            first={i === 0}
+            last={i === rows.length - 1}
           />
         ))}
         <div className="bullets-add">

@@ -9,9 +9,14 @@
 .item-tools .ai-btn { width: auto; height: 22px; padding: 0 6px; border-radius: 6px; }
 .item-tools .ai-btn span { display: none; }
 .item-tools .ai-btn:hover:not(:disabled) { color: #fff; background: var(--accent); }
-.brow .ai-panel { grid-column: 2; }
 
-.ai-panel { display: grid; gap: 8px; margin-top: 6px; padding: 10px; border: 1px solid var(--accent-soft); border-radius: 10px; background: #f7f8fe; }
+.ai-panel {
+  position: fixed; z-index: 70; display: grid; gap: 8px; align-content: start; padding: 10px 12px 12px; overflow-y: auto;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 10px 40px rgba(20, 20, 10, 0.24);
+}
+.ai-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -4px -6px 0 0; }
+.ai-panel-head strong { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--accent); }
+.ai-panel-head .icon-btn { width: 28px; height: 28px; font-size: 16px; }
 .ai-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .ai-chips button { padding: 4px 10px; border: 1px solid var(--line-strong); border-radius: 99px; background: var(--surface); font-size: 12px; }
 .ai-chips button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
@@ -27,17 +32,28 @@
 @keyframes spin { to { transform: rotate(360deg); } }
 .tb-notice.err { color: var(--danger); max-width: 320px; }
 
-/* floating assistant */
+/* floating assistant: one round button that opens "Ask AI" / "Tailor to a job" */
+.ai-dial { position: fixed; right: 20px; bottom: 64px; z-index: 60; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+.ai-dial-items { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; animation: dial-in 0.14s ease-out; }
+.ai-dial-item {
+  display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border: 1px solid var(--line); border-radius: 99px;
+  background: var(--surface); font-weight: 600; box-shadow: var(--shadow); white-space: nowrap;
+}
+.ai-dial-item:hover { border-color: var(--accent); color: var(--accent); }
+.ai-dial-item svg { font-size: 17px; }
 .ai-fab {
-  position: fixed; right: 20px; bottom: 64px; z-index: 60; display: inline-flex; align-items: center; gap: 8px; padding: 12px 18px;
-  border: 0; border-radius: 99px; background: var(--accent); color: #fff; font-weight: 600; box-shadow: var(--shadow);
+  display: grid; place-items: center; width: 52px; height: 52px; padding: 0; border: 0; border-radius: 50%;
+  background: var(--accent); color: #fff; font-size: 24px; box-shadow: var(--shadow);
 }
 .ai-fab:hover { filter: brightness(1.1); }
+.ai-fab.on { background: var(--ink); }
+@keyframes dial-in { from { opacity: 0; transform: translateY(8px); } }
 .chat {
   position: fixed; right: 20px; bottom: 64px; z-index: 60; width: min(400px, calc(100vw - 24px)); height: min(600px, calc(100dvh - 140px));
   display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 8px 40px rgba(20, 20, 10, 0.22); overflow: hidden;
 }
 .chat > header { display: flex; align-items: center; gap: 4px; padding: 8px 8px 8px 16px; border-bottom: 1px solid var(--line); }
+.chat > header .pop-panel { z-index: 65; }
 .chat h2 { display: flex; align-items: center; gap: 8px; font-size: 14px; }
 .chat-log { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 14px; }
 .chat-intro p { margin-bottom: 10px; color: var(--muted); font-size: 13px; }
@@ -55,12 +71,10 @@
 .chat > .ai-note { padding: 0 14px 10px; }
 
 @media (max-width: 900px) {
-  .ai-fab { bottom: calc(var(--tabs-h) + 14px); right: 14px; }
-  .ai-fab span { display: none; }
-  .ai-fab { padding: 14px; }
+  .ai-dial { bottom: calc(var(--tabs-h) + 14px); right: 14px; }
   .chat { right: 0; left: 0; bottom: var(--tabs-h); width: auto; height: 78dvh; border-radius: 16px 16px 0 0; }
 }
-@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .spin, .ai-dial-items { animation: none; } }
 
 /* Review before applying, and Tailor to a job */
 .proposal-actions { display: flex; gap: 8px; margin-top: 8px; }

@@ -1,4 +1,5 @@
 import { CountryField, NationalityField, TextField } from '../components/fields'
+import { PhoneField } from '../components/PhoneField'
 import type { PersonalDetails } from '../model/types'
 
 /** The persona's details form. Used on the persona pages and inside the editor's "Personal info" tab. */
@@ -16,9 +17,9 @@ export function PersonalFields({ value: b, onChange }: { value: PersonalDetails;
 
       <fieldset>
         <legend>Contact</legend>
-        <div className="grid2">
+        <div>
           <TextField label="Email" type="email" value={b.email} onChange={(v) => onChange({ email: v })} autoComplete="email" inputMode="email" />
-          <TextField label="Phone" type="tel" value={b.phone} onChange={(v) => onChange({ phone: v })} autoComplete="tel" inputMode="tel" placeholder="+44 7000 000000" />
+          <PhoneField label="Phone" value={b.phone} onChange={(v) => onChange({ phone: v })} defaultCountry={b.address.country} />
         </div>
       </fieldset>
 

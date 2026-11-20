@@ -11,7 +11,8 @@ export function CardFace({ sec }: { sec: Section }) {
       <KindIcon kind={sec.kind} className="card-kind" />
       <span className="card-text">
         <strong>{sec.title || 'Untitled'}</strong>
-        <small>{KIND_LABEL[sec.kind]}</small>
+        {/* A card titled "Text" or "Links" doesn't need its type spelled out a second time. */}
+        {KIND_LABEL[sec.kind].toLowerCase() !== sec.title.trim().toLowerCase() && <small>{KIND_LABEL[sec.kind]}</small>}
       </span>
     </>
   )

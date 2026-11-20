@@ -1,4 +1,5 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { createPortal } from 'react-dom'
 import { improve as improveApi } from '../api/client'
 import { useCaps } from '../api/Caps'
 import { Check, Close, Refresh, Sparkle } from '../components/icons'
@@ -23,6 +24,49 @@ const REFINEMENTS = [
   ['Grammar only', 'Only fix grammar, spelling and punctuation; keep the wording otherwise.'],
 ] as const
 
+/** Floating card pinned next to the button that opened it (below it, or above when there is no room), so the suggestion appears where you are looking. */
+function AnchoredPanel({ anchor, onClose, children }: { anchor: RefObject<HTMLElement>; onClose: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null)
+  const place = useCallback(() => {
+    const a = anchor.current?.getBoundingClientRect()
+    const el = ref.current
+    if (!a || !el) return
+    const width = Math.min(400, window.innerWidth - 16)
+    const left = Math.min(Math.max(8, a.right - width), window.innerWidth - width - 8)
+    const below = window.innerHeight - a.bottom - 14
+    const above = a.top - 14
+    const h = el.offsetHeight
+    const next = h <= below || below >= above ? { top: a.bottom + 6, left, width, maxHeight: below } : { top: Math.max(8, a.top - 6 - Math.min(h, above)), left, width, maxHeight: above }
+    // Only update when something moved, otherwise re-running this after every render would loop.
+    setPos((p) => (p && p.top === next.top && p.left === next.left && p.width === next.width && p.maxHeight === next.maxHeight ? p : next))
+  }, [anchor])
+  useLayoutEffect(place)
+  useEffect(() => {
+    const el = ref.current
+    const ro = el && new ResizeObserver(place)
+    if (el) ro?.observe(el)
+    window.addEventListener('resize', place)
+    window.addEventListener('scroll', place, true) // the form scrolls inside its own panel
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') (e.stopPropagation(), onClose())
+    }
+    document.addEventListener('keydown', onKey, true)
+    return () => {
+      ro?.disconnect()
+      window.removeEventListener('resize', place)
+      window.removeEventListener('scroll', place, true)
+      document.removeEventListener('keydown', onKey, true)
+    }
+  }, [place, onClose])
+  return createPortal(
+    <div ref={ref} className="ai-panel no-print" role="dialog" aria-label="AI suggestion" aria-live="polite" style={pos ? { top: pos.top, left: pos.left, width: pos.width, maxHeight: pos.maxHeight } : { visibility: 'hidden', top: 0, left: 0 }}>
+      {children}
+    </div>,
+    document.body,
+  )
+}
+
 /**
  * "Improve with AI" for one field. Returns the trigger button and the suggestion panel so each field can place them where it fits.
  * The suggestion is only applied when the user accepts it.
@@ -36,6 +80,7 @@ export function useImprove(spec: ImproveSpec | undefined, value: string, onApply
   const [error, setError] = useState('')
   const [instruction, setInstruction] = useState('')
   const ticket = useRef(0)
+  const triggerRef = useRef<HTMLButtonElement>(null)
 
   if (!spec || !caps.ai) return { trigger: null, panel: null }
 
@@ -69,6 +114,7 @@ export function useImprove(spec: ImproveSpec | undefined, value: string, onApply
 
   const trigger = (
     <button
+      ref={triggerRef}
       type="button"
       className={`ai-btn ${open ? 'on' : ''}`}
       disabled={empty}
@@ -81,7 +127,11 @@ export function useImprove(spec: ImproveSpec | undefined, value: string, onApply
   )
 
   const panel = open && (
-    <div className="ai-panel" role="region" aria-label="AI suggestion" aria-live="polite">
+    <AnchoredPanel anchor={triggerRef} onClose={close}>
+      <div className="ai-panel-head">
+        <strong><Sparkle /> Improve with AI</strong>
+        <button type="button" className="icon-btn" onClick={close} aria-label="Close suggestion"><Close /></button>
+      </div>
       <div className="ai-chips">
         {REFINEMENTS.map(([label, instr]) => (
           <button key={label} type="button" disabled={busy} onClick={() => run(instr)}>{label}</button>
@@ -104,7 +154,7 @@ export function useImprove(spec: ImproveSpec | undefined, value: string, onApply
         </div>
       )}
       <small className="ai-note">Your text is sent to Google Gemini to generate this suggestion.</small>
-    </div>
+    </AnchoredPanel>
   )
   return { trigger, panel }
 }

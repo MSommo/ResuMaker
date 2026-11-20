@@ -46,7 +46,7 @@ function Footer() {
       <div className="footer-inner">
         <span>© {new Date().getFullYear()} ResuMaker</span>
         <span className="sig">Crafted by <strong>Mario Maraucci</strong></span>
-        <span className="footer-note">Your CV is stored in this browser. AI only sees what you send it.</span>
+        <span className="footer-note">Your CVs are saved on this server. AI only sees what you send it.</span>
       </div>
     </footer>
   )
