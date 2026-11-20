@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A newer push to the same branch makes the older run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ── React frontend ─────────────────────────────────────────
+  frontend:
+    name: Frontend (typecheck + test + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Type-check
+        run: npx tsc -b
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  # ── Python backend ─────────────────────────────────────────
+  backend:
+    name: Backend (tests)
+    runs-on: ubuntu-latest
+
+    # The suite needs a real Postgres (with pgvector) and Redis, same images as docker-compose.yml.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: resumaker
+          POSTGRES_PASSWORD: resumaker
+          POSTGRES_DB: resumaker
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd "pg_isready -U resumaker -d resumaker"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6381:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      # The live-Gemini evals are excluded by the pytest config (-m 'not live'); the API key is a dummy.
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql+asyncpg://resumaker:resumaker@localhost:5434/resumaker
+          REDIS_URL: redis://localhost:6381/0
+        run: uv run pytest -q
