@@ -15,7 +15,7 @@
                    │ repair │  shows the model what failed and why; asks for corrected ops ──▶ apply
                    └────────┘
 
-`route` uses a cheap model to tell questions from edit requests. `plan`, `repair` and `answer` use the main model.
+`route` uses a cheap model to tell questions, "remember that…" and edit requests apart (`remember` extracts one memory for the service to save; no CV change). `plan`, `repair` and `answer` use the main model.
 `apply` and `finalize` are deterministic (the shared operations engine) and are what make the agent safe: the model only
 proposes, validated code decides what actually changes. `review` is the only place the graph pauses: with a checkpointer
 the paused run is stored in Postgres and resumes (even after an API restart) when the user accepts or rejects the changes.

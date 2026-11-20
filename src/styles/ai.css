@@ -88,3 +88,12 @@
 .proposal .applied input[type="checkbox"], .proposal-list input[type="checkbox"] { width: 16px; height: 16px; min-height: 0; padding: 0; margin: 1px 0 0; flex: none; accent-color: var(--accent, #2f55d4); cursor: pointer; }
 .proposal .applied label:has(input:not(:checked)), .proposal-list label:has(input:not(:checked)) { opacity: 0.55; }
 .proposal .applied label:has(input:focus-visible), .proposal-list label:has(input:focus-visible) { outline: 2px solid var(--accent, #2f55d4); outline-offset: 2px; border-radius: 4px; }
+
+/* Memory panel */
+.memory-add { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; }
+.memory-add select { width: auto; }
+.memory-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.memory-list li { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+.mem-kind { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--muted); }
+.mem-kind.fact { color: #a15c00; border-color: #a15c00; }
+.mem-text { overflow-wrap: anywhere; }

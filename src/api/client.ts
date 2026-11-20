@@ -47,6 +47,8 @@ export interface ChatResult {
   changes: string[]
   messageId: string
   undoVersionId: string | null
+  /** What the assistant did with the message. */
+  intent?: 'edit' | 'answer' | 'remember'
   resume: ResumeDoc
 }
 
@@ -192,6 +194,17 @@ export async function tailorStream(id: string, posting: string, onEvent: (e: Tai
 export const decideProposal = (id: string, runId: string, accept: 'all' | 'none' | number[]) => json<ChatResult>('POST', `/resumes/${id}/chat/${runId}/decide`, { accept })
 export const chatHistory = (id: string) => json<ChatMessage[]>('GET', `/resumes/${id}/chat`)
 export const clearChat = async (id: string) => void (await request('DELETE', `/resumes/${id}/chat`))
+
+// Memory: what the assistant remembers about a person (preferences and facts they confirmed)
+export interface Memory {
+  id: string
+  kind: 'preference' | 'fact'
+  text: string
+  createdAt: string
+}
+export const listMemories = (personaId: string) => json<Memory[]>('GET', `/personas/${personaId}/memories`)
+export const addMemory = (personaId: string, kind: Memory['kind'], text: string) => json<Memory>('POST', `/personas/${personaId}/memories`, { kind, text })
+export const deleteMemory = async (id: string) => void (await request('DELETE', `/memories/${id}`))
 
 // Version history
 export const restoreVersion = (resumeId: string, versionId: string) => json<ResumeDoc>('POST', `/resumes/${resumeId}/versions/${versionId}/restore`)

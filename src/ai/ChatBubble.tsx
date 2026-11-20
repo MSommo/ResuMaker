@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { chatHistory, chatStream, clearChat, decideProposal, restoreVersion, type ChatResult, type Proposal } from '../api/client'
 import { Chat, Close, Send, Sparkle, Trash, Undo } from '../components/icons'
 import { useResume } from '../state/ResumeContext'
+import { MemoryDialog } from './MemoryDialog'
 import { TailorDialog } from './TailorDialog'
 
 interface Msg {
@@ -33,13 +34,14 @@ const SUGGESTIONS = [
 
 /** Floating assistant. The LangGraph agent on the server edits the saved CV; every change is listed and can be undone. */
 export function ChatBubble() {
-  const { id, adopt, flush } = useResume()
+  const { id, personaId, adopt, flush } = useResume()
   const [open, setOpen] = useState(false)
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState('Thinking…')
   const [tailoring, setTailoring] = useState(false)
+  const [memoryOpen, setMemoryOpen] = useState(false)
   // Human in the loop by default: the assistant proposes and you approve. "Approve all" skips that until the tab session ends.
   const [auto, setAuto] = useState(readAuto)
   const [proposal, setProposal] = useState<Proposal | null>(null)
@@ -186,6 +188,7 @@ export function ChatBubble() {
           <header>
             <h2><Sparkle /> AI assistant</h2>
             <span className="tb-grow" />
+            <button type="button" className="btn small" onClick={() => setMemoryOpen(true)} title="What the assistant remembers about this person">Memory</button>
             <button type="button" className="btn small" onClick={() => setTailoring(true)} title="Make a copy of this CV tailored to a job posting">Tailor to a job</button>
             {msgs.length > 0 && <button type="button" className="icon-btn" onClick={() => void clear()} aria-label="Clear conversation" title="Clear conversation"><Trash /></button>}
             <button type="button" className="icon-btn" onClick={() => setOpen(false)} aria-label="Close assistant"><Close /></button>
@@ -262,6 +265,7 @@ export function ChatBubble() {
         </section>
       )}
       {tailoring && <TailorDialog id={id} onClose={() => setTailoring(false)} />}
+      {memoryOpen && personaId && <MemoryDialog personaId={personaId} onClose={() => setMemoryOpen(false)} />}
     </>
   )
 }

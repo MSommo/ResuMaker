@@ -2,7 +2,7 @@
 
 Phases 1 to 4 are done (versions and undo, dry run, streaming, review mode with a Postgres checkpointer, router, planner, parallel writers, critic, tailor to a job). Each phase below ships with its own tests and, where quality matters, a live eval.
 
-## Phase 5: Memory (pgvector)
+## Phase 5: Memory (pgvector), done
 
 Remember what is useful across sessions, per persona.
 - **What is stored:** style preferences ("short bullets, no buzzwords"), facts you confirmed ("my title at Acme was Staff Engineer"), and the best bullets from past CVs. Always visible and editable in the UI, and removable one by one. Memory never overrides what is in the CV.
