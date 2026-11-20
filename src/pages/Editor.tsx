@@ -255,16 +255,7 @@ export default function EditorPage() {
     <DndContext sensors={sensors} collisionDetection={collide} measuring={MEASURING} onDragStart={onDragStart} onDragMove={onDragMove} onDragEnd={onDragEnd} onDragCancel={() => setDrag(null)}>
       <div className="editor" data-view={view} data-drawer={drawer ? "open" : "closed"}>
         <aside className="ed-panel no-print">
-          {headerOpen && tab === 'sections' ? (
-            <div className="ed-body">
-              <HeaderEditor onBack={() => setSelectedId(null)} goInfo={() => (setSelectedId(null), setTab('info'))} />
-            </div>
-          ) : selected && tab === 'sections' ? (
-            <div className="ed-body">
-              <SectionEditor sec={selected} onBack={() => setSelectedId(null)} goInfo={() => (setSelectedId(null), setTab('info'))} />
-            </div>
-          ) : (
-            <>
+          <>
               <div className="ed-tabs" role="tablist">
                 <button role="tab" aria-selected={tab === 'info'} onClick={() => setTab('info')}>Personal info</button>
                 <button role="tab" aria-selected={tab === 'sections'} onClick={() => setTab('sections')}>Sections</button>
@@ -277,6 +268,10 @@ export default function EditorPage() {
               <div className="ed-body">
                 {tab === 'info' ? (
                   <PersonalForm />
+                ) : headerOpen ? (
+                  <HeaderEditor onBack={() => setSelectedId(null)} goInfo={() => (setSelectedId(null), setTab('info'))} />
+                ) : selected ? (
+                  <SectionEditor sec={selected} onBack={() => setSelectedId(null)} goInfo={() => (setSelectedId(null), setTab('info'))} />
                 ) : (
                   <div className="zones">
                     <HeaderBlock zone={layout.zones.find((z) => z.id === 'header')} sections={zoneSections(resume, 'header')} drag={drag} landing={landing} onSelectHeader={() => setSelectedId('@header')} onSelect={setSelectedId} onStash={stashOne} />
@@ -291,8 +286,7 @@ export default function EditorPage() {
                   </div>
                 )}
               </div>
-            </>
-          )}
+          </>
         </aside>
 
         <Drawer open={drawer} onClose={() => setDrawer(false)} removed={removed} onAddTemplate={addTemplate} onAddRemoved={addRemoved} onDelete={deleteOne} />
