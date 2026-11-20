@@ -183,32 +183,46 @@ export function ListEditor<T extends { id: Id }>({ items, onChange, create, addL
 }) {
   const [open, setOpen] = useState<Set<Id>>(new Set())
   const toggle = (id: Id) => setOpen((s) => (s.has(id) ? new Set([...s].filter((x) => x !== id)) : new Set(s).add(id)))
+  const root = useRef<HTMLDivElement>(null)
+  // Focus follows the action: after a change the DOM node a keyboard user was on may be gone or moved, which drops focus to the page.
+  // Candidates are tried in order; the first one that exists and is enabled gets it.
+  const [focusAfter, setFocusAfter] = useState<string[] | null>(null)
+  useEffect(() => {
+    if (!focusAfter) return
+    for (const sel of focusAfter) {
+      const el = root.current?.querySelector<HTMLElement>(sel)
+      if (el && !(el as HTMLButtonElement).disabled) {
+        el.focus()
+        break
+      }
+    }
+    setFocusAfter(null)
+  }, [focusAfter])
+  const act = (id: Id, name: string) => `[data-item="${id}"] [data-act="${name}"]`
   const move = (i: number, d: number) => {
     const j = i + d
     if (j < 0 || j >= items.length) return
     const next = items.slice()
     ;[next[i], next[j]] = [next[j], next[i]]
     onChange(next)
+    // Keep the cursor on the same button; at either end that button is disabled, so land on its partner.
+    setFocusAfter([act(items[i].id, d < 0 ? 'up' : 'down'), act(items[i].id, d < 0 ? 'down' : 'up')])
   }
-  const root = useRef<HTMLDivElement>(null)
-  const [focusNew, setFocusNew] = useState<Id | null>(null)
-  // After "Add", put the cursor in the new item's first field.
-  useEffect(() => {
-    if (focusNew === null) return
-    root.current?.querySelector<HTMLElement>(`[data-item="${focusNew}"] .item-body input, [data-item="${focusNew}"] .item-body [contenteditable]`)?.focus()
-    setFocusNew(null)
-  }, [focusNew])
   const add = () => {
     const it = create()
     onChange([...items, it])
     setOpen((s) => new Set(s).add(it.id))
-    setFocusNew(it.id)
+    // The new item's first field.
+    setFocusAfter([`[data-item="${it.id}"] .item-body input`, `[data-item="${it.id}"] .item-body [contenteditable]`])
   }
-  const remove = (it: T) => {
+  const remove = (it: T, i: number) => {
     const name = summary(it).trim()
     // Only ask when there is something to lose; a blank item just added by mistake goes quietly.
     if (name && !window.confirm(`Remove “${name}”?`)) return
     onChange(items.filter((x) => x.id !== it.id))
+    // The item that took its place (or the one before it); with none left, the Add button.
+    const near = items[i + 1] ?? items[i - 1]
+    setFocusAfter([...(near ? [act(near.id, 'remove')] : []), ':scope > [data-act="add"]'])
   }
   return (
     <div className="list" ref={root}>
@@ -227,16 +241,16 @@ export function ListEditor<T extends { id: Id }>({ items, onChange, create, addL
                 </button>
               )}
               <span className="item-tools">
-                <button type="button" onClick={() => move(i, -1)} disabled={i === 0} aria-label={`Move ${summary(it) || itemName} up`} title="Move up"><Up /></button>
-                <button type="button" onClick={() => move(i, 1)} disabled={i === items.length - 1} aria-label={`Move ${summary(it) || itemName} down`} title="Move down"><Down /></button>
-                <button type="button" onClick={() => remove(it)} aria-label={`Remove ${summary(it) || itemName}`} title="Remove"><Trash /></button>
+                <button type="button" onClick={() => move(i, -1)} disabled={i === 0} aria-label={`Move ${summary(it) || itemName} up`} title="Move up" data-act="up"><Up /></button>
+                <button type="button" onClick={() => move(i, 1)} disabled={i === items.length - 1} aria-label={`Move ${summary(it) || itemName} down`} title="Move down" data-act="down"><Down /></button>
+                <button type="button" onClick={() => remove(it, i)} aria-label={`Remove ${summary(it) || itemName}`} title="Remove" data-act="remove"><Trash /></button>
               </span>
             </div>
             {isOpen && <div className="item-body">{render(it, (patch) => onChange(items.map((x) => (x.id === it.id ? { ...x, ...patch } : x))))}</div>}
           </div>
         )
       })}
-      <button type="button" className="add" onClick={add}><Plus /> {addLabel}</button>
+      <button type="button" className="add" data-act="add" onClick={add}><Plus /> {addLabel}</button>
     </div>
   )
 }

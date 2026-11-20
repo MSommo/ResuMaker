@@ -214,11 +214,19 @@ export default function EditorPage() {
     })
   // Removing a card is one click: offer to take it back for a few seconds. (It is also kept in Components.)
   const [undo, setUndo] = useState<{ sec: Section; index: number } | null>(null)
+  const undoBtn = useRef<HTMLButtonElement>(null)
+  const [restored, setRestored] = useState<string | null>(null)
   useEffect(() => {
     if (!undo) return
+    undoBtn.current?.focus() // the card the keyboard was on is gone: move to the next thing the user may want
     const t = setTimeout(() => setUndo(null), 10000)
     return () => clearTimeout(t)
   }, [undo])
+  useEffect(() => {
+    if (restored === null) return
+    document.querySelector<HTMLElement>(`[data-flip="${restored}"] .card-main`)?.focus()
+    setRestored(null)
+  }, [restored])
   const stashOne = (id: string) => {
     const index = resume.sections.findIndex((x) => x.id === id)
     if (index >= 0) setUndo({ sec: resume.sections[index], index })
@@ -233,6 +241,7 @@ export default function EditorPage() {
       return { ...r, sections: rest }
     })
     setUndo(null)
+    setRestored(sec.id)
   }
   const deleteOne = (id: string) => {
     const s = resume.sections.find((x) => x.id === id)
@@ -301,7 +310,7 @@ export default function EditorPage() {
                     ))}
                     {undo && (
                       <p className="zones-note" role="status">
-                        Removed “{undo.sec.title || 'Untitled'}”. <button type="button" className="link" onClick={undoStash}>Undo</button>
+                        Removed “{undo.sec.title || 'Untitled'}”. <button type="button" className="link" ref={undoBtn} onClick={undoStash}>Undo</button>
                       </p>
                     )}
                     {removed.length > 0 && !undo && (
