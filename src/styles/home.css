@@ -27,6 +27,7 @@
 .lcard-body p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
 .lcard-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .lcard-hint { font-size: 12.5px; }
+.lcard-body .lcard-sub { margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lcard-status:empty { display: none; }
 .lcard-body .lcard-status { color: var(--ink); font-size: 13px; }
 .lcard.busy .lcard-thumb { opacity: 0.6; }

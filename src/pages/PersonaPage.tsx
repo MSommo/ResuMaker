@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { createResume, deleteResume, getPersona, getResume, saveResume, updatePersona, type Persona, type ResumeDoc, type ResumeSummary } from '../api/client'
+import { createResume, deleteResume, getPersona, getResume, renameResume, updatePersona, type Persona, type ResumeDoc, type ResumeSummary } from '../api/client'
 import { PageThumb } from '../components/CvView'
 import { ImportPanel } from '../ai/ImportPanel'
 import { UpgradeNote } from '../ai/Upgrade'
@@ -23,13 +23,13 @@ function ago(iso: string) {
 }
 
 type Work = 'rename' | 'duplicate' | 'delete'
-const WORKING: Record<Work, string> = { rename: 'Saving the new headline…', duplicate: 'Making a copy…', delete: 'Deleting…' }
+const WORKING: Record<Work, string> = { rename: 'Renaming…', duplicate: 'Making a copy…', delete: 'Deleting…' }
 
 function CvCard({ cv, onDelete, onChanged }: { cv: ResumeSummary; onDelete: () => Promise<void>; onChanged: () => void }) {
   const [doc, setDoc] = useState<ResumeDoc | null>(null)
   const [thumbFailed, setThumbFailed] = useState(false)
   const [renaming, setRenaming] = useState(false)
-  const [name, setName] = useState(cv.title)
+  const [name, setName] = useState(cv.name)
   const [work, setWork] = useState<Work | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [error, setError] = useState('')
@@ -63,26 +63,27 @@ function CvCard({ cv, onDelete, onChanged }: { cv: ResumeSummary; onDelete: () =
     }
   }
 
-  // A CV's name is the headline printed under your name, so changing it edits the CV itself.
+  // The name only tells your CVs apart: it is never printed, so renaming doesn't touch the CV (the headline is edited in
+  // the editor). Clearing it shows the headline again.
   const rename = () => {
     const next = name.trim()
     setRenaming(false)
-    if (!next || next === cv.title) return setName(cv.title)
+    if (next === cv.name) return setName(cv.name)
     void run('rename', async () => {
       try {
-        const fresh = await getResume(cv.id)
-        await saveResume(cv.id, { ...fresh.resume, basics: { ...fresh.resume.basics, headline: next } }, fresh.version)
+        await renameResume(cv.id, next)
         onChanged()
       } catch (e) {
-        setName(cv.title)
+        setName(cv.name)
         throw e
       }
-    }, 'Couldn’t change the headline; the CV is unchanged.')
+    }, 'Couldn’t rename the CV.')
   }
   const duplicate = () =>
     void run('duplicate', async () => {
       const fresh = await getResume(cv.id)
-      await createResume(cv.personaId, { resume: { ...fresh.resume, basics: { ...fresh.resume.basics, headline: `${cv.title} (copy)` } }, layoutId: cv.layoutId })
+      // The copy prints the same headline; only its name says it's a copy.
+      await createResume(cv.personaId, { resume: fresh.resume, layoutId: cv.layoutId, name: `${cv.title} (copy)`.slice(0, 100) })
       onChanged()
     }, 'Couldn’t make a copy.')
   const remove = () => {
@@ -107,27 +108,29 @@ function CvCard({ cv, onDelete, onChanged }: { cv: ResumeSummary; onDelete: () =
               ref={input}
               className="rename"
               value={name}
-              maxLength={200}
-              aria-label="Headline, shown under your name on this CV"
+              maxLength={100}
+              placeholder={cv.headline || 'Untitled CV'}
+              aria-label="CV name, only you see it"
               autoFocus
               onChange={(e) => setName(e.target.value)}
               onBlur={rename}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') e.currentTarget.blur()
-                else if (e.key === 'Escape') (setName(cv.title), setRenaming(false))
+                else if (e.key === 'Escape') (setName(cv.name), setRenaming(false))
               }}
             />
           ) : (
             <h3 title={cv.title}>{cv.title}</h3>
           )}
           <Menu label={`Actions for ${cv.title}`} triggerClassName="icon-btn" trigger={<More />}>
-            <MenuItem icon={<Edit />} disabled={busy} onSelect={() => (setName(cv.title), setRenaming(true))}>Change headline</MenuItem>
+            <MenuItem icon={<Edit />} disabled={busy} onSelect={() => (setName(cv.name), setRenaming(true))}>Rename</MenuItem>
             <MenuItem icon={<Copy />} disabled={busy} onSelect={duplicate}>Duplicate</MenuItem>
             <MenuSep />
             <MenuItem icon={<Trash />} danger disabled={busy} onSelect={() => setConfirming(true)}>Delete…</MenuItem>
           </Menu>
         </div>
-        {renaming && <p className="lcard-hint">The headline is printed under your name on this CV. Enter saves, Esc cancels.</p>}
+        {renaming && <p className="lcard-hint">Only you see this name: it isn’t printed on the CV. Leave it empty to show the headline. Enter saves, Esc cancels.</p>}
+        {!renaming && cv.name && cv.headline && <p className="lcard-sub" title="Headline printed on this CV">{cv.headline}</p>}
         <p className="lcard-meta">
           <span className="badge">{layouts.find((l) => l.id === cv.layoutId)?.name ?? cv.layoutId}</span>
           <span>Edited {ago(cv.updatedAt)}</span>

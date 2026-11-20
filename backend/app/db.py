@@ -73,13 +73,21 @@ class ResumeRow(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     persona_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    title: Mapped[str] = mapped_column(String(200), default="Untitled CV")  # derived from the headline
+    # The owner's own label for telling CVs apart; never printed on the CV. Not part of the content: no version bump, no history.
+    name: Mapped[str] = mapped_column(String(100), default="", server_default="")
+    title: Mapped[str] = mapped_column(String(200), default="Untitled CV")  # what lists show: the name, else the headline
     layout_id: Mapped[str] = mapped_column(String(50), default="sidebar")
     data: Mapped[dict[str, Any]] = mapped_column(JSONB)
     # Optimistic locking: a save must name the version it was based on.
     version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+    def retitle(self) -> None:
+        """Recompute `title` from the name and the stored headline."""
+        headline = str(((self.data or {}).get("basics") or {}).get("headline", "")).strip()
+        self.title = (self.name or "").strip() or headline[:200] or "Untitled CV"
 
 
 class ResumeVersionRow(Base):

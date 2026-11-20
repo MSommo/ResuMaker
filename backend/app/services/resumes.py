@@ -38,7 +38,7 @@ def merged(row: ResumeRow, persona: UserRow) -> Resume:
 def _store(row: ResumeRow, resume: Resume) -> None:
     row.data = {**resume.model_dump(mode="json"), "basics": {"headline": resume.basics.headline}}
     row.layout_id = resume.layoutId
-    row.title = resume.basics.headline.strip() or "Untitled CV"
+    row.retitle()
 
 
 def _personal(resume: Resume) -> PersonalDetails:
@@ -52,16 +52,28 @@ async def get_resume(s: AsyncSession, rid: uuid.UUID) -> tuple[ResumeRow, UserRo
     return row, await s.get(UserRow, row.persona_id)  # type: ignore[return-value]
 
 
-async def create_resume(s: AsyncSession, persona_id: uuid.UUID, *, resume: Resume | None = None, layout_id: str = "sidebar", template: str = "blank") -> tuple[ResumeRow, UserRow]:
+async def create_resume(
+    s: AsyncSession, persona_id: uuid.UUID, *, resume: Resume | None = None, layout_id: str = "sidebar", template: str = "blank", name: str = ""
+) -> tuple[ResumeRow, UserRow]:
     persona = await s.get(UserRow, persona_id)
     if persona is None:
         raise PersonaNotFound(str(persona_id))
     base = resume or (sample_resume(layout_id) if template == "sample" else blank_resume(layout_id))
     # Whatever personal details the template carries are replaced by the persona's; only the headline is the CV's own.
     base.basics = Basics(**to_details(persona).model_dump(), headline=base.basics.headline)
-    row = ResumeRow(id=uuid.uuid4(), persona_id=persona_id, version=1)
+    row = ResumeRow(id=uuid.uuid4(), persona_id=persona_id, version=1, name=name.strip())
     _store(row, base)
     s.add(row)
+    await s.commit()
+    return row, persona
+
+
+async def rename_resume(s: AsyncSession, rid: uuid.UUID, name: str) -> tuple[ResumeRow, UserRow]:
+    """Set the CV's name (empty: lists show the headline again). A label, not content: the version and history are untouched,
+    so renaming never conflicts with an open editor."""
+    row, persona = await get_resume(s, rid)
+    row.name = name.strip()
+    row.retitle()
     await s.commit()
     return row, persona
 

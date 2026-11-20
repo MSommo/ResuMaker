@@ -27,17 +27,23 @@ class PersonaOut(PersonalDetails):
         return cls(id=str(p.id), resumeCount=resume_count, createdAt=p.created_at, updatedAt=p.updated_at, **to_details(p).model_dump())
 
 
+def _headline(row: ResumeRow) -> str:
+    return str(((row.data or {}).get("basics") or {}).get("headline", ""))
+
+
 class ResumeSummary(BaseModel):
     id: str
     personaId: str  # noqa: N815
-    title: str
+    title: str  # what to show: the name, else the headline, else "Untitled CV"
+    name: str  # the owner's own label, never printed ("" = none)
+    headline: str  # printed under the name on the CV
     layoutId: str  # noqa: N815
     version: int
     updatedAt: datetime  # noqa: N815
 
     @classmethod
     def of(cls, row: ResumeRow) -> "ResumeSummary":
-        return cls(id=str(row.id), personaId=str(row.persona_id), title=row.title, layoutId=row.layout_id, version=row.version, updatedAt=row.updated_at)
+        return cls(id=str(row.id), personaId=str(row.persona_id), title=row.title, name=row.name, headline=_headline(row), layoutId=row.layout_id, version=row.version, updatedAt=row.updated_at)
 
 
 class ResumeOut(ResumeSummary):
@@ -48,7 +54,7 @@ class ResumeOut(ResumeSummary):
     @classmethod
     def of(cls, row: ResumeRow, persona: UserRow) -> "ResumeOut":  # type: ignore[override]
         return cls(
-            id=str(row.id), personaId=str(row.persona_id), title=row.title, layoutId=row.layout_id, version=row.version,
+            id=str(row.id), personaId=str(row.persona_id), title=row.title, name=row.name, headline=_headline(row), layoutId=row.layout_id, version=row.version,
             updatedAt=row.updated_at, createdAt=row.created_at, persona=PersonaOut.of(persona), resume=merged(row, persona),
         )
 
@@ -62,6 +68,11 @@ class CreateResumeIn(BaseModel):
     resume: Resume | None = None  # import an existing document, or…
     layoutId: str = "sidebar"  # noqa: N815
     template: Literal["blank", "sample"] = "blank"  # …start from a template
+    name: str = Field("", max_length=100)
+
+
+class RenameIn(BaseModel):
+    name: str = Field(max_length=100)  # "" clears it
 
 
 class SaveIn(BaseModel):
