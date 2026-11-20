@@ -16,7 +16,7 @@ from app.domain.models import Resume
 from app.services.cv_import import parse_cv
 
 pytestmark = pytest.mark.live
-API = os.environ.get("EVAL_API", "http://localhost:8180/api")
+API = os.environ.get("EVAL_API") or f"http://{os.environ.get('APP_HOST', 'localhost')}:{os.environ.get('API_PORT', '8180')}/api"  # `make eval-import` sets EVAL_API
 H = {"x-resumaker": "1"}
 
 

@@ -1,0 +1,65 @@
+# Serves the built React app and forwards /api to the FastAPI service. A template: the official nginx entrypoint fills in
+# the ${...} values at start (envsubst, see Dockerfile.web.static and 16-resumaker.envsh), so the same image runs in
+# docker compose (BACKEND_URL=http://api:8100) and on Railway (BACKEND_URL=http://api.railway.internal:8100, PORT set by Railway).
+
+# The scheme the browser used. Railway's edge terminates TLS and says so in X-Forwarded-Proto; locally there is no proxy.
+map $http_x_forwarded_proto $resumaker_proto {
+    default $http_x_forwarded_proto;
+    ""      $scheme;
+}
+
+server {
+    listen ${PORT};
+    ${NGINX_LISTEN_V6}
+    server_name _;
+    root /usr/share/nginx/html;
+    client_max_body_size 5m;                 # a CV is a few hundred KB of JSON at most
+    server_tokens off;
+
+    # The real client address, for the API's per-IP sign-in limit. Only a proxy listed in TRUSTED_PROXIES may tell us
+    # (Railway's edge), in REAL_IP_HEADER: X-Real-IP on Railway (its edge overwrites it), else X-Forwarded-For read from the
+    # RIGHT (real_ip_recursive off), so entries a client typed in itself are ignored. Nobody trusted (the local stacks) =
+    # the TCP peer's address. See SECURITY.md.
+    ${NGINX_REAL_IP}
+
+    include /etc/nginx/snippets/security-headers.conf;
+
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css text/javascript application/javascript application/json image/svg+xml;
+
+    # Re-resolve the API's name every 10 s: a restarted container (or a Railway redeploy) gets a new IP. The resolver is the
+    # container's own, read from /etc/resolv.conf at start (Docker's 127.0.0.11, Railway's internal DNS, ...).
+    resolver ${NGINX_LOCAL_RESOLVERS} valid=10s;
+
+    location /api/ {
+        set $api "${BACKEND_URL}";
+        proxy_pass $api;                      # with a variable and no URI part, the original request URI is passed through
+        proxy_http_version 1.1;
+        proxy_set_header Host $http_host;     # with the port: the API compares it with the browser's Origin header (CSRF check)
+        proxy_set_header X-Forwarded-Proto $resumaker_proto;
+        # ONE address, the one worked out above. Overwritten, never appended: whatever the client sent is not passed on.
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 120s;              # AI calls and PDF rendering can take a while
+        client_max_body_size 12m;             # CV import uploads (the API itself enforces 10 MB)
+        proxy_buffering off;                  # the assistant streams progress as Server-Sent Events: pass chunks through immediately
+    }
+
+    # Hashed build output never changes under the same name.
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        include /etc/nginx/snippets/security-headers.conf;
+        try_files $uri =404;
+    }
+
+    # Single-page app: unknown paths (/p/<id>, /editor/<id>, …) are handled by the client router.
+    location / {
+        add_header Cache-Control "no-cache";
+        include /etc/nginx/snippets/security-headers.conf;
+        try_files $uri /index.html;
+    }
+}

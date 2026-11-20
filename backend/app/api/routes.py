@@ -31,6 +31,7 @@ from . import schemas as sc
 from .deps import Principal, current, get_infra, get_session, owned_resume, own_persona, parse_id, rate_limit, require_ai
 
 # Every route here needs a signed-in user. The few public ones (status, sign-in) live in `public`.
+log = logging.getLogger("resumaker.api")
 router = APIRouter(dependencies=[Depends(current)])
 public = APIRouter()
 AI = [Depends(require_ai), Depends(rate_limit)]  # every AI endpoint: entitled, then within the per-user quota
@@ -375,6 +376,8 @@ async def pdf(*, rid: uuid.UUID = Depends(owned_resume), who: Principal = Depend
     try:
         data = await render_pdf(infra, s, who.user, row.id)
     except Exception as e:  # noqa: BLE001
-        raise HTTPException(502, f"PDF rendering failed: {e}") from e
+        # The cause (internal addresses, Chrome's own messages) goes to the log, not to the browser.
+        log.exception("PDF rendering failed for CV %s", row.id)
+        raise HTTPException(502, "PDF rendering failed. Please try again.") from e
     await infra.cache.set(key, data, infra.settings.pdf_cache_ttl)
     return Response(data, media_type="application/pdf", headers={**headers, "x-cache": "miss"})

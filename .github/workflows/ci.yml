@@ -38,6 +38,31 @@ jobs:
       - name: Build
         run: npm run build
 
+  # ── Known vulnerabilities in dependencies ──────────────────
+  audit:
+    name: Dependency audit (npm + pip)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Everything, dev tools included: a compromised test runner or bundler runs on developer machines and in this CI.
+      - name: npm audit
+        run: npm audit --audit-level=moderate
+
+      - uses: astral-sh/setup-uv@v5
+
+      # The exact versions in uv.lock (what the API image installs), checked against the PyPI advisory database.
+      - name: pip-audit
+        working-directory: backend
+        run: |
+          uv export --frozen --no-hashes --no-emit-project > "$RUNNER_TEMP/requirements.txt"
+          uvx pip-audit --disable-pip --no-deps -r "$RUNNER_TEMP/requirements.txt"
+
   # ── Python backend ─────────────────────────────────────────
   backend:
     name: Backend (tests)
@@ -72,6 +97,12 @@ jobs:
       run:
         working-directory: backend
 
+    # The service containers above publish these ports on the runner (the same ones as the local scratch stack).
+    env:
+      APP_HOST: localhost
+      SCRATCH_PG_PORT: 5434
+      SCRATCH_REDIS_PORT: 6381
+
     steps:
       - uses: actions/checkout@v4
 
@@ -86,6 +117,6 @@ jobs:
       # The live-Gemini evals are excluded by the pytest config (-m 'not live'); the API key is a dummy.
       - name: Run tests
         env:
-          DATABASE_URL: postgresql+asyncpg://resumaker:resumaker@localhost:5434/resumaker
-          REDIS_URL: redis://localhost:6381/0
+          DATABASE_URL: postgresql+asyncpg://resumaker:resumaker@${{ env.APP_HOST }}:${{ env.SCRATCH_PG_PORT }}/resumaker
+          REDIS_URL: redis://${{ env.APP_HOST }}:${{ env.SCRATCH_REDIS_PORT }}/0
         run: uv run pytest -q

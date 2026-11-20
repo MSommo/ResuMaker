@@ -30,7 +30,7 @@ async def get_session(infra: Infra = Depends(get_infra)) -> AsyncIterator[AsyncS
 
 
 def _allowed_origins(settings: Settings, request: Request) -> set[str]:
-    origins = {settings.frontend_url.rstrip("/"), settings.base_url, *(o.rstrip("/") for o in settings.cors_origins)}
+    origins = {o.rstrip("/") for o in (settings.frontend_url, settings.base_url, *settings.cors_origins) if o}
     host = request.headers.get("host")
     if host:  # the page was served by the same host that is receiving this request (nginx passes Host through)
         origins |= {f"http://{host}", f"https://{host}"}
@@ -50,6 +50,8 @@ async def require_app_header(request: Request) -> None:
 
 
 def client_ip(request: Request) -> str:
+    """The browser's address. Behind nginx this is the address nginx saw (uvicorn --proxy-headers takes it from the single
+    X-Forwarded-For value nginx sets, overwriting whatever the client sent), never a value the client chose. See SECURITY.md."""
     return request.client.host if request.client else "unknown"
 
 

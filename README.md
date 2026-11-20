@@ -54,7 +54,7 @@ make stable-expose                   # reachable from your local network (see be
 make stable-backup                   # dump the real database to backups/
 ```
 
-`make` lists every target (logs, MCP, graph, personas, PDFs, migrations…). If something already uses a port, `make` names the process and you can override it, e.g. `make stack WEB_PORT=5181`.
+`make` lists every target (logs, MCP, graph, personas, PDFs, migrations…). If something already uses a port, `make` names the process and you can override it, e.g. `make stack WEB_PORT=5181`. Every address the Makefile prints or uses is built from variables (`APP_HOST`, `WEB_PORT`, `API_PORT`, `SCRATCH_PG_PORT`, `SCRATCH_REDIS_PORT`, `DEV_WEB_PORT`, `MCP_HOST`, `MCP_HTTP_PORT`), and the API itself has no built-in database or Redis address: they come from the environment (`.env.example` lists the local values).
 
 **To freeze a new build:** commit, `git tag -a stable-2 -m "…"`, `make stable-build STABLE_TAG=stable-2`, then `make stable-up STABLE_TAG=stable-2`. The database is migrated on startup, so take a `make stable-backup` first.
 
@@ -84,7 +84,9 @@ The old `personas` table is now `users`: each person is an account with a sign-i
 - **Authorisation.** Every route requires a session unless it is explicitly public (`/status`, sign-in, accept-invite): routers are protected by default. Each `{resume_id}` / `{persona_id}` route depends on an ownership check; someone else's CV is a plain 404. `tests/test_auth.py` enumerates the OpenAPI schema and fails if a route is reachable without a session or a CV route skips the ownership check. Roles: `user` and `admin`. **Admins manage accounts only: they cannot read other people's CVs.** The last admin can't be removed, demoted or locked out; deleting an account re-asks for the password.
 - **No registration.** There is no sign-up. An admin prepares a **persona draft** on the Users page (just a name and the sign-in email; no password, nobody can sign in), then generates a one-time invite link when it's ready. The person opens it, chooses a password and the account is complete; they fill in the rest of their details themselves. Drafts are *Draft* (no link yet), *Invited* (link out, valid 72 h; expired links revert to Draft) or *Active*.
 - **Getting accounts.** The first admin comes from the CLI: `make user-create LOGIN=you@example.com FIRST=You ADMIN=1` (or `make stable-user-create …` for the frozen stack) prints a one-time link (`/accept#token`, valid 72 h, usable once, stored hashed, in the URL fragment so no server logs it). Your **existing personas became users with no password**, their sign-in email pre-filled from the persona's email: run `make stable-user-admin LOGIN=<your email>` to make yourself admin, then `make stable-user-invite LOGIN=<email>` (or Users page → *Reset password*) to claim each one. Lost password: `make user-invite` / `make user-passwd`.
-- **CSRF.** Unsafe requests need the `x-resumaker` header and, when the browser sends one, a same-site `Origin`; cookies are `SameSite=Strict`. nginx also sends a CSP, `X-Frame-Options: DENY`, `nosniff`, and API responses are `no-store`.
+- **CSRF.** Unsafe requests need the `x-resumaker` header and, when the browser sends one, a same-site `Origin`; cookies are `SameSite=Strict`. nginx also sends a CSP, HSTS, `X-Frame-Options: DENY`, `nosniff`, and API responses are `no-store`.
+
+Everything in place, and what production refuses to start without, is listed in [SECURITY.md](SECURITY.md).
 - **PDFs.** Headless Chrome gets a 2-minute, read-only session for that one render, revoked immediately; it never sees the user's own cookie.
 - **MCP.** The MCP server acts as **one user**, identified by `RESUMAKER_TOKEN` (`make mcp-token LOGIN=you@example.com`; hashed in the database, expires in a year) and refuses to start without it. Every tool is scoped to that user's CVs. Add it to the client config `env`.
 
@@ -152,14 +154,69 @@ Claude Desktop (`claude_desktop_config.json`):
 
 Tools: `list_personas`, `create_persona`, `list_resumes`, `get_resume`, `create_resume`, `apply_operations` (with `dry_run`), `list_versions`, `diff_version`, `restore_version`, `improve_text`, `ask_assistant`, `propose_changes` + `decide_proposal` (review before applying), `tailor_to_posting`, `export_pdf`. Resource: `resume://{id}`. Prompt: `review_cv`.
 
+## Deployment (Railway)
+
+Four services in one Railway project. The repo holds the config for the two we build (`railway.json` for the web service, `backend/railway.json` for the API): a Dockerfile build, a healthcheck and `ON_FAILURE` restarts.
+
+| Service | Source | Config file (Settings → Config-as-code) | Public domain |
+|---|---|---|---|
+| **web** | this repo, root `/` | `/railway.json` (`Dockerfile.web.static`: the built app behind nginx) | **yes**: the only public entry point |
+| **api** | this repo, root `/backend` | `/backend/railway.json` (`backend/Dockerfile`: FastAPI + Chromium) | **no**: reached by nginx over the private network |
+| **Postgres** | the **pgvector** template, or a database service with image `pgvector/pgvector:pg16` | | no |
+| **Redis** | Railway's Redis | | no |
+
+Postgres **must have pgvector** (memories): the plain Railway Postgres image doesn't ship it. The first migration runs `CREATE EXTENSION IF NOT EXISTS vector`, which the default `postgres` user is allowed to do. To run the app as a less privileged role, see [SECURITY.md](SECURITY.md#database).
+
+**Variables.** The `${{…}}` references are Railway's: they keep working when a service is renamed or redeployed.
+
+*api*
+
+| Variable | Value |
+|---|---|
+| `APP_ENV` | `production`: refuses to start with unsafe settings (below), no `/docs` |
+| `PORT` | `8100` (fixed, so the web service's `BACKEND_URL` is stable) |
+| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (`postgres://…` is accepted and turned into `postgresql+asyncpg://`) |
+| `REDIS_URL` | `${{Redis.REDIS_URL}}` (it must carry a password) |
+| `PUBLIC_URL` | `https://${{web.RAILWAY_PUBLIC_DOMAIN}}` (or your custom domain): invite links, and cookies are `Secure` |
+| `FRONTEND_URL` | `http://${{web.RAILWAY_PRIVATE_DOMAIN}}:${{web.PORT}}`: headless Chrome loads the app from here to render PDFs |
+| `GEMINI_API_KEY` | your key (without it the app runs, with AI off) |
+
+*web*
+
+| Variable | Value |
+|---|---|
+| `BACKEND_URL` | `http://${{api.RAILWAY_PRIVATE_DOMAIN}}:${{api.PORT}}` |
+| `PORT` | `8080` (Railway's default for the domain; any value works, nginx listens on `$PORT`) |
+| `TRUSTED_PROXIES` | `0.0.0.0/0 ::/0`: only Railway's edge reaches this service, so its client-address header is believed |
+| `REAL_IP_HEADER` | `X-Real-IP`: the header Railway's edge overwrites with the real client address |
+
+At start, nginx fills `nginx/default.conf.template` with `BACKEND_URL`, `PORT` and the container's own DNS resolver (read from `/etc/resolv.conf`), re-resolving the API every 10 s because private IPs change on redeploy. It listens on IPv6 too, which Railway's private network uses; uvicorn does the same (`API_HOST` defaults to `::` in the image).
+
+**Production refuses to start** (`APP_ENV=production`) when `PUBLIC_URL` is missing or not `https://`, `COOKIE_SECURE=false`, `FRONTEND_URL` is missing, the database has no password or the local one, Redis has no password, or a `CORS_ORIGINS` entry is plain http. The log lists every problem at once.
+
+**Migrations** run when the API starts, under a Postgres advisory lock (Alembic's and LangGraph's tables alike), so several replicas or a redeploy overlapping the old one are safe.
+
+**PDFs** need Chromium, which is in the API image. It runs without its sandbox (containers have no user namespaces) and with `--disable-dev-shm-usage`, so Railway's small `/dev/shm` doesn't matter. It only ever loads our own frontend. Give the API service at least **1 GB of memory**: a render peaks around a few hundred MB on top of the app.
+
+**MCP server:** not deployed. It acts as a single user without asking who calls, so it is only safe on your own machine (stdio, or HTTP on loopback). Exposing it would need per-request authentication first.
+
+**First run.**
+
+1. Create the four services and set the variables above; deploy. The API's healthcheck is `/api/status` (always 200 once it's up, with `db`/`cache`/`ai`/`pdf` flags), the web service's is `/`.
+2. Create the first administrator **inside** the API service, where the private database address resolves (`railway run` executes on your machine, which can't reach `*.railway.internal`):
+   ```bash
+   railway ssh --service api -- python -m app.cli create-user --login you@example.com --first You --admin
+   ```
+   It prints a one-time `https://…/accept#…` link (valid 72 h). Open it, choose a password; invite everyone else from the Users page.
+3. Check `https://<your domain>/api/status` shows `"db":true,"cache":true,"pdf":true`.
+
 ## Roadmap
 
 See [docs/ROADMAP.md](docs/ROADMAP.md). Done: phases 1 to 5 and 7. Deferred: [phase 6, bring a job posting in from a link](docs/phase-6-job-import.md).
 
 ## Notes and limits
 
-- **No login, on purpose.** Anyone who can reach the app can open any persona's CVs. That is fine for a household on a trusted network; add authentication before exposing it more widely.
 - **The catalog exists twice** (TypeScript for the UI, Python for the agent/MCP). `backend/tests/test_catalog_parity.py` fails if they drift.
-- **PDFs** are rendered by headless Chrome loading `FRONTEND_URL/preview/<id>`, so the frontend must be reachable by the API (in Docker: `http://web`, i.e. nginx, or `http://web:5173` with `HOT=1`). Chrome runs with `--no-sandbox` inside the container; it only ever loads our own page.
-- **This is a development setup** (dev servers, bind mounts, default DB password). A production setup would build the frontend to static files behind nginx and drop the bind mounts.
+- **PDFs** are rendered by headless Chrome loading `FRONTEND_URL/preview/<id>`, so the frontend must be reachable by the API (in Docker: `http://web:8080`, i.e. nginx, or `http://web:5173` with `HOT=1`; on Railway the web service's private address). Chrome runs with `--no-sandbox` inside the container; it only ever loads our own page.
+- **The local stacks are not production**: default database password, no Redis password, plain http. For the internet, see [Deployment (Railway)](#deployment-railway).
 - **Concurrent edits:** saves carry the version they were based on; a stale save is rejected (409) and the editor reloads the newer version.

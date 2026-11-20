@@ -58,7 +58,13 @@ class Infra:
         )
         await self._pool.open()
         self.checkpointer = AsyncPostgresSaver(self._pool)  # type: ignore[arg-type]
-        await self.checkpointer.setup()
+        # Replicas (or the API and the MCP server) may start together: one sets up LangGraph's tables at a time, like Alembic.
+        async with self._pool.connection() as conn:
+            await conn.execute("select pg_advisory_lock(727275)")
+            try:
+                await AsyncPostgresSaver(conn).setup()  # type: ignore[arg-type]
+            finally:
+                await conn.execute("select pg_advisory_unlock(727275)")
         await self._prune_stale_proposals()
 
         # Two compiled copies of the same graph: plain runs are not persisted (no point storing a CV snapshot per message);
