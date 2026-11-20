@@ -69,14 +69,14 @@ async def test_legacy_database_is_migrated_and_backfilled(monkeypatch):
         assert cvs[ids[0]]["persona_id"] == cvs[ids[1]]["persona_id"] == mario["id"] and cvs[ids[2]]["persona_id"] != mario["id"]
         assert cvs[ids[0]]["title"] == "AI Strategy Lead" and cvs[ids[2]]["title"] == "Untitled CV"
         assert json.loads(cvs[ids[0]]["data"])["basics"] == {"headline": "AI Strategy Lead"}  # identity moved out of the CV
-        assert "name" not in cvs[ids[0]]
+        assert cvs[ids[0]]["name"] == ""  # 0002 turned the old `name` into `title`; 0007 adds a new, empty one (the owner's label)
         assert await conn.fetchval("select count(*) from chat_messages") == 1  # chat history survived
         # ...and old messages got the new columns' defaults: nothing to undo, not undone.
         assert await conn.fetchval("select count(*) from chat_messages where undone is false and undo_version_id is null") == 1
         # Persona deletion cascades at the database level.
         await conn.execute("delete from users where id = $1", mario["id"])
         assert await conn.fetchval("select count(*) from resumes") == 1
-        assert await conn.fetchval("select version_num from alembic_version") == "0006"  # head: personas (0002), versions (0003), memories (0004), users + auth (0005), AI entitlement (0006)
+        assert await conn.fetchval("select version_num from alembic_version") == "0007"  # head: personas (0002), versions (0003), memories (0004), users + auth (0005), AI entitlement (0006), CV names (0007)
         assert await conn.fetchval("select count(*) from resume_versions") == 0  # 0003 added the (empty) history table
         assert await conn.fetchval("select count(*) from memories") == 0  # 0004 added the (empty) memory table
         # 0005: personas became users, unclaimed (nobody can sign in), with the login pre-filled from the email.
@@ -84,6 +84,8 @@ async def test_legacy_database_is_migrated_and_backfilled(monkeypatch):
         # 0006: everyone who already existed keeps AI.
         assert await conn.fetchval("select count(*) from users where ai_enabled is not true") == 0
         assert await conn.fetchval("select count(*) from users where password_hash is not null") == 0
+        # 0007: existing CVs have no name, so they keep showing their headline.
+        assert await conn.fetchval("select count(*) from resumes where name <> ''") == 0
         assert await conn.fetchval("select to_regclass('personas')") is None
         assert await conn.fetchval("select count(*) from sessions") == 0 and await conn.fetchval("select count(*) from user_tokens") == 0
         assert await conn.fetchval("select extname from pg_extension where extname = 'vector'") == "vector"
