@@ -158,7 +158,7 @@ export default function Users() {
       {adding && (
         <section className="panelbox" aria-labelledby="add-h">
           <h2 id="add-h">Add a person</h2>
-          <p className="lede">Their name and the email they’ll sign in with. Nobody can sign in until you generate their invite link; they choose their own password.</p>
+          <p className="lede">Their name, and the email they’ll sign in with if you know it. Nobody can sign in until you generate their invite link; they choose their own password (and the email, if you left it blank).</p>
           <form
             className="form user-add"
             onSubmit={async (e) => {
@@ -179,7 +179,7 @@ export default function Users() {
           >
             <div className="field"><label htmlFor="u-first">First name</label><input ref={firstField} id="u-first" required value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} /></div>
             <div className="field"><label htmlFor="u-last">Last name</label><input id="u-last" value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} /></div>
-            <div className="field"><label htmlFor="u-login">Email</label><input id="u-login" type="email" required value={form.login} onChange={(e) => setForm({ ...form, login: e.target.value })} /></div>
+            <div className="field"><label htmlFor="u-login">Email (optional)</label><input id="u-login" type="email" value={form.login} onChange={(e) => setForm({ ...form, login: e.target.value })} /></div>
             <div className="field"><label htmlFor="u-role">Role</label>
               <select id="u-role" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}><option value="user">Person</option><option value="admin">Administrator</option></select>
             </div>

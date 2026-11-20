@@ -53,13 +53,26 @@ async def login(body: sc.LoginIn, request: Request, response: Response, infra: I
     return sc.MeOut.of(user, await _count(s, user.id))
 
 
+@public.post("/accept/check", response_model=sc.LinkInfoOut, dependencies=[Depends(login_rate_limit)])
+async def accept_check(body: sc.LinkCheckIn, s: AsyncSession = Depends(get_session)):
+    """Does this one-time link still work, and must the person give their sign-in email? Reveals nothing else."""
+    try:
+        return sc.LinkInfoOut(needsEmail=await auth.link_needs_email(s, body.token))
+    except auth.TokenInvalid:
+        raise HTTPException(400, "This link is invalid or has expired. Ask for a new one.") from None
+
+
 @public.post("/accept", response_model=sc.MeOut, dependencies=[Depends(login_rate_limit)])
 async def accept(body: sc.AcceptIn, request: Request, response: Response, infra: Infra = Depends(get_infra), s: AsyncSession = Depends(get_session)):
     """Set a password with a one-time invite / reset link, and sign in."""
     try:
-        user = await auth.redeem_link(s, infra.settings, body.token, body.password)
+        user = await auth.redeem_link(s, infra.settings, body.token, body.password, body.login)
     except auth.TokenInvalid:
         raise HTTPException(400, "This link is invalid or has expired. Ask for a new one.") from None
+    except auth.LoginTaken:
+        raise HTTPException(409, "Someone already signs in with that email.") from None
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from None
     except auth.WeakPassword as e:
         raise HTTPException(422, str(e)) from None
     await _start_session(request, response, infra, s, user)
@@ -217,10 +230,8 @@ async def update_user(user_id: str, body: sc.AdminUserPatch, who: Principal = De
 @admin.post("/users/{user_id}/invite", response_model=sc.InviteOut)
 async def reissue_link(user_id: str, infra: Infra = Depends(get_infra), s: AsyncSession = Depends(get_session)):
     """Generate the one-time link that lets a person complete their account (or, if they already have one, reset a forgotten
-    password: their current password keeps working until the link is used). Needs a sign-in email on the persona."""
+    password: their current password keeps working until the link is used)."""
     user = await _user(s, user_id)
-    if not user.login:
-        raise HTTPException(409, "Set the email this person will sign in with first.")
     purpose = "reset" if user.password_hash else "invite"
     await auth.unlock(s, user)
     return _invite_out(infra, user, await auth.issue_link(s, infra.settings, user, purpose), await _count(s, user.id))

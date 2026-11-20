@@ -214,6 +214,15 @@ class PasswordIn(BaseModel):
 class AcceptIn(BaseModel):
     token: str = Field(min_length=10, max_length=200)
     password: str = Field(min_length=1, max_length=256)
+    login: str | None = Field(default=None, max_length=254)  # the sign-in email, only used when the account has none yet
+
+
+class LinkCheckIn(BaseModel):
+    token: str = Field(min_length=10, max_length=200)
+
+
+class LinkInfoOut(BaseModel):
+    needsEmail: bool  # noqa: N815
 
 
 class ConfirmIn(BaseModel):
@@ -274,7 +283,7 @@ class AdminUserIn(BaseModel):
 
     firstName: str = Field(min_length=1, max_length=100)  # noqa: N815
     lastName: str = Field(default="", max_length=100)  # noqa: N815
-    login: str = Field(min_length=3, max_length=254)
+    login: str | None = Field(default=None, max_length=254)  # optional: needed only to generate the invite link
     role: Literal["user", "admin"] = "user"
 
 
