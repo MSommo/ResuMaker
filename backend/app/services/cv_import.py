@@ -130,6 +130,12 @@ def norm_country(raw: str) -> str:
         return ""
 
 
+def _name_case(s: str) -> str:
+    """Layouts print names in capitals, so documents often carry "JANE DOE". Store names in normal capitalisation."""
+    s = s.strip()
+    return s.title() if len(s) > 1 and s.isupper() else s
+
+
 def _clip(s: str, n: int = MAX_FIELD) -> str:
     return s.strip()[:n]
 
@@ -177,7 +183,7 @@ def to_resume(imp: ImportedCV, layout_id: str = "sidebar") -> tuple[Resume, list
     if b.address.country.strip() and not country:
         warnings.append(f"Country “{b.address.country.strip()}” was not recognised and was left empty.")
     r.basics = Basics(
-        firstName=_clip(b.firstName, 100), lastName=_clip(b.lastName, 100), headline=_clip(b.headline, 200), email=_clip(b.email, 200), phone=_clip(b.phone, 60),
+        firstName=_name_case(_clip(b.firstName, 100)), lastName=_name_case(_clip(b.lastName, 100)), headline=_clip(b.headline, 200), email=_clip(b.email, 200), phone=_clip(b.phone, 60),
         address=Address(street=_clip(b.address.street), city=_clip(b.address.city), postcode=_clip(b.address.postcode, 30), country=country),
         birthDate=_clip(b.birthDate, 10), birthPlace=_clip(b.birthPlace), nationality=_clip(b.nationality),
     )

@@ -141,6 +141,13 @@ def test_dates(raw, expected):
     assert norm_date(raw) == expected
 
 
+def test_shouted_names_are_stored_in_normal_case():
+    r, _ = to_resume(ImportedCV(basics=ImpBasics(firstName="JANE", lastName="DE LUCA", headline="Senior Engineer")))
+    assert (r.basics.firstName, r.basics.lastName) == ("Jane", "De Luca")
+    r, _ = to_resume(ImportedCV(basics=ImpBasics(firstName="Jane", lastName="McDonald")))
+    assert r.basics.lastName == "McDonald"  # mixed case is left alone
+
+
 def test_countries():
     assert [norm_country(x) for x in ("IT", "it", "Italy", "United Kingdom", "UK", "Narnia", "")] == ["IT", "IT", "IT", "GB", "GB", "", ""]
 
