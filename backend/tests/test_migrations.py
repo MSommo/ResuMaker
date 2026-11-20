@@ -76,11 +76,13 @@ async def test_legacy_database_is_migrated_and_backfilled(monkeypatch):
         # Persona deletion cascades at the database level.
         await conn.execute("delete from users where id = $1", mario["id"])
         assert await conn.fetchval("select count(*) from resumes") == 1
-        assert await conn.fetchval("select version_num from alembic_version") == "0005"  # head: personas (0002), versions (0003), memories (0004), users + auth (0005)
+        assert await conn.fetchval("select version_num from alembic_version") == "0006"  # head: personas (0002), versions (0003), memories (0004), users + auth (0005), AI entitlement (0006)
         assert await conn.fetchval("select count(*) from resume_versions") == 0  # 0003 added the (empty) history table
         assert await conn.fetchval("select count(*) from memories") == 0  # 0004 added the (empty) memory table
         # 0005: personas became users, unclaimed (nobody can sign in), with the login pre-filled from the email.
         assert mario["password_hash"] is None and mario["role"] == "user" and mario["is_active"] is True and mario["login"] == "m@x.org"
+        # 0006: everyone who already existed keeps AI.
+        assert await conn.fetchval("select count(*) from users where ai_enabled is not true") == 0
         assert await conn.fetchval("select count(*) from users where password_hash is not null") == 0
         assert await conn.fetchval("select to_regclass('personas')") is None
         assert await conn.fetchval("select count(*) from sessions") == 0 and await conn.fetchval("select count(*) from user_tokens") == 0

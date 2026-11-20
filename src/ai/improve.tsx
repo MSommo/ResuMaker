@@ -2,7 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 import { createPortal } from 'react-dom'
 import { improve as improveApi } from '../api/client'
 import { useCaps } from '../api/Caps'
-import { Check, Close, Refresh, Sparkle } from '../components/icons'
+import { Check, Close, Lock, Refresh, Sparkle } from '../components/icons'
+import { UpgradeNote } from './Upgrade'
 import { useOptionalResume } from '../state/ResumeContext'
 
 export interface ImproveContext {
@@ -82,7 +83,26 @@ export function useImprove(spec: ImproveSpec | undefined, value: string, onApply
   const ticket = useRef(0)
   const triggerRef = useRef<HTMLButtonElement>(null)
 
-  if (!spec || !caps.ai) return { trigger: null, panel: null }
+  if (!spec || !(caps.ai || caps.aiLocked)) return { trigger: null, panel: null }
+
+  if (caps.aiLocked) {
+    // Shown but locked: the button opens the upgrade note instead of a suggestion.
+    const trigger = (
+      <button ref={triggerRef} type="button" className={`ai-btn locked ${open ? 'on' : ''}`} onClick={() => setOpen((o) => !o)} aria-expanded={open} title="Improve with AI: upgrade to use">
+        <Lock /> <span>Improve</span>
+      </button>
+    )
+    const panel = open && (
+      <AnchoredPanel anchor={triggerRef} onClose={() => setOpen(false)}>
+        <div className="ai-panel-head">
+          <strong><Sparkle /> Improve with AI</strong>
+          <button type="button" className="icon-btn" onClick={() => setOpen(false)} aria-label="Close"><Close /></button>
+        </div>
+        <UpgradeNote feature="Improving text" compact />
+      </AnchoredPanel>
+    )
+    return { trigger, panel }
+  }
 
   const run = async (instr = '') => {
     const mine = ++ticket.current
