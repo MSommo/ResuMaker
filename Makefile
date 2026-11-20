@@ -227,6 +227,11 @@ web-build: ## Production build of the frontend into dist/
 
 check: typecheck test-web test ## Type-check + frontend unit tests + backend tests
 
+.PHONY: hooks
+hooks: ## Install the git hooks in .githooks (pre-commit: type-check + frontend tests; pre-push: backend tests)
+	git config core.hooksPath .githooks
+	@echo "Git hooks installed."
+
 ##@ MCP server (for Claude Desktop / Claude Code)
 
 .PHONY: eval-router eval-agent eval-tailor eval-memory eval-import
