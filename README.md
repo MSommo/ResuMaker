@@ -140,7 +140,7 @@ Tools: `list_personas`, `create_persona`, `list_resumes`, `get_resume`, `create_
 
 ## Roadmap
 
-See [docs/ROADMAP.md](docs/ROADMAP.md): memory (pgvector), import a job from a URL, import a CV from HTML/DOCX/PDF.
+See [docs/ROADMAP.md](docs/ROADMAP.md). Done: phases 1 to 5 and 7. Deferred: [phase 6, bring a job posting in from a link](docs/phase-6-job-import.md).
 
 ## Notes and limits
 

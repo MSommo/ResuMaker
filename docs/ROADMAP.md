@@ -10,18 +10,11 @@ Remember what is useful across sessions, per persona.
 - **Writes are explicit:** the assistant proposes "remember this?" and you accept; nothing is saved silently.
 - **Eval:** does a remembered preference change the output, and does a wrong or stale memory ever beat the CV text (it must not).
 
-## Phase 6: Find and import a job (URL, Indeed, LinkedIn)
+## Phase 6: Bring a job posting in from a link (deferred)
 
-Get a posting into the tailor flow without pasting. Researched options:
+Full design: **[phase-6-job-import.md](phase-6-job-import.md)**.
 
-- **Indeed has an official MCP server** (beta, hosted at `mcp.indeed.com`, job search by title, keywords, location; sign-in through OAuth in a browser). It is built for MCP clients such as Claude, so the cleanest use is **at the client**: add it next to the ResuMaker MCP in Claude Code or Desktop, find a job there, and pass its text to `tailor_to_posting`. No scraping, no terms-of-service risk, no code in ResuMaker beyond a prompt (`tailor_to_job`) that spells out the two-step flow. Making ResuMaker's own server an MCP *client* of Indeed is possible but a poor fit: the OAuth sign-in is interactive and per person, and I have not confirmed that Indeed allows third-party apps to use it (only snippets of its docs were readable, so check docs.indeed.com/mcp first).
-- **LinkedIn has no official MCP server.** The community ones work by driving a logged-in browser session on *your* account, which LinkedIn's terms prohibit; the repos say so themselves. The risk lands on your account (restrictions or a ban), not on us. Not built into ResuMaker's server. If you want one, use it at the client with a spare account, knowingly.
-- **In the app: a plain "paste a URL" import** for open pages (company career sites, many boards), with the safety work that needs:
-  - SSRF: HTTPS/HTTP only; resolve DNS and refuse private, loopback, link-local and cloud-metadata addresses, re-checked on every redirect (the server sits on a home network next to other services). Timeout, size cap, text content types only, no cookies or credentials.
-  - Extraction order: schema.org `JobPosting` JSON-LD, then readable text (trafilatura), then Chrome for JavaScript-only pages, behind the same address checks.
-  - Login-walled or bot-blocking sites (LinkedIn, often Indeed pages) get a clear message and the paste fallback. No wall-bypassing.
-  - The fetched page is untrusted: only the extracted spec reaches the editing agent, and the extracted text is shown before tailoring.
-  - Tests: private IPs, redirects to private IPs, DNS rebinding, oversize; saved real-page fixtures for each extraction path.
+Summary: paste a link instead of the posting text, see what was read, then tailor as today. The built-in fetcher handles open pages only (schema.org `JobPosting` data first, then readable text, then optionally Chrome) behind strict server-side-request-forgery protection: validated and pinned addresses, hand-followed redirects, size and time caps, robots.txt, and a blocklist for sites that forbid automated access. Indeed has an official MCP server, best used **beside** ResuMaker's in Claude Code or Desktop rather than called from ResuMaker; LinkedIn has no official one and its community servers put your account at risk, so LinkedIn stays paste-only. Deferred on 2026-11-20.
 
 ## Phase 7: Import a CV from HTML, DOCX or PDF, done
 
