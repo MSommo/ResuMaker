@@ -122,7 +122,8 @@
 .invite-box input { width: 100%; font-family: ui-monospace, monospace; font-size: 13px; }
 .user-add { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0 14px; align-items: end; }
 .user-add .form-actions { margin: 0 0 0 0; }
-.table-wrap { overflow-x: auto; }
+/* No overflow clipping: the row ⋯ menus must be able to open past the table's edge. Phones get cards instead (below). */
+.table-wrap { position: relative; }
 .users-table { width: 100%; border-collapse: collapse; }
 .users-table th { text-align: left; font-size: 12px; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line); }
 .users-table td { padding: 12px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
@@ -130,6 +131,11 @@
 .row-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 .row-msg { flex-basis: 100%; margin: 4px 0 0; font-size: 13px; color: var(--muted); text-align: right; }
 .row-msg.form-error { color: var(--danger); }
+.row-actions .pop-panel { z-index: 20; }
+.users-table tr.confirming td { border-bottom: 0; }
+.users-table .confirm-row td { padding: 4px 14px 16px; background: color-mix(in srgb, var(--danger) 5%, var(--surface)); }
+.confirm-row p { margin: 10px 0; }
+.user-add-error { grid-column: 1 / -1; }
 .form-hint { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
 @media (max-width: 720px) {
   .users-table thead { display: none; }
@@ -138,6 +144,7 @@
   .users-table td[data-label]::before { content: attr(data-label); color: var(--muted); font-size: 12px; }
   .row-actions { justify-content: flex-start; }
   .row-msg { text-align: left; }
+  .users-table .confirm-row td { display: block; padding: 4px 12px 14px; }
 }
 
 /* on/off switch (admin: AI per user) */
