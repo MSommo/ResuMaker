@@ -67,7 +67,7 @@ async def restore(s: AsyncSession, rid: uuid.UUID, vid: uuid.UUID) -> tuple[Resu
     await snapshot(s, row, source="before-restore", label=f"Before restoring “{v.label or v.source}”")
     row.data = copy.deepcopy(v.data)
     row.layout_id = v.layout_id
-    row.title = v.title
+    row.retitle()  # the name stays (it isn't content); the headline comes back with the snapshot
     row.version += 1
     row.updated_at = utcnow()
     # The assistant message(s) whose changes this snapshot undoes are now undone.

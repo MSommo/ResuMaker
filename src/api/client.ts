@@ -15,7 +15,12 @@ export interface Persona extends PersonalDetails {
 export interface ResumeSummary {
   id: string
   personaId: string
+  /** What to show for the CV: its name, else its headline, else "Untitled CV". */
   title: string
+  /** The owner's own label for telling CVs apart; never printed on the CV. "" when there is none. */
+  name: string
+  /** Printed under the person's name on the CV. */
+  headline: string
   layoutId: string
   version: number
   updatedAt: string
@@ -158,9 +163,11 @@ export const getPersona = (id: string) => json<{ persona: Persona; resumes: Resu
 export const updatePersona = (id: string, details: PersonalDetails) => json<Persona>('PUT', `/personas/${id}`, details)
 
 // CVs
-export const createResume = (personaId: string, body: { resume?: Resume; layoutId?: string; template?: 'blank' | 'sample' }) => json<ResumeDoc>('POST', `/personas/${personaId}/resumes`, body)
+export const createResume = (personaId: string, body: { resume?: Resume; layoutId?: string; template?: 'blank' | 'sample'; name?: string }) => json<ResumeDoc>('POST', `/personas/${personaId}/resumes`, body)
 export const getResume = (id: string) => json<ResumeDoc>('GET', `/resumes/${id}`)
 export const saveResume = (id: string, resume: Resume, version: number, keepalive = false) => json<ResumeDoc>('PUT', `/resumes/${id}`, { resume, version }, { keepalive })
+/** Name a CV ("" clears it). Not a content change: the version stays, so an open editor isn't affected. */
+export const renameResume = (id: string, name: string) => json<ResumeSummary>('PATCH', `/resumes/${id}`, { name })
 export const deleteResume = async (id: string) => void (await request('DELETE', `/resumes/${id}`))
 
 // AI

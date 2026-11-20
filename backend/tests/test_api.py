@@ -87,6 +87,40 @@ async def test_cv_save_ignores_personal_details_but_keeps_the_headline(client):
     assert saved["resume"]["basics"]["headline"] == "Staff Engineer" and saved["title"] == "Staff Engineer"
 
 
+
+async def test_a_cv_name_is_separate_from_the_headline(client):
+    """The name only tells your CVs apart: lists show it, the CV never prints it, and renaming isn't an edit."""
+    p = await new_persona(client, "Lee", "Real")
+    doc = await create(client, "blank", persona=p)
+    cv = doc["resume"]
+    cv["basics"]["headline"] = "Staff Engineer"
+    doc = (await client.put(f"/api/resumes/{doc['id']}", json={"resume": cv, "version": doc["version"]})).json()
+    assert doc["title"] == "Staff Engineer" and doc["name"] == ""  # no name: lists show the headline
+
+    r = await client.patch(f"/api/resumes/{doc['id']}", json={"name": "  Acme application  "})
+    assert r.status_code == 200
+    assert r.json()["title"] == "Acme application" and r.json()["headline"] == "Staff Engineer"
+    assert r.json()["version"] == doc["version"]  # not a content change, so an open editor doesn't conflict
+    got = (await client.get(f"/api/resumes/{doc['id']}")).json()
+    assert got["resume"]["basics"]["headline"] == "Staff Engineer" and got["name"] == "Acme application"
+
+    cv["basics"]["headline"] = "Principal Engineer"  # a later headline edit keeps the name
+    saved = (await client.put(f"/api/resumes/{doc['id']}", json={"resume": cv, "version": doc["version"]})).json()
+    assert saved["title"] == "Acme application" and saved["headline"] == "Principal Engineer"
+    listed = (await client.get(f"/api/personas/{p['id']}")).json()["resumes"]
+    assert [(c["title"], c["name"], c["headline"]) for c in listed] == [("Acme application", "Acme application", "Principal Engineer")]
+
+    cleared = (await client.patch(f"/api/resumes/{doc['id']}", json={"name": ""})).json()
+    assert cleared["title"] == "Principal Engineer" and cleared["name"] == ""
+    assert (await client.patch(f"/api/resumes/{doc['id']}", json={"name": "x" * 101})).status_code == 422
+
+
+async def test_a_new_cv_can_be_named(client):
+    p = await new_persona(client)
+    r = await client.post(f"/api/personas/{p['id']}/resumes", json={"template": "blank", "name": "Short version"})
+    assert r.status_code == 201 and r.json()["title"] == "Short version" and r.json()["resume"]["basics"]["headline"] == ""
+
+
 async def test_crud_roundtrip(client):
     doc = await create(client)
     assert doc["persona"]["firstName"] == "Jane" and doc["version"] == 1

@@ -94,7 +94,7 @@ async def update_persona(*, body: sc.PersonaIn, pid: uuid.UUID = Depends(own_per
 
 @router.post("/personas/{persona_id}/resumes", response_model=sc.ResumeOut, status_code=201)
 async def create_resume(*, body: sc.CreateResumeIn, pid: uuid.UUID = Depends(own_persona), s: AsyncSession = Depends(get_session)):
-    row, persona = await repo.create_resume(s, pid, resume=body.resume, layout_id=body.layoutId, template=body.template)
+    row, persona = await repo.create_resume(s, pid, resume=body.resume, layout_id=body.layoutId, template=body.template, name=body.name)
     return sc.ResumeOut.of(row, persona)
 
 
@@ -164,6 +164,16 @@ async def save_resume(*, rid: uuid.UUID = Depends(owned_resume), body: sc.SaveIn
         raise HTTPException(404, "CV not found.") from None
     except repo.VersionConflict as e:
         return JSONResponse(status_code=409, content={"error": "This CV was changed elsewhere.", "current": sc.ResumeOut.of(e.current, e.persona).model_dump(mode="json")})
+
+
+@router.patch("/resumes/{resume_id}", response_model=sc.ResumeSummary)
+async def rename_resume(*, rid: uuid.UUID = Depends(owned_resume), body: sc.RenameIn, s: AsyncSession = Depends(get_session)):
+    """Name the CV, to tell it apart from your others. Only you see it: it is never printed on the CV. "" clears it."""
+    try:
+        row, _ = await repo.rename_resume(s, rid, body.name)
+    except repo.NotFound:
+        raise HTTPException(404, "CV not found.") from None
+    return sc.ResumeSummary.of(row)
 
 
 @router.delete("/resumes/{resume_id}", status_code=204)
