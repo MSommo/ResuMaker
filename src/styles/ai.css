@@ -167,7 +167,7 @@
 .page-drop > div { display: grid; justify-items: center; gap: 6px; padding: 44px 56px; border: 2px dashed var(--accent); border-radius: 22px; background: var(--surface); box-shadow: var(--shadow); text-align: center; }
 .page-drop strong { font-size: 20px; }
 .page-drop span { color: var(--muted); }
-.imp-panel { max-width: 720px; scroll-margin-top: 80px; }
+.imp-panel { scroll-margin-top: 80px; }
 /* On My CVs the import box is one compact row: icon, what to do, accepted files (stacked again on narrow screens). */
 .imp-panel .ai-note { max-width: 70ch; font-size: 12px; }
 .imp-panel .dz-idle { grid-template-columns: auto auto; grid-template-areas: 'icon title' 'icon or' 'icon types'; justify-items: start; align-items: center; column-gap: 16px; row-gap: 2px; text-align: left; }

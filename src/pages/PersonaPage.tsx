@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { createResume, deleteResume, getPersona, getResume, saveResume, updatePersona, type Persona, type ResumeDoc, type ResumeSummary } from '../api/client'
-import { Avatar } from '../components/Avatar'
 import { PageThumb } from '../components/CvView'
 import { ImportPanel } from '../ai/ImportPanel'
 import { PersonaForm } from '../components/PersonaForm'
@@ -227,24 +226,27 @@ export default function PersonaPage() {
     )
   if (!persona) return <div className="state-box" aria-busy="true"><p>Loading your CVs…</p></div>
 
-  const contact = [persona.email, persona.phone, persona.address.city].filter(Boolean).join(' · ')
+  // The details every CV prints (the navbar already says who is signed in, so no avatar here).
+  const details = [fullName(persona), persona.email, persona.phone, persona.address.city].filter(Boolean)
+  const fresh = !cvs.length
   return (
     <div className="container home">
-      <header className="persona-head">
-        <Avatar id={persona.id} first={persona.firstName} last={persona.lastName} size={56} />
-        <div className="persona-id">
-          <h1>{fullName(persona)}</h1>
-          <p className="persona-meta">
-            <span>{contact || 'No contact details yet'}</span>
-            {!editing && <button type="button" className="link" onClick={() => setEditing(true)}>Edit details</button>}
-          </p>
-        </div>
+      <header className="page-head">
+        <h1>My CVs</h1>
+        <p className="persona-meta">
+          {details.length > 1 ? (
+            <span><span className="sr-only">On every CV: </span>{details.join(' · ')}</span>
+          ) : (
+            <span>Add your name and contact details once: every CV you make uses them.</span>
+          )}
+          {!editing && <button type="button" className="link" onClick={() => setEditing(true)}>{details.length > 1 ? 'Edit details' : 'Add details'}</button>}
+        </p>
       </header>
 
       {editing && (
         <section className="panelbox" aria-label="Edit details">
           <h2>Details</h2>
-          <p className="lede">Shared by all of {persona.firstName}’s CVs.</p>
+          <p className="lede">Shared by all your CVs: change them here once.</p>
           <PersonaForm
             initial={personalOf({ ...persona, headline: '' })}
             submitLabel="Save details"
@@ -260,19 +262,21 @@ export default function PersonaPage() {
 
       {error && <p className="form-error" role="alert">{error}</p>}
 
-      <section className="block" aria-labelledby="cvs-h">
-        <div className="section-head"><h2 id="cvs-h">{persona.firstName}’s CVs</h2></div>
-        {cvs.length ? (
+      {/* With no CVs yet there is nothing to list: the page goes straight to starting the first one. */}
+      {!fresh && (
+        <section className="block" aria-label="Your CVs">
           <div className="lgrid">{cvs.map((cv) => <CvCard key={cv.id} cv={cv} onDelete={() => removeCv(cv)} onChanged={() => void load()} />)}</div>
-        ) : (
-          <p className="empty">No CVs yet. Import one you already have, or start from a layout below.</p>
-        )}
-      </section>
+        </section>
+      )}
 
-      <section className="block" aria-labelledby="new-h">
+      <section className={`block ${fresh ? 'first-run' : ''}`} aria-labelledby="new-h">
         <div className="section-head">
-          <h2 id="new-h">{cvs.length ? 'Create another CV' : 'Create a CV'}</h2>
-          <p>Import a CV you already have, or start from a layout. You can switch layouts later without losing anything.</p>
+          <h2 id="new-h">{fresh ? 'Start your first CV' : 'Create another CV'}</h2>
+          <p>
+            {fresh
+              ? 'Import a CV you already have and it’s ready to edit in a minute, or start from a layout. You can switch layouts later without losing anything.'
+              : 'Import a CV you already have, or start from a layout. You can switch layouts later without losing anything.'}
+          </p>
         </div>
         <ImportPanel persona={persona} incoming={incoming} />
         <h3 className="sub-head">Start from a layout</h3>
