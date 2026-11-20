@@ -19,7 +19,7 @@ log = logging.getLogger("resumaker.tailor")
 async def stream_tailor(infra: Infra, rid: uuid.UUID, posting: str) -> AsyncIterator[dict[str, Any]]:
     """Events: status, spec, variant, then the usual chat events (step/status) ending in `proposal`. Errors raise."""
     if infra.llm is None:
-        raise LLMError("AI is not configured. Add GEMINI_API_KEY to .env and restart the API.", 501)
+        raise LLMError("AI is not configured. Ask the administrator to set it up.", 501)
     async with infra.session() as s:
         row, persona = await repo.get_resume(s, rid)
         master = repo.merged(row, persona)

@@ -113,11 +113,59 @@
 .mem-text { overflow-wrap: anywhere; }
 
 /* Import a CV */
-.dropzone { display: grid; place-items: center; min-height: 120px; padding: 18px; border: 2px dashed var(--line-strong); border-radius: 12px; text-align: center; cursor: pointer; color: var(--muted); position: relative; }
-.dropzone.over { border-color: var(--accent, #2f55d4); background: color-mix(in srgb, var(--accent, #2f55d4) 8%, transparent); }
-.dropzone.busy { cursor: progress; }
+/* ---- CV import: dropzone, progress, review */
+.imp-pick { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.dropzone { position: relative; display: grid; place-items: center; min-height: 230px; padding: 24px; border: 2px dashed var(--line-strong); border-radius: 16px; text-align: center; cursor: pointer; color: var(--muted);
+  background: radial-gradient(120% 120% at 50% 0%, color-mix(in srgb, var(--accent) 5%, transparent), transparent 70%); transition: border-color 0.15s, background 0.15s, transform 0.15s; }
+.dropzone:hover { border-color: var(--accent); }
+.dropzone.over { border-style: solid; border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface)); transform: scale(1.012); }
+.dropzone.bad { border-color: var(--danger); }
+.dropzone.busy { cursor: progress; border-style: solid; border-color: var(--line); }
 .dropzone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; min-height: 0; padding: 0; }
 .dropzone.busy input[type="file"] { pointer-events: none; }
-.found-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; }
-.found-list li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
-@media (max-width: 520px) { .found-list { grid-template-columns: 1fr; } }
+.dz-idle, .dz-reading { display: grid; justify-items: center; gap: 6px; pointer-events: none; }
+.dz-idle strong, .dz-reading strong { color: var(--ink); font-size: 17px; }
+.dz-icon { display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 4px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); }
+.dz-icon svg { width: 26px; height: 26px; }
+.dropzone.over .dz-icon { animation: dz-bob 0.7s ease-in-out infinite alternate; }
+@keyframes dz-bob { to { transform: translateY(-5px); } }
+.dz-types { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; }
+.dz-types b { padding: 2px 9px; border-radius: 99px; border: 1px solid var(--line-strong); color: var(--ink); font-weight: 600; font-size: 11px; letter-spacing: 0.03em; }
+.dz-types em { font-style: normal; margin-left: 4px; }
+.dz-steps { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 7px; text-align: left; font-size: 13px; }
+.dz-steps li { display: flex; align-items: center; gap: 9px; opacity: 0.45; }
+.dz-steps li.now, .dz-steps li.done { opacity: 1; }
+.dz-steps li.now { color: var(--ink); font-weight: 600; }
+.dz-steps svg, .dz-steps i { width: 16px; height: 16px; flex: none; }
+.dz-steps svg { color: #2e7d32; }
+.dz-steps i { border-radius: 50%; border: 2px solid var(--line-strong); box-sizing: border-box; }
+.dz-steps li.now i { border-color: var(--accent); border-top-color: transparent; animation: spin 0.9s linear infinite; }
+.imp-error { margin: 0; padding: 8px 12px; border-radius: 8px; font-size: 13px; color: var(--danger); background: color-mix(in srgb, var(--danger) 9%, transparent); }
+.imp-review { margin-top: 8px; }
+.imp-who { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+.imp-badge { display: grid; place-items: center; width: 36px; height: 36px; flex: none; border-radius: 50%; background: #2e7d32; color: #fff; }
+.imp-badge svg { width: 18px; height: 18px; }
+.imp-warn { padding: 10px 14px; border-radius: 10px; font-size: 13px; background: color-mix(in srgb, #d98200 11%, var(--surface)); border: 1px solid color-mix(in srgb, #d98200 40%, var(--line)); }
+.imp-warn ul { margin: 4px 0 0; padding-left: 18px; }
+.imp-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.imp-chips li { padding: 4px 11px; border-radius: 99px; border: 1px solid var(--line-strong); font-size: 13px; }
+.imp-chips b { color: var(--accent); margin-right: 2px; }
+.imp-diffs { list-style: none; margin: 0; padding: 4px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.imp-diffs li + li { border-top: 1px solid var(--line); }
+.imp-diffs label { display: grid; grid-template-columns: auto 92px minmax(0, 1fr) auto minmax(0, 1.2fr); align-items: baseline; gap: 8px; padding: 8px 0; cursor: pointer; font-size: 13px; }
+.imp-diffs input { width: 16px; height: 16px; min-height: 0; padding: 0; accent-color: var(--accent); align-self: center; }
+.imp-field { font-weight: 600; }
+.imp-old { color: var(--muted); text-decoration: line-through; overflow-wrap: anywhere; }
+.imp-new { color: var(--ink); overflow-wrap: anywhere; }
+@media (max-width: 560px) { .imp-diffs label { grid-template-columns: auto 1fr; } .imp-diffs label > span:nth-of-type(n+2) { grid-column: 2; } }
+@media (prefers-reduced-motion: reduce) { .dropzone, .dropzone.over .dz-icon, .dz-steps li.now i { animation: none; transition: none; transform: none; } }
+
+/* dropping a file anywhere on the page */
+.page-drop { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(3px); pointer-events: none; }
+.page-drop > div { display: grid; justify-items: center; gap: 6px; padding: 44px 56px; border: 2px dashed var(--accent); border-radius: 22px; background: var(--surface); box-shadow: var(--shadow); text-align: center; }
+.page-drop strong { font-size: 20px; }
+.page-drop span { color: var(--muted); }
+.imp-panel { margin-bottom: 28px; scroll-margin-top: 80px; }
+.imp-panel .imp-pick, .imp-panel .imp-review { margin-top: 0; }
+.imp-panel .imp-review { padding: 18px 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
+.imp-panel .dropzone { min-height: 190px; }

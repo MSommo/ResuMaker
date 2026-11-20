@@ -163,7 +163,7 @@ async def _remember(s: Any, infra: Infra, persona_id: uuid.UUID, rid: uuid.UUID,
 async def stream_chat(infra: Infra, rid: uuid.UUID, message: str, mode: str = "apply") -> AsyncIterator[dict[str, Any]]:
     """mode "apply": change the CV. mode "propose": pause before changing it and emit a `proposal` to accept or reject."""
     if infra.graph is None or infra.graph_hitl is None:
-        raise LLMError("AI is not configured. Add GEMINI_API_KEY to .env and restart the API.", 501)
+        raise LLMError("AI is not configured. Ask the administrator to set it up.", 501)
     async with infra.session() as s:
         row, persona = await repo.get_resume(s, rid)
         history = await repo.chat_history(s, rid, limit=14)
@@ -201,7 +201,7 @@ async def stream_chat(infra: Infra, rid: uuid.UUID, message: str, mode: str = "a
 async def decide(infra: Infra, rid: uuid.UUID, run_id: str, accept: Any) -> ChatOutcome:
     """Resume a paused run with the user's decision: "all", "none", or the indices of the proposed changes to keep."""
     if infra.graph_hitl is None:
-        raise LLMError("AI is not configured. Add GEMINI_API_KEY to .env and restart the API.", 501)
+        raise LLMError("AI is not configured. Ask the administrator to set it up.", 501)
     config = _thread(rid, run_id)
     state = await infra.graph_hitl.aget_state(config)
     if not state.values or not state.next:

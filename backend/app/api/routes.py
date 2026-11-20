@@ -37,7 +37,7 @@ public = APIRouter()
 
 def _ai(infra: Infra) -> None:
     if infra.llm is None:
-        raise HTTPException(501, "AI is not configured. Add GEMINI_API_KEY to .env and restart the API.")
+        raise HTTPException(501, "AI is not configured. Ask the administrator to set it up.")
 
 
 async def _row(s: AsyncSession, resume_id: uuid.UUID):

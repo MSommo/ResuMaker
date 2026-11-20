@@ -3,9 +3,9 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { createResume, deleteResume, getPersona, getResume, saveResume, updatePersona, type Persona, type ResumeDoc, type ResumeSummary } from '../api/client'
 import { Avatar } from '../components/Avatar'
 import { PageThumb } from '../components/CvView'
-import { ImportDialog } from '../ai/ImportDialog'
+import { ImportPanel } from '../ai/ImportPanel'
 import { PersonaForm } from '../components/PersonaForm'
-import { Back, Copy, Edit, More, Trash } from '../components/icons'
+import { Back, Copy, Edit, More, Trash, Upload } from '../components/icons'
 import { Menu, MenuItem, MenuSep } from '../components/Popover'
 import { layouts } from '../layouts/registry'
 import { fullName } from '../model/format'
@@ -122,7 +122,8 @@ export default function PersonaPage() {
   const [error, setError] = useState('')
   const [editing, setEditing] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [importing, setImporting] = useState(false)
+  const [incoming, setIncoming] = useState<{ file: File; n: number } | undefined>()
+  const [dragging, setDragging] = useState(false)
   // Sample thumbnails show this person's own details, so the choice looks like their CV.
   const samples = useMemo(() => {
     if (!persona) return []
@@ -132,6 +133,25 @@ export default function PersonaPage() {
       return { l, r: { ...r, basics: { ...r.basics, ...details } } }
     })
   }, [persona])
+
+  // Drop a CV file anywhere on this page to import it. Only real file drags count (not dragged text or links).
+  useEffect(() => {
+    let depth = 0
+    const files = (e: DragEvent) => !!e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')
+    const enter = (e: DragEvent) => { if (files(e)) { depth++; setDragging(true) } }
+    const leave = (e: DragEvent) => { if (files(e) && --depth <= 0) { depth = 0; setDragging(false) } }
+    const over = (e: DragEvent) => { if (files(e)) e.preventDefault() }
+    const drop = (e: DragEvent) => {
+      if (!files(e)) return
+      e.preventDefault()
+      depth = 0
+      setDragging(false)
+      const f = e.dataTransfer?.files?.[0]
+      if (f) setIncoming((cur) => ({ file: f, n: (cur?.n ?? 0) + 1 }))
+    }
+    window.addEventListener('dragenter', enter); window.addEventListener('dragleave', leave); window.addEventListener('dragover', over); window.addEventListener('drop', drop)
+    return () => { window.removeEventListener('dragenter', enter); window.removeEventListener('dragleave', leave); window.removeEventListener('dragover', over); window.removeEventListener('drop', drop) }
+  }, [])
 
   const load = useCallback(async () => {
     try {
@@ -216,9 +236,9 @@ export default function PersonaPage() {
       <section className="block" aria-labelledby="new-h">
         <div className="section-head">
           <h2 id="new-h">{cvs.length ? 'Create another CV' : 'Create a CV'}</h2>
-          <p>Choose a layout. You can switch later without losing anything.</p>
-          <button type="button" className="btn" onClick={() => setImporting(true)}>Import a CV from a file (PDF, DOCX, HTML)</button>
+          <p>Already have one? Drop it below. Otherwise choose a layout. You can switch later without losing anything.</p>
         </div>
+        <ImportPanel persona={persona} incoming={incoming} />
         <div className="lgrid">
           {samples.map(({ l, r }) => (
             <article key={l.id} className="lcard">
@@ -238,7 +258,9 @@ export default function PersonaPage() {
         </div>
       </section>
 
-      {importing && persona && <ImportDialog persona={persona} onClose={() => setImporting(false)} />}
+      {dragging && (
+        <div className="page-drop" aria-hidden><div><Upload width={34} height={34} /><strong>Drop your CV to import it</strong><span>PDF, DOCX or HTML</span></div></div>
+      )}
     </div>
   )
 }

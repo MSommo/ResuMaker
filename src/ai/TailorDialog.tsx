@@ -104,7 +104,7 @@ export function TailorDialog({ id, onClose }: { id: string; onClose: () => void 
             <p className="tailor-help">Paste the job posting. I’ll make a <strong>new copy</strong> of this CV tailored to it, so the original stays as it is. I only rephrase and emphasise what is already in your CV; I never add experience you don’t have.</p>
             <textarea value={posting} onChange={(e) => setPosting(e.target.value)} rows={10} placeholder="Paste the full text of the job posting here…" aria-label="Job posting" autoFocus />
             {error && <p className="skipped">{error}</p>}
-            <small className="ai-note">The posting and your CV text are sent to Google Gemini.</small>
+            <small className="ai-note">The posting and your CV text are sent to an AI service.</small>
             <div className="proposal-actions">
               <button type="button" className="btn primary" disabled={posting.trim().length < 40} onClick={() => void start()}>Tailor my CV</button>
               <button type="button" className="btn" onClick={onClose}>Cancel</button>

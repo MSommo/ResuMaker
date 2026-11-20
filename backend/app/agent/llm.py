@@ -63,16 +63,16 @@ class GeminiLLM:
                     raise
                 return await go(False)
         except errors.APIError as e:
-            raise LLMError(e.message or "Gemini request failed.", 429 if e.code == 429 else 502) from e
+            raise LLMError(e.message or "The AI request failed.", 429 if e.code == 429 else 502) from e
         except Exception as e:  # network, timeout…
-            raise LLMError(f"Could not reach Gemini: {e}") from e
+            raise LLMError(f"Could not reach the AI service: {e}") from e
 
     @staticmethod
     def _check(resp: types.GenerateContentResponse) -> str:
         text = resp.text or ""
         if not text.strip():
             blocked = getattr(resp.prompt_feedback, "block_reason", None)
-            raise LLMError("Gemini’s safety filters blocked this request." if blocked else "Gemini returned an empty answer.")
+            raise LLMError("The AI’s safety filters blocked this request." if blocked else "The AI returned an empty answer.")
         return text
 
     async def text(self, *, system: str, prompt: str, temperature: float = 0.5, fast: bool = False) -> str:
@@ -95,10 +95,10 @@ class GeminiLLM:
         try:
             res = await self.client.aio.models.embed_content(model=self.embedding_model, contents=texts, config=cfg)
         except errors.APIError as e:
-            raise LLMError(e.message or "Gemini embedding request failed.", 429 if e.code == 429 else 502) from e
+            raise LLMError(e.message or "The AI request failed.", 429 if e.code == 429 else 502) from e
         except Exception as e:  # noqa: BLE001
-            raise LLMError(f"Could not reach Gemini: {e}") from e
+            raise LLMError(f"Could not reach the AI service: {e}") from e
         vectors = [list(e.values or []) for e in (res.embeddings or [])]
         if len(vectors) != len(texts) or any(len(v) != self.dims for v in vectors):
-            raise LLMError("Gemini returned unexpected embeddings.")
+            raise LLMError("The AI returned an unexpected answer.")
         return vectors

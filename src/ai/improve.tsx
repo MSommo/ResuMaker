@@ -153,7 +153,7 @@ export function useImprove(spec: ImproveSpec | undefined, value: string, onApply
           </div>
         </div>
       )}
-      <small className="ai-note">Your text is sent to Google Gemini to generate this suggestion.</small>
+      <small className="ai-note">Your text is sent to an AI service to generate this suggestion.</small>
     </AnchoredPanel>
   )
   return { trigger, panel }
