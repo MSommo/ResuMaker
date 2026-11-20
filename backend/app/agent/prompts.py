@@ -49,7 +49,7 @@ Examples:
 - Change headline: {"op":"update_basics","patch":{"headline":"Staff Engineer"}}
 - Rewrite a text section: {"op":"update_section","sectionId":"<text section id>","patch":{"text":"..."}}
 - Remove: {"op":"remove_item","sectionId":"<id>","itemId":"<id>","patch":{}}
-A zone only accepts the section kinds listed for it in the catalog. Personal details live in "basics" (the "details" section just displays them). Everything in "basics" except the headline belongs to the person and is shared by all of their CVs; the headline belongs to this CV only."""
+A zone only accepts the section kinds listed for it in the catalog. An entry like "text:user" means only the Profile text block (a text section with the person icon); the "header" zone takes only Personal details and Profile, and is never chosen unless asked for. Personal details live in "basics" (the "details" section just displays them). Everything in "basics" except the headline belongs to the person and is shared by all of their CVs; the headline belongs to this CV only."""
 
 REPAIR_NOTE = """Some of the operations you proposed could not be applied. The CV state above already includes the ones that worked.
 Failed operations and why:

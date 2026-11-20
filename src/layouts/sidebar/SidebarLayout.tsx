@@ -4,7 +4,7 @@ import { addressLines, birthLines } from '../../model/format'
 import { zoneSections } from '../../model/sections'
 import type { Basics, Entry, Leveled, Resume, Section } from '../../model/types'
 import { Paginated, type Unit } from '../Paginated'
-import { Rich, paragraphs, parseBullets } from '../shared'
+import { HeaderExtras, Rich, paragraphs, parseBullets } from '../shared'
 import './sidebar.css'
 
 const Heading = ({ children }: { children: ReactNode }) => <h2 className="sb-heading">{children}</h2>
@@ -145,6 +145,7 @@ export function SidebarLayout({ resume: r }: { resume: Resume }) {
         {b.lastName}
       </h1>
       {b.headline && <div className="sb-headline">{b.headline}</div>}
+      <HeaderExtras resume={r} />
     </header>
   )
 

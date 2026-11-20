@@ -36,12 +36,12 @@ export function SectionEditor({ sec, onBack, goInfo }: { sec: Section; onBack: (
       <button type="button" className="back" onClick={onBack}><Back /> All sections</button>
       <div className="form">
         <TextField label="Section title" value={sec.title} onChange={(v) => up({ title: v })} />
-        {showIcons && <IconPicker label="Icon" value={sec.icon} onChange={(v: IconId) => up({ icon: v })} />}
+        {showIcons && sec.zone !== 'header' && <IconPicker label="Icon" value={sec.icon} onChange={(v: IconId) => up({ icon: v })} />}
         {sec.kind !== 'text' && sec.kind !== 'details' && KIND_LABEL[sec.kind].toLowerCase() !== sec.title.trim().toLowerCase() && <p className="kind-tag">{KIND_LABEL[sec.kind]}</p>}
 
         {sec.kind === 'details' && (
           <p className="form-note">
-            This block shows your personal details. Edit them under <button type="button" className="link" onClick={goInfo}>Personal info</button>.
+            This block shows your address and personal details, which are the same on all your CVs. Edit them in <button type="button" className="link" onClick={goInfo}>Personal info</button>.
           </p>
         )}
 

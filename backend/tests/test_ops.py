@@ -81,3 +81,43 @@ def test_set_layout_and_unknown_layout():
     r = sample_resume()
     assert apply_ops(r, [Op(op="set_layout", layoutId="timeline")]).resume.layoutId == "timeline"
     assert apply_ops(r, [Op(op="set_layout", layoutId="nope")]).skipped
+
+
+# ---------------------------------------------------------------- the header zone: only Profile and Personal details
+
+
+def _cv(layout="sidebar"):
+    from app.domain.catalog import blank_resume
+
+    return blank_resume(layout)
+
+
+def test_header_takes_only_profile_and_personal_details():
+    from app.domain.ops import Op, apply_ops
+
+    r = _cv()
+    by = {s.title: s for s in r.sections}
+    res = apply_ops(r, [Op(op="move_section", sectionId=by["Profile"].id, zone="header"), Op(op="move_section", sectionId=by["Details"].id, zone="header")])
+    assert not res.skipped and {s.title for s in res.resume.sections if s.zone == "header"} == {"Profile", "Details"}
+    for title in ("Hobbies", "Skills", "Education"):  # same kind as a header-able block, but not pre-approved
+        bad = apply_ops(r, [Op(op="move_section", sectionId=by[title].id, zone="header")])
+        assert bad.skipped and not bad.applied, title
+
+
+def test_nothing_is_placed_in_the_header_automatically():
+    from app.domain.ops import Op, apply_ops, pick_zone
+
+    assert pick_zone("sidebar", "text", icon="user") != "header"
+    assert pick_zone("sidebar", "details") == "side"
+    assert pick_zone("sidebar", "text", "main", icon="user") == "main"
+    r = apply_ops(_cv(), [Op(op="add_section", sectionId="p2", template="profile")]).resume
+    assert {s.zone for s in r.sections if s.title == "Profile"} == {"main"}
+
+
+def test_switching_layout_keeps_header_sections_in_the_header():
+    from app.domain.ops import Op, apply_ops
+
+    r = _cv()
+    prof = next(s for s in r.sections if s.title == "Profile")
+    r = apply_ops(r, [Op(op="move_section", sectionId=prof.id, zone="header"), Op(op="set_layout", layoutId="timeline")]).resume
+    assert next(s for s in r.sections if s.title == "Profile").zone == "header"
