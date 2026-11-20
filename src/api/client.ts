@@ -122,34 +122,70 @@ export type ChatEvent =
   | { type: 'done'; result: ChatResult }
   | { type: 'error'; status: number; message: string }
 
-/**
- * Streams one assistant turn as Server-Sent Events (a POST, so EventSource can't be used). Calls `onEvent` for every event
- * and resolves with the final `done` result, or with a `proposal` in review mode. Throws on an `error` event.
- */
-export async function chatStream(id: string, message: string, mode: 'apply' | 'propose', onEvent: (e: ChatEvent) => void, signal?: AbortSignal): Promise<ChatResult | Proposal> {
-  const res = await request('POST', `/resumes/${id}/chat/stream`, { message, mode }, { signal })
+/** Reads a Server-Sent Events response (we POST, so EventSource can't be used) and calls `onEvent` for each event. */
+async function readEvents<E extends { type: string }>(res: Response, onEvent: (e: E) => void): Promise<void> {
   if (!res.body) throw new ApiError('Streaming is not supported by this browser.', 0)
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
   let buf = ''
-  let result: ChatResult | Proposal | null = null
   for (;;) {
     const { value, done } = await reader.read()
-    if (done) break
+    if (done) return
     buf += decoder.decode(value, { stream: true })
     let end: number
     while ((end = buf.indexOf('\n\n')) >= 0) {
       const line = buf.slice(0, end).trim()
       buf = buf.slice(end + 2)
-      if (!line.startsWith('data:')) continue
-      const ev = JSON.parse(line.slice(5)) as ChatEvent
-      onEvent(ev)
-      if (ev.type === 'error') throw new ApiError(ev.message, ev.status)
-      if (ev.type === 'done') result = ev.result
-      if (ev.type === 'proposal') result = ev
+      if (line.startsWith('data:')) onEvent(JSON.parse(line.slice(5)) as E)
     }
   }
+}
+
+/**
+ * Streams one assistant turn. Resolves with the final `done` result, or with a `proposal` in review mode. Throws on an `error` event.
+ */
+export async function chatStream(id: string, message: string, mode: 'apply' | 'propose', onEvent: (e: ChatEvent) => void, signal?: AbortSignal): Promise<ChatResult | Proposal> {
+  const res = await request('POST', `/resumes/${id}/chat/stream`, { message, mode }, { signal })
+  let result: ChatResult | Proposal | null = null
+  await readEvents<ChatEvent>(res, (ev) => {
+    onEvent(ev)
+    if (ev.type === 'error') throw new ApiError(ev.message, ev.status)
+    if (ev.type === 'done') result = ev.result
+    if (ev.type === 'proposal') result = ev
+  })
   if (!result) throw new ApiError('The assistant stopped before finishing. Please try again.', 0)
+  return result
+}
+
+/** What a job posting needs, and how the CV measures up. */
+export interface JobSpec {
+  title: string
+  company: string
+  summary: string
+  keywords: string[]
+  matched: string[]
+  gaps: string[]
+  language: string
+}
+
+export type TailorEvent =
+  | { type: 'status'; label: string }
+  | { type: 'step'; node: string; detail: string }
+  | { type: 'spec' } & JobSpec
+  | { type: 'variant'; resumeId: string; personaId: string }
+  | { type: 'proposal'; resumeId: string } & Proposal
+  | { type: 'error'; status: number; message: string }
+
+/** Tailors a CV to a pasted posting: creates a variant CV and resolves with the proposal to review (nothing is applied yet). */
+export async function tailorStream(id: string, posting: string, onEvent: (e: TailorEvent) => void, signal?: AbortSignal): Promise<Proposal & { resumeId: string }> {
+  const res = await request('POST', `/resumes/${id}/tailor/stream`, { posting }, { signal })
+  let result: (Proposal & { resumeId: string }) | null = null
+  await readEvents<TailorEvent>(res, (ev) => {
+    onEvent(ev)
+    if (ev.type === 'error') throw new ApiError(ev.message, ev.status)
+    if (ev.type === 'proposal') result = ev
+  })
+  if (!result) throw new ApiError('Tailoring stopped before finishing. Please try again.', 0)
   return result
 }
 

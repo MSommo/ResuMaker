@@ -1,6 +1,0 @@
-
-.proposal .applied label { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
-.proposal .applied input { width: auto; margin-top: 3px; }
-.proposal-actions { display: flex; gap: 8px; margin-top: 8px; }
-.review-toggle { display: flex; gap: 6px; align-items: center; margin: 0 12px 8px; cursor: pointer; }
-.review-toggle input { width: auto; }

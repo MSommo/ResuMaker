@@ -99,6 +99,8 @@ graph TD;
 
 `make eval-agent` runs 20 end-to-end editing tasks (single edits, multi-part requests, whole-CV rewrites, and the same on a 10-job CV) through the real graph and checks the resulting CV deterministically (no LLM judge). It reports pass rate, repairs and latency and writes `backend/.data/eval-report.json`; `EVAL_DECOMPOSE=0` runs the one-shot baseline. `EVAL_DECOMPOSE=0` runs the one-shot baseline and `EVAL_CRITIC=0` skips the critic. Results so far (single runs are noisy, treat gaps as trends): one-shot 19/20 (long CV 2/3: it left every job of a tailoring request untouched), about 5.5 s per task; sequential tasks 20/20 at about 11.5 s; parallel writers with the critic 39/40 over two runs (long CV 5/6) at about 8 s, against 35/40 without the critic. The critic costs about 1.5 s on multi-part requests.
 
+**Tailor to a job.** In the chat, "Tailor to a job" takes a pasted posting (the server never fetches URLs). It analyses the posting against your CV into what the role needs, what your CV already shows, and what it lacks (those gaps are never invented), then creates a **new variant CV** and proposes the changes on it in review mode, so the original is never touched. Postings are untrusted web text: only the extracted summary and keywords reach the editing agent, never the raw posting, so instructions hidden in a posting can't steer it. Discarding deletes the variant. API: `POST /api/resumes/{id}/tailor/stream`, then `.../resumes/{variantId}/chat/{runId}/decide`. MCP: `tailor_to_posting`, then `decide_proposal` on the variant.
+
 **History and undo.** Every AI, MCP and restore change snapshots the CV first (last 100 kept), and autosaves checkpoint every 15 minutes. Undo restores the snapshot, so it works after a reload. `dryRun` on `/ops` previews changes without saving.
 
 | Endpoint | |
@@ -127,7 +129,7 @@ Claude Desktop (`claude_desktop_config.json`):
 { "mcpServers": { "resumaker": { "command": "docker", "args": ["compose", "-f", "/ABSOLUTE/PATH/TO/ResuMaker/docker-compose.stable.yml", "run", "--rm", "-T", "mcp"] } } }
 ```
 
-Tools: `list_personas`, `create_persona`, `list_resumes`, `get_resume`, `create_resume`, `apply_operations` (with `dry_run`), `list_versions`, `diff_version`, `restore_version`, `improve_text`, `ask_assistant`, `propose_changes` + `decide_proposal` (review before applying), `export_pdf`. Resource: `resume://{id}`. Prompt: `review_cv`.
+Tools: `list_personas`, `create_persona`, `list_resumes`, `get_resume`, `create_resume`, `apply_operations` (with `dry_run`), `list_versions`, `diff_version`, `restore_version`, `improve_text`, `ask_assistant`, `propose_changes` + `decide_proposal` (review before applying), `tailor_to_posting`, `export_pdf`. Resource: `resume://{id}`. Prompt: `review_cv`.
 
 ## Notes and limits
 

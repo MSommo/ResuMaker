@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { chatHistory, chatStream, clearChat, decideProposal, restoreVersion, type ChatResult, type Proposal } from '../api/client'
 import { Chat, Close, Send, Sparkle, Trash, Undo } from '../components/icons'
 import { useResume } from '../state/ResumeContext'
+import { TailorDialog } from './TailorDialog'
 
 interface Msg {
   role: 'user' | 'assistant'
@@ -29,6 +30,7 @@ export function ChatBubble() {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState('Thinking…')
+  const [tailoring, setTailoring] = useState(false)
   const [review, setReview] = useState(false) // propose changes first instead of applying them
   const [proposal, setProposal] = useState<Proposal | null>(null)
   const [picked, setPicked] = useState<Set<number>>(new Set())
@@ -135,6 +137,7 @@ export function ChatBubble() {
           <header>
             <h2><Sparkle /> AI assistant</h2>
             <span className="tb-grow" />
+            <button type="button" className="btn small" onClick={() => setTailoring(true)} title="Make a copy of this CV tailored to a job posting">Tailor to a job</button>
             {msgs.length > 0 && <button type="button" className="icon-btn" onClick={() => void clear()} aria-label="Clear conversation" title="Clear conversation"><Trash /></button>}
             <button type="button" className="icon-btn" onClick={() => setOpen(false)} aria-label="Close assistant"><Close /></button>
           </header>
@@ -202,6 +205,7 @@ export function ChatBubble() {
           <small className="ai-note">Your CV text is sent to Google Gemini to answer. AI can make mistakes. Check the changes.</small>
         </section>
       )}
+      {tailoring && <TailorDialog id={id} onClose={() => setTailoring(false)} />}
     </>
   )
 }

@@ -61,3 +61,23 @@
   .chat { right: 0; left: 0; bottom: var(--tabs-h); width: auto; height: 78dvh; border-radius: 16px 16px 0 0; }
 }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+
+/* Review before applying, and Tailor to a job */
+.proposal .applied label { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
+.proposal .applied input, .proposal-list input, .review-toggle input { width: 16px; height: 16px; min-height: 0; padding: 0; margin: 2px 0 0; flex: none; }
+.proposal-actions { display: flex; gap: 8px; margin-top: 8px; }
+.review-toggle { display: flex; gap: 6px; align-items: center; margin: 0 12px 8px; cursor: pointer; }
+
+.modal-backdrop { position: fixed; inset: 0; background: rgb(0 0 0 / 0.45); display: grid; place-items: center; z-index: 60; padding: 16px; }
+.modal.tailor { background: var(--surface); color: inherit; border-radius: 14px; width: min(640px, 100%); max-height: 90vh; overflow: auto; padding: 16px 18px 18px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 20px 60px rgb(0 0 0 / 0.3); }
+.modal.tailor header { display: flex; align-items: center; gap: 8px; }
+.modal.tailor h2 { font-size: 16px; margin: 0; display: flex; gap: 6px; align-items: center; }
+.modal.tailor h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.7; margin: 10px 0 4px; }
+.modal.tailor textarea { width: 100%; resize: vertical; }
+.tailor-help { margin: 0; font-size: 13px; opacity: 0.85; }
+.tailor-spec { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.tailor-spec p { margin: 0 0 4px; }
+.tailor-body { display: flex; flex-direction: column; gap: 8px; }
+.gaps { margin: 0; padding-left: 18px; color: #a15c00; }
+.proposal-list label { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
+.proposal-list, .proposal .applied { list-style: none; padding-left: 0; }
