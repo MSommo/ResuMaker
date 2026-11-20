@@ -20,6 +20,7 @@ from ..services import personas as people
 from ..services import resumes as repo
 from ..services import versions as vers
 from ..services.chat import ProposalGone, decide, run_chat, stream_chat
+from ..services import memory as mem
 from ..services.tailor import stream_tailor
 from ..services.improve import improve_text
 from . import schemas as sc
@@ -118,6 +119,44 @@ async def create_resume(persona_id: str, body: sc.CreateResumeIn, s: AsyncSessio
     await _persona(s, persona_id)
     row, persona = await repo.create_resume(s, parse_id(persona_id), resume=body.resume, layout_id=body.layoutId, template=body.template)
     return sc.ResumeOut.of(row, persona)
+
+
+# ------------------------------------------------------------------ memory
+
+
+def _memory_out(m) -> sc.MemoryOut:
+    return sc.MemoryOut(id=str(m.id), kind=m.kind, text=m.text, createdAt=m.created_at)
+
+
+@router.get("/personas/{persona_id}/memories", response_model=list[sc.MemoryOut])
+async def list_memories(persona_id: str, s: AsyncSession = Depends(get_session)):
+    await _persona(s, persona_id)
+    return [_memory_out(m) for m in await mem.list_memories(s, parse_id(persona_id))]
+
+
+@router.post("/personas/{persona_id}/memories", response_model=sc.MemoryOut, status_code=201, dependencies=[Depends(rate_limit)])
+async def add_memory(persona_id: str, body: sc.MemoryIn, infra: Infra = Depends(get_infra)):
+    """Save a preference or fact by hand (it is embedded with Gemini, so AI must be configured)."""
+    _ai(infra)
+    async with infra.session() as s:
+        await _persona(s, persona_id)
+        try:
+            row, _ = await mem.add(s, infra.llm, parse_id(persona_id), body.kind, body.text)
+        except mem.MemoryFull:
+            raise HTTPException(409, f"Memory is full ({mem.MAX_PER_PERSONA} items). Delete some first.") from None
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from None
+        except LLMError as e:
+            raise HTTPException(e.status, str(e)) from e
+        return _memory_out(row)
+
+
+@router.delete("/memories/{memory_id}", status_code=204)
+async def delete_memory(memory_id: str, s: AsyncSession = Depends(get_session)):
+    try:
+        await mem.delete(s, parse_id(memory_id))
+    except mem.MemoryNotFound:
+        raise HTTPException(404, "Memory not found.") from None
 
 
 # ------------------------------------------------------------------ CVs
@@ -236,7 +275,7 @@ async def chat(resume_id: str, body: sc.ChatIn, infra: Infra = Depends(get_infra
 def _chat_out(out) -> sc.ChatOut:
     return sc.ChatOut(
         reply=out.reply, applied=out.applied, skipped=out.skipped, changes=out.changes, messageId=out.message_id,
-        undoVersionId=out.undo_version_id, resume=sc.ResumeOut.of(out.row, out.persona),
+        undoVersionId=out.undo_version_id, intent=out.intent, resume=sc.ResumeOut.of(out.row, out.persona),
     )
 
 

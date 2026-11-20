@@ -148,4 +148,17 @@ class ChatOut(BaseModel):
     changes: list[str] = []
     messageId: str  # noqa: N815
     undoVersionId: str | None = None  # noqa: N815  (restore this version to undo the change)
+    intent: str = "edit"  # "edit" | "answer" | "remember": lets the UI refresh the Memory panel
     resume: ResumeOut
+
+
+class MemoryIn(BaseModel):
+    kind: Literal["preference", "fact"] = "preference"
+    text: str = Field(min_length=1, max_length=300)
+
+
+class MemoryOut(BaseModel):
+    id: str
+    kind: str
+    text: str
+    createdAt: datetime  # noqa: N815

@@ -20,6 +20,7 @@ from ..db import PersonaRow
 from ..domain.diff import diff_resumes
 from ..domain.models import Resume
 from ..infra import Infra
+from . import memory
 from . import resumes as repo
 from . import versions
 
@@ -76,7 +77,7 @@ def _detail(node: str, state: dict[str, Any]) -> str:
 def _status_after(node: str, state: dict[str, Any]) -> str | None:
     """What the user should read while the next step runs."""
     if node == "route":
-        return "Writing an answer…" if state.get("intent") == "answer" else "Planning the work…"
+        return {"answer": "Writing an answer…", "remember": "Saving to memory…"}.get(state.get("intent", ""), "Planning the work…")
     if node == "decompose":
         n = len(state.get("tasks", []))
         return f"Writing {n} parts in parallel…" if n > 1 else "Planning the changes…"
@@ -119,11 +120,14 @@ async def _drive(graph: Any, graph_input: Any, config: dict[str, Any] | None, fi
 async def _commit(infra: Infra, s: Any, rid: uuid.UUID, row: repo.ResumeRow, persona: PersonaRow, before: Resume, final: dict[str, Any], message: str, proposed: int | None = None) -> ChatOutcome:
     """Turn a finished run into saved changes: snapshot (for Undo), save with the optimistic lock, and record the conversation."""
     intent = final.get("intent", "edit")
-    applied: list[str] = [] if intent == "answer" else final.get("applied", [])
-    skipped: list[str] = [] if intent == "answer" else final.get("skipped", [])
+    quiet = intent in ("answer", "remember")  # no CV changes
+    applied: list[str] = [] if quiet else final.get("applied", [])
+    skipped: list[str] = [] if quiet else final.get("skipped", [])
     plan = final.get("plan", {})
     if intent == "answer":
         reply = final.get("answer") or "I don’t have an answer for that."
+    elif intent == "remember":
+        reply = await _remember(s, infra, row.persona_id, rid, final.get("memo") or {})
     else:
         reply = final.get("summary") or plan.get("reply") or final.get("first_reply") or ("Done." if applied else "I didn’t change anything.")
         if proposed is not None and len(applied) != proposed:  # the user accepted only some of the proposed changes
@@ -143,6 +147,19 @@ async def _commit(infra: Infra, s: Any, rid: uuid.UUID, row: repo.ResumeRow, per
     return ChatOutcome(reply, applied, skipped, row, persona, str(msg.id), changes, str(undo_id) if undo_id else None, intent)
 
 
+async def _remember(s: Any, infra: Infra, persona_id: uuid.UUID, rid: uuid.UUID, memo: dict[str, Any]) -> str:
+    """Save what the `remember` node extracted. Asking to remember something is the consent: nothing is ever saved silently."""
+    if not memo.get("ok") or not memo.get("text"):
+        return memo.get("reason") or "I wasn’t sure what to remember. Tell me the preference or fact in one sentence."
+    try:
+        row, created = await memory.add(s, infra.llm, persona_id, memo.get("kind", "preference"), memo["text"], rid)
+    except memory.MemoryFull:
+        return f"Your memory is full ({memory.MAX_PER_PERSONA} items). Delete some in the Memory panel first."
+    except ValueError as e:
+        return str(e)
+    return f"Okay, I’ll remember: {row.text}" if created else f"I already had that: {row.text}"
+
+
 async def stream_chat(infra: Infra, rid: uuid.UUID, message: str, mode: str = "apply") -> AsyncIterator[dict[str, Any]]:
     """mode "apply": change the CV. mode "propose": pause before changing it and emit a `proposal` to accept or reject."""
     if infra.graph is None or infra.graph_hitl is None:
@@ -155,7 +172,10 @@ async def stream_chat(infra: Infra, rid: uuid.UUID, message: str, mode: str = "a
         messages.append({"role": "user", "text": message})
 
         data = before.model_dump(mode="json")
-        state_in = {"messages": messages, "resume": data, "original": data, "mode": mode, "base_version": row.version}
+        state_in = {
+            "messages": messages, "resume": data, "original": data, "mode": mode, "base_version": row.version,
+            "memory": await memory.context_block(s, infra.llm, row.persona_id, message),  # the person's saved preferences and relevant facts
+        }
         propose = mode == "propose"
         run_id = uuid.uuid4().hex
         final: dict[str, Any] = dict(state_in)

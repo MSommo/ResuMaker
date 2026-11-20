@@ -204,6 +204,9 @@ eval-agent: ## Live end-to-end eval of the editing agent (13 tasks, real Gemini;
 eval-tailor: ## Live eval of tailoring: honest gaps, nothing invented, prompt injection ignored (real Gemini)
 	cd backend && set -a && . ../.env && set +a && DATABASE_URL=$(SCRATCH_DB) REDIS_URL=$(SCRATCH_REDIS) uv run pytest -m live -s -q tests/evals/test_tailor_eval.py
 
+eval-memory: ## Live eval of memory: embedding thresholds, extraction, preferences applied, wrong memory ignored (real Gemini)
+	cd backend && set -a && . ../.env && set +a && DATABASE_URL=$(SCRATCH_DB) REDIS_URL=$(SCRATCH_REDIS) uv run pytest -m live -s -q tests/evals/test_memory_eval.py
+
 test-web: ## Frontend unit tests (Markdown helpers), on the host
 	npx vitest run
 
@@ -217,7 +220,7 @@ check: typecheck test-web test ## Type-check + frontend unit tests + backend tes
 
 ##@ MCP server (for Claude Desktop / Claude Code)
 
-.PHONY: eval-router eval-agent eval-tailor
+.PHONY: eval-router eval-agent eval-tailor eval-memory
 .PHONY: mcp mcp-local mcp-http
 mcp: ## MCP over stdio, in Docker (what a client config runs)
 	$(COMPOSE) run --rm -T mcp

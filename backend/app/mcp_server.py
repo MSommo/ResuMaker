@@ -28,6 +28,7 @@ from .services import personas as people
 from .services import resumes as repo
 from .services import versions
 from .services.chat import ProposalGone, decide, run_chat, stream_chat
+from .services import memory as mem
 from .services.tailor import stream_tailor
 from .services.improve import improve_text
 
@@ -236,6 +237,39 @@ async def propose_changes(resume_id: str, instruction: str) -> dict[str, Any]:
     except LLMError as e:
         raise ValueError(str(e)) from None
     raise ValueError("The assistant did not finish.")
+
+
+@mcp.tool(annotations=ToolAnnotations(read_only_hint=True))
+async def list_memories(persona_id: str) -> list[dict[str, Any]]:
+    """What ResuMaker remembers about a person: style preferences and facts they confirmed. The editing agent uses these."""
+    async with infra().session() as s:
+        return [{"id": str(m.id), "kind": m.kind, "text": m.text} for m in await mem.list_memories(s, _uuid(persona_id))]
+
+
+@mcp.tool()
+async def remember(persona_id: str, text: str, kind: str = "preference") -> dict[str, Any]:
+    """Save one preference (how they want their CV written) or fact (something they confirmed about themselves). Only do this
+    when the person asked you to remember it. Saying the same thing twice keeps one memory."""
+    i = infra()
+    if i.llm is None:
+        raise ValueError("AI is not configured, so memory (which uses embeddings) is unavailable.")
+    async with i.session() as s:
+        try:
+            row, created = await mem.add(s, i.llm, _uuid(persona_id), kind, text)
+        except (ValueError, mem.MemoryNotFound, mem.MemoryFull, LLMError) as e:
+            raise ValueError(str(e) or "Could not save that memory.") from None
+    return {"id": str(row.id), "text": row.text, "created": created}
+
+
+@mcp.tool()
+async def forget_memory(memory_id: str) -> str:
+    """Delete one saved memory by id (from list_memories)."""
+    async with infra().session() as s:
+        try:
+            await mem.delete(s, _uuid(memory_id))
+        except mem.MemoryNotFound:
+            raise ValueError("Memory not found.") from None
+    return "Forgotten."
 
 
 @mcp.tool()

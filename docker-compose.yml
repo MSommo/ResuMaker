@@ -19,7 +19,7 @@ x-api-env: &api-env
 
 services:
   db:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16  # Postgres 16 with the pgvector extension (memory search). Debian-based, so the data volume is not shared with alpine builds.
     environment:
       POSTGRES_USER: resumaker
       POSTGRES_PASSWORD: resumaker   # local development only

@@ -38,7 +38,7 @@ from ..domain.diff import diff_resumes
 from ..domain.models import Resume
 from ..domain.ops import OP_NAMES, Op, apply_ops
 from .llm import LLM
-from .prompts import ANSWER_SYSTEM, CHAT_SYSTEM, CRITIC_SYSTEM, DECOMPOSE_SYSTEM, REPAIR_NOTE, REVISE_NOTE, ROUTER_SYSTEM
+from .prompts import ANSWER_SYSTEM, CHAT_SYSTEM, CRITIC_SYSTEM, DECOMPOSE_SYSTEM, MEMORY_SYSTEM, REPAIR_NOTE, REVISE_NOTE, ROUTER_SYSTEM
 
 log = logging.getLogger("resumaker.agent")
 
@@ -53,6 +53,7 @@ NODE_DOCS = {
     "critic": "LLM call: reads the request and the before/after of every changed section; reports missing parts, invented or lost facts, inconsistencies.",
     "revise": "LLM call: fixes exactly the problems the critic found (one round), applying new operations on top of the merged result.",
     "route": "Cheap-model LLM call: is this message a question (answer) or a request to change the CV (edit)? Defaults to edit.",
+    "remember": "Cheap-model LLM call: turns \"remember that…\" into one saved memory (a style preference or a confirmed fact). The service saves it.",
     "answer": "LLM call: answers a question about the CV in plain text. Never changes anything.",
     "plan": "LLM call: reads the CV and the conversation, returns a reply plus structured edit operations.",
     "apply": "Deterministic: runs the operations through the validated engine; collects what was applied and what failed.",
@@ -121,7 +122,7 @@ class AgentPlan(BaseModel):
 class Route(BaseModel):
     """The router's decision about the latest user message."""
 
-    intent: Literal["answer", "edit"]
+    intent: Literal["answer", "edit", "remember"]
     reason: str = ""
 
 
@@ -129,6 +130,15 @@ class Task(BaseModel):
     instruction: str
     sectionIds: list[str] = Field(default_factory=list)  # noqa: N815  (empty = the whole CV)
     itemIds: list[str] = Field(default_factory=list)  # noqa: N815  (empty = every item of those sections)
+
+
+class Memo(BaseModel):
+    """What the `remember` node extracts from "remember that…" (saved by the service, which owns the database)."""
+
+    ok: bool = True
+    kind: Literal["preference", "fact"] = "preference"
+    text: str = ""
+    reason: str = ""
 
 
 class Critique(BaseModel):
@@ -179,7 +189,9 @@ class AgentState(TypedDict, total=False):
     original: dict[str, Any]         # the CV when the run started, to re-apply only the accepted changes
     mode: str                        # "apply" (change the CV) or "propose" (pause for review first)
     base_version: int                # the CV's version when the run started (optimistic locking at commit time)
-    intent: str                      # route: "answer" | "edit"
+    intent: str                      # route: "answer" | "edit" | "remember"
+    memory: str                      # the person's saved preferences and relevant facts, as a prompt block ("" = none)
+    memo: dict[str, Any]             # remember: the memory to save
     answer: str                      # the reply, for questions
     plan: dict[str, Any]             # latest plan from the model
     first_reply: str
@@ -261,7 +273,8 @@ def _contents(state: dict[str, Any], extra: str | None = None, task: dict[str, A
                 ask = f"{task['instruction']}\n\n(This is one part of a larger request: \"{m['text'][:600]}\". Do ONLY this part; other parts are handled separately.)"
             else:
                 view, ask, ctx_note = snapshot(Resume.model_validate(state["resume"])), m["text"], ""
-            ctx = f"CATALOG (layouts, zones, templates):\n{json.dumps(catalog())}\n\nCURRENT CV STATE:\n{json.dumps(view, ensure_ascii=False)}{ctx_note}"
+            mem = f"\n\nMEMORY (saved preferences and confirmed facts about this person):\n{state['memory']}" if state.get("memory") else ""
+            ctx = f"CATALOG (layouts, zones, templates):\n{json.dumps(catalog())}\n\nCURRENT CV STATE:\n{json.dumps(view, ensure_ascii=False)}{ctx_note}{mem}"
             out.append({"role": "user", "parts": [ctx, ask, *([extra] if extra else [])]})
         else:
             out.append({"role": role, "parts": [m["text"]]})
@@ -294,8 +307,12 @@ def build_graph(llm: LLM | None, checkpointer: Any = None, use_decompose: bool =
         turns = state["messages"][-8:]
         convo = "\n".join(f"{'Assistant' if m['role'] == 'assistant' else 'User'}: {m['text']}" for m in turns)
         cv = json.dumps(snapshot(Resume.model_validate(state["resume"])), ensure_ascii=False)
-        text = await llm.text(system=ANSWER_SYSTEM, prompt=f"CURRENT CV STATE:\n{cv}\n\nCONVERSATION:\n{convo}", temperature=0.4)
+        text = await llm.text(system=ANSWER_SYSTEM, prompt=f"CURRENT CV STATE:\n{cv}\n\n" + (f"MEMORY (saved preferences and facts about this person):\n{state['memory']}\n\n" if state.get("memory") else "") + f"CONVERSATION:\n{convo}", temperature=0.4)
         return {"answer": text.strip(), "applied": [], "applied_ops": [], "skipped": []}
+
+    async def remember(state: AgentState) -> AgentState:
+        m = await llm.json(system=MEMORY_SYSTEM, contents=[{"role": "user", "parts": [state["messages"][-1]["text"]]}], schema=Memo, temperature=0.0, fast=True)
+        return {"memo": m.model_dump(), "applied": [], "applied_ops": [], "skipped": []}
 
     async def decompose(state: AgentState) -> AgentState:
         """Best effort: on any problem the request simply runs as one task, exactly as before."""
@@ -327,7 +344,7 @@ def build_graph(llm: LLM | None, checkpointer: Any = None, use_decompose: bool =
         never touches shared state; it returns the operations that worked and `merge` replays them in order."""
         idx, task = payload["idx"], payload["task"]
         cv = Resume.model_validate(payload["resume"])
-        view = {"messages": payload["messages"]}
+        view = {"messages": payload["messages"], "memory": payload.get("memory", "")}
         applied_ops: list[dict[str, Any]] = []
         skipped: list[str] = []
         reply = ""
@@ -446,14 +463,14 @@ def build_graph(llm: LLM | None, checkpointer: Any = None, use_decompose: bool =
         res = apply_ops(Resume.model_validate(state["original"]), [Op(**ops[i]) for i in keep])
         return {"resume": res.resume.model_dump(mode="json"), "applied": res.applied, "applied_ops": [o.model_dump(exclude_none=True) for o in res.applied_ops]}
 
-    def after_route(state: AgentState) -> Literal["answer", "decompose"]:
-        return "answer" if state.get("intent") == "answer" else "decompose"
+    def after_route(state: AgentState) -> Literal["answer", "remember", "decompose"]:
+        return {"answer": "answer", "remember": "remember"}.get(state.get("intent", ""), "decompose")
 
     def fan_out(state: AgentState) -> Any:
         """Several tasks: one `write` each, all at once. One task: the plain plan -> apply path."""
         if len(state.get("tasks", [])) < 2:
             return "plan"
-        return [Send("write", {"idx": i, "task": t, "resume": state["resume"], "messages": state["messages"]}) for i, t in enumerate(state["tasks"])]
+        return [Send("write", {"idx": i, "task": t, "resume": state["resume"], "messages": state["messages"], "memory": state.get("memory", "")}) for i, t in enumerate(state["tasks"])]
 
     def finish(state: AgentState) -> Literal["review", "__end__"]:
         return "review" if state.get("mode") == "propose" and state.get("applied") else END
@@ -468,10 +485,11 @@ def build_graph(llm: LLM | None, checkpointer: Any = None, use_decompose: bool =
         return "revise" if not state["critique"]["ok"] and state["critique"]["problems"] else finish(state)
 
     g = StateGraph(AgentState)
-    for name, fn in (("route", route), ("answer", answer), ("decompose", decompose), ("plan", plan), ("write", write), ("merge", merge), ("critic", critic), ("revise", revise), ("apply", apply), ("repair", repair), ("review", review), ("finalize", finalize)):
+    for name, fn in (("route", route), ("answer", answer), ("remember", remember), ("decompose", decompose), ("plan", plan), ("write", write), ("merge", merge), ("critic", critic), ("revise", revise), ("apply", apply), ("repair", repair), ("review", review), ("finalize", finalize)):
         g.add_node(name, fn)
     g.add_edge(START, "route")
-    g.add_conditional_edges("route", after_route, {"answer": "answer", "decompose": "decompose"})
+    g.add_conditional_edges("route", after_route, {"answer": "answer", "remember": "remember", "decompose": "decompose"})
+    g.add_edge("remember", END)
     g.add_edge("answer", END)
     g.add_conditional_edges("decompose", fan_out, ["plan", "write"])
     g.add_edge("plan", "apply")

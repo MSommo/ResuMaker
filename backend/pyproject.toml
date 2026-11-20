@@ -13,6 +13,7 @@ dependencies = [
     "langgraph>=1.2.23",
     "langgraph-checkpoint-postgres>=3.2.1",
     "mcp>=2.3.0",
+    "pgvector>=0.5.1",
     "playwright>=1.65.2",
     "psycopg[binary,pool]>=3.3.9",
     "pycountry>=26.2.16",

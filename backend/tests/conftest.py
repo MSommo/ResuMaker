@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import zlib
 
 # Tests use their own database and Redis db, never the dev data. Hosts/ports come from the environment so the same
 # tests run on the host (the scratch stack on localhost:5434) and inside the docker network (db:5432). The default
@@ -20,7 +21,7 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from app.agent.graph import AgentPlan, Critique, Decomposition, Route
+from app.agent.graph import AgentPlan, Critique, Decomposition, Memo, Route
 from app.agent.llm import LLMError
 from app.agent.prompts import ANSWER_SYSTEM
 from app.agent.tailor import JobSpec
@@ -45,6 +46,8 @@ class FakeLLM:
         self.decompositions: list[Decomposition | Exception] = []  # unscripted: one task, i.e. the old behaviour
         self.critiques: list[Critique | Exception] = []  # unscripted: the critic approves
         self.decompose_calls = 0
+        self.embed_calls = 0
+        self.memos: list = []  # scripted Memo results for the `remember` node; unscripted: a preference echoing the message
         self.critic_calls = 0
         self.specs: list[JobSpec | Exception] = []  # unscripted: a plain spec
         self.seen: list[str] = []  # everything the planning/writing calls were shown
@@ -61,11 +64,28 @@ class FakeLLM:
         self.text_calls.append(prompt)
         return "Improved text."
 
+    async def embed(self, texts, *, query=False):
+        """Deterministic stand-in: hashed bag of words, normalised. Texts sharing words are close, unrelated texts are far."""
+        self.embed_calls += 1
+        out = []
+        for t in texts:
+            v = [0.0] * 768
+            for w in re.findall(r"[a-z0-9]+", t.lower()):
+                v[zlib.crc32(w.encode()) % 768] += 1.0
+            n = sum(x * x for x in v) ** 0.5 or 1.0
+            out.append([x / n for x in v])
+        return out
+
     async def json(self, *, system, contents, schema, temperature=0.3, fast=False):
         if schema is Route:
             self.route_calls += 1
             self.fast_flags.append(fast)
             nxt = self.routes.pop(0) if self.routes else Route(intent="edit", reason="test default")
+            if isinstance(nxt, Exception):
+                raise nxt
+            return nxt
+        if schema is Memo:
+            nxt = self.memos.pop(0) if self.memos else Memo(ok=True, kind="preference", text=contents[0]["parts"][0])
             if isinstance(nxt, Exception):
                 raise nxt
             return nxt
@@ -141,7 +161,8 @@ async def client(infra):
     app.state.infra = infra  # ASGITransport doesn't run lifespan; infra is already started
     llm = infra.llm
     llm.plans.clear(), llm.routes.clear(), llm.decompositions.clear(), llm.specs.clear(), llm.seen.clear(), llm.critiques.clear(), llm.answers.clear(), llm.text_calls.clear(), llm.fast_flags.clear()
-    llm.json_calls = llm.route_calls = llm.answer_calls = llm.decompose_calls = llm.critic_calls = 0
+    llm.json_calls = llm.route_calls = llm.answer_calls = llm.decompose_calls = llm.critic_calls = llm.embed_calls = 0
+    llm.memos.clear()
     infra.pdf.renders = 0
     infra.settings.ai_rate_limit_per_min = 1000
     await infra.redis.flushdb()

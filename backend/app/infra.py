@@ -47,7 +47,7 @@ class Infra:
         await asyncio.to_thread(run_migrations)  # alembic drives its own event loop, so it gets its own thread
         self.redis = Redis.from_url(s.redis_url)
         self.cache = Cache(self.redis)
-        self.llm: LLM | None = self._llm_override or (GeminiLLM(s.gemini_api_key, s.gemini_model, s.gemini_fast_model or None) if s.gemini_api_key else None)
+        self.llm: LLM | None = self._llm_override or (GeminiLLM(s.gemini_api_key, s.gemini_model, s.gemini_fast_model or None, s.gemini_embedding_model, s.embedding_dims) if s.gemini_api_key else None)
 
         # LangGraph's own tables (checkpoints) live in the same database but are created and versioned by the library,
         # not by Alembic (migrations/env.py ignores them). Runs that pause for review are stored here.

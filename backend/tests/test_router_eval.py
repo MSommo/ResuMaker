@@ -21,6 +21,11 @@ EDITS = [
     "Rewrite my latest job's bullets to be more impactful", "Remove the hobbies section", "Change my headline to Staff Engineer",
     "Switch to the timeline layout", "Move Skills to the top", "Fix the typos", "Make it shorter",
 ]
+REMEMBERS = [
+    "Remember that I prefer short bullets", "Always write my CV in British English", "Note that my title at Acme was Staff Engineer",
+    "From now on keep every bullet under 12 words", "Remember I never want buzzwords like synergy", "Please remember that I was promoted in 2022",
+]
+EDITS += ["Shorten my bullets and always keep them short", "Rewrite my profile and remember that I like a formal tone"]  # a change now beats "remember"
 MIN_ACCURACY = 0.9
 
 
@@ -30,11 +35,11 @@ async def test_router_golden_set():
         pytest.skip("needs a real GEMINI_API_KEY")
     llm = GeminiLLM(key, os.environ.get("GEMINI_MODEL", "gemini-flash-latest"), "gemini-flash-lite-latest")
     wrong = []
-    for text, want in [(q, "answer") for q in QUESTIONS] + [(e, "edit") for e in EDITS]:
+    for text, want in [(q, "answer") for q in QUESTIONS] + [(e, "edit") for e in EDITS] + [(r, "remember") for r in REMEMBERS]:
         r = await llm.json(system=ROUTER_SYSTEM, contents=[{"role": "user", "parts": [text]}], schema=Route, temperature=0.0, fast=True)
         if r.intent != want:
             wrong.append((text, want, r.intent))
-    total = len(QUESTIONS) + len(EDITS)
+    total = len(QUESTIONS) + len(EDITS) + len(REMEMBERS)
     acc = 1 - len(wrong) / total
     print(f"\nrouter accuracy {acc:.0%} ({total - len(wrong)}/{total}); misses: {wrong}")
     assert acc >= MIN_ACCURACY, wrong

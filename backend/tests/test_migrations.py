@@ -76,8 +76,10 @@ async def test_legacy_database_is_migrated_and_backfilled(monkeypatch):
         # Persona deletion cascades at the database level.
         await conn.execute("delete from personas where id = $1", mario["id"])
         assert await conn.fetchval("select count(*) from resumes") == 1
-        assert await conn.fetchval("select version_num from alembic_version") == "0003"  # head: personas (0002) + versions (0003)
+        assert await conn.fetchval("select version_num from alembic_version") == "0004"  # head: personas (0002), versions (0003), memories (0004)
         assert await conn.fetchval("select count(*) from resume_versions") == 0  # 0003 added the (empty) history table
+        assert await conn.fetchval("select count(*) from memories") == 0  # 0004 added the (empty) memory table
+        assert await conn.fetchval("select extname from pg_extension where extname = 'vector'") == "vector"
     finally:
         await conn.close()
         admin = await asyncpg.connect(ADMIN_DB_URL)

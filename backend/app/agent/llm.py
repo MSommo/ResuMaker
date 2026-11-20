@@ -24,13 +24,19 @@ class LLM(Protocol):
 
     async def json(self, *, system: str, contents: list[dict[str, Any]], schema: type[T], temperature: float = 0.3, fast: bool = False) -> T: ...
 
+    async def embed(self, texts: list[str], *, query: bool = False) -> list[list[float]]:
+        """One vector per text. `query=True` for a search query, False for something being stored (the model treats them differently)."""
+        ...
+
 
 def _contents(items: list[dict[str, Any]]) -> list[types.Content]:
     return [types.Content(role=i["role"], parts=[types.Part(text=t) for t in i["parts"]]) for i in items]
 
 
 class GeminiLLM:
-    def __init__(self, api_key: str, model: str, fast_model: str | None = None):
+    def __init__(self, api_key: str, model: str, fast_model: str | None = None, embedding_model: str = "gemini-embedding-001", dims: int = 768):
+        self.embedding_model = embedding_model
+        self.dims = dims
         self.model = model
         self.fast_model = fast_model or model
         self.client = genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=60_000, api_version="v1beta"))
@@ -78,3 +84,16 @@ class GeminiLLM:
             return schema.model_validate_json(raw)
         except Exception as e:  # noqa: BLE001
             raise LLMError("The assistant returned an unreadable answer. Please try again.") from e
+
+    async def embed(self, texts: list[str], *, query: bool = False) -> list[list[float]]:
+        cfg = types.EmbedContentConfig(task_type="RETRIEVAL_QUERY" if query else "RETRIEVAL_DOCUMENT", output_dimensionality=self.dims)
+        try:
+            res = await self.client.aio.models.embed_content(model=self.embedding_model, contents=texts, config=cfg)
+        except errors.APIError as e:
+            raise LLMError(e.message or "Gemini embedding request failed.", 429 if e.code == 429 else 502) from e
+        except Exception as e:  # noqa: BLE001
+            raise LLMError(f"Could not reach Gemini: {e}") from e
+        vectors = [list(e.values or []) for e in (res.embeddings or [])]
+        if len(vectors) != len(texts) or any(len(v) != self.dims for v in vectors):
+            raise LLMError("Gemini returned unexpected embeddings.")
+        return vectors
