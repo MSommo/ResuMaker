@@ -93,7 +93,7 @@ graph TD;
   apply -->|review mode| review --> finalize --> END;
 ```
 
-**Review mode.** Tick "Review changes before applying" in the chat (or send `mode: "propose"`). The graph pauses at `review` and nothing is saved. The paused run is stored in Postgres by LangGraph's checkpointer (its own `checkpoint*` tables; Alembic ignores them), so it survives an API restart; unanswered proposals are pruned after 7 days. You then accept all, none, or some changes; `finalize` re-applies only the accepted ones. A proposal can be decided once (`410` afterwards), and if the CV changed meanwhile the decision fails with `409`.
+**Review mode (the default in the chat).** The assistant proposes and you approve; "Approve all for this session" (a button in the chat and on the review card) switches to applying right away until the browser tab session ends, and you can Undo either way. The API default is unchanged (`mode: "apply"`; send `"propose"` for review). The graph pauses at `review` and nothing is saved. The paused run is stored in Postgres by LangGraph's checkpointer (its own `checkpoint*` tables; Alembic ignores them), so it survives an API restart; unanswered proposals are pruned after 7 days. You then accept all, none, or some changes; `finalize` re-applies only the accepted ones. A proposal can be decided once (`410` afterwards), and if the CV changed meanwhile the decision fails with `409`.
 
 `make eval-router` runs a golden set of 20 messages (questions vs. edits) against the real fast model (a few cents; excluded from `make test`). It currently scores 20/20.
 

@@ -26,6 +26,26 @@ export function TailorDialog({ id, onClose }: { id: string; onClose: () => void 
     return () => window.removeEventListener('keydown', onKey)
   })
 
+  // Review stage hotkeys: A creates the tailored CV, R discards it, Ctrl/Cmd+Enter creates from anywhere.
+  useEffect(() => {
+    if (stage !== 'review' || !proposal) return
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        if (picked.size) void apply()
+      } else if (!(e.metaKey || e.ctrlKey || e.altKey) && !(el instanceof HTMLTextAreaElement)) {
+        const k = e.key.toLowerCase()
+        if (k === 'a' && picked.size) void apply()
+        else if (k === 'r') void cancel()
+        else return
+        e.preventDefault()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
   const start = async () => {
     setStage('working')
     setError('')
@@ -119,8 +139,8 @@ export function TailorDialog({ id, onClose }: { id: string; onClose: () => void 
                 {proposal.skipped.length > 0 && <p className="skipped">Couldn’t prepare {proposal.skipped.length}: {proposal.skipped.join('; ')}</p>}
                 {error && <p className="skipped">{error}</p>}
                 <div className="proposal-actions">
-                  <button type="button" className="btn primary" disabled={stage === 'applying' || picked.size === 0} onClick={() => void apply()}>{stage === 'applying' ? 'Creating…' : 'Create tailored CV'}</button>
-                  <button type="button" className="btn" disabled={stage === 'applying'} onClick={() => void cancel()}>Discard</button>
+                  <button type="button" className="btn primary" disabled={stage === 'applying' || picked.size === 0} onClick={() => void apply()}>{stage === 'applying' ? 'Creating…' : <>Create tailored CV <kbd>A</kbd></>}</button>
+                  <button type="button" className="btn" disabled={stage === 'applying'} onClick={() => void cancel()}>Discard <kbd>R</kbd></button>
                 </div>
               </>
             )}

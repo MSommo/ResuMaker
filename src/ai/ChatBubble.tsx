@@ -15,6 +15,15 @@ interface Msg {
   error?: boolean
 }
 
+const AUTO_KEY = 'resumaker.approveAll'
+const readAuto = () => {
+  try {
+    return sessionStorage.getItem(AUTO_KEY) === '1' // sessionStorage: it ends with the tab, which is what "this session" means
+  } catch {
+    return false
+  }
+}
+
 const SUGGESTIONS = [
   'Tighten my profile to 3 sentences',
   'Rewrite my latest job’s bullets to be more impactful',
@@ -31,7 +40,8 @@ export function ChatBubble() {
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState('Thinking…')
   const [tailoring, setTailoring] = useState(false)
-  const [review, setReview] = useState(false) // propose changes first instead of applying them
+  // Human in the loop by default: the assistant proposes and you approve. "Approve all" skips that until the tab session ends.
+  const [auto, setAuto] = useState(readAuto)
   const [proposal, setProposal] = useState<Proposal | null>(null)
   const [picked, setPicked] = useState<Set<number>>(new Set())
   const loaded = useRef(false)
@@ -71,7 +81,7 @@ export function ChatBubble() {
     try {
       await flush() // the agent reads the saved CV, so make sure it has your latest edits
       setStatus('Thinking…')
-      const out = await chatStream(id, content, review ? 'propose' : 'apply', (ev) => ev.type === 'status' && setStatus(ev.label))
+      const out = await chatStream(id, content, auto ? 'apply' : 'propose', (ev) => ev.type === 'status' && setStatus(ev.label))
       if ('runId' in out) {
         setProposal(out)
         setPicked(new Set(out.items.map((i) => i.index)))
@@ -82,6 +92,45 @@ export function ChatBubble() {
       setBusy(false)
     }
   }
+
+  const changeAuto = (on: boolean) => {
+    setAuto(on)
+    try {
+      on ? sessionStorage.setItem(AUTO_KEY, '1') : sessionStorage.removeItem(AUTO_KEY)
+    } catch {
+      /* private mode: the choice just lasts until reload */
+    }
+  }
+
+  const selection = (): 'all' | number[] => (proposal && picked.size === proposal.items.length ? 'all' : [...picked].sort((a, b) => a - b))
+  const approve = () => void decide(selection())
+  const approveSession = () => {
+    changeAuto(true)
+    void decide(selection())
+  }
+
+  // Hotkeys for the review card: A approve, R reject, S approve all for this session, Ctrl/Cmd+Enter approve from anywhere.
+  // The message box is disabled while a proposal waits, so plain letters are never typed into it.
+  useEffect(() => {
+    if (!proposal || busy) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        if (picked.size) approve()
+        return
+      }
+      const el = e.target as HTMLElement
+      if (e.metaKey || e.ctrlKey || e.altKey || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement || (el instanceof HTMLInputElement && el.type !== 'checkbox')) return
+      const k = e.key.toLowerCase()
+      if (k === 'a' && picked.size) approve()
+      else if (k === 'r') void decide('none')
+      else if (k === 's' && picked.size) approveSession()
+      else return
+      e.preventDefault()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
 
   const showResult = (out: ChatResult) => {
     if (out.applied.length) adopt(out.resume.resume, out.resume.version)
@@ -181,8 +230,9 @@ export function ChatBubble() {
                 </ul>
                 {proposal.skipped.length > 0 && <p className="skipped">Couldn’t prepare {proposal.skipped.length}: {proposal.skipped.join('; ')}</p>}
                 <div className="proposal-actions">
-                  <button type="button" className="btn small primary" disabled={busy || picked.size === 0} onClick={() => void decide(picked.size === proposal.items.length ? 'all' : [...picked].sort((a, b) => a - b))}>Apply {picked.size === proposal.items.length ? 'all' : `${picked.size} selected`}</button>
-                  <button type="button" className="btn small" disabled={busy} onClick={() => void decide('none')}>Reject</button>
+                  <button type="button" className="btn small primary" disabled={busy || picked.size === 0} onClick={approve}>Approve{picked.size === proposal.items.length ? '' : ` ${picked.size} selected`} <kbd>A</kbd></button>
+                  <button type="button" className="btn small" disabled={busy} onClick={() => void decide('none')}>Reject <kbd>R</kbd></button>
+                  <button type="button" className="btn small" disabled={busy || picked.size === 0} title="Apply these and stop asking until this browser tab session ends. You can still Undo." onClick={approveSession}>Approve all for this session <kbd>S</kbd></button>
                 </div>
               </div>
             )}
@@ -194,14 +244,20 @@ export function ChatBubble() {
               ref={inputRef}
               rows={1}
               value={text}
-              placeholder="Ask for a change…"
+              disabled={!!proposal}
+              placeholder={proposal ? 'Approve or reject the changes above first' : 'Ask for a change…'}
               aria-label="Message"
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), void send(text))}
             />
             <button type="submit" className="btn primary icon" disabled={busy || !!proposal || !text.trim()} aria-label="Send"><Send /></button>
           </form>
-          <label className="ai-note review-toggle"><input type="checkbox" checked={review} onChange={(e) => setReview(e.target.checked)} /> Review changes before applying</label>
+          {auto && (
+            <div className="ai-note approval-mode">
+              <span>Approve all is on for this session: changes apply right away (you can still Undo).</span>
+              <button type="button" className="link-btn" onClick={() => changeAuto(false)}>Turn off</button>
+            </div>
+          )}
           <small className="ai-note">Your CV text is sent to Google Gemini to answer. AI can make mistakes. Check the changes.</small>
         </section>
       )}

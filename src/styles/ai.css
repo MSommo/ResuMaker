@@ -63,10 +63,7 @@
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
 
 /* Review before applying, and Tailor to a job */
-.proposal .applied label { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
-.proposal .applied input, .proposal-list input, .review-toggle input { width: 16px; height: 16px; min-height: 0; padding: 0; margin: 2px 0 0; flex: none; }
 .proposal-actions { display: flex; gap: 8px; margin-top: 8px; }
-.review-toggle { display: flex; gap: 6px; align-items: center; margin: 0 12px 8px; cursor: pointer; }
 
 .modal-backdrop { position: fixed; inset: 0; background: rgb(0 0 0 / 0.45); display: grid; place-items: center; z-index: 60; padding: 16px; }
 .modal.tailor { background: var(--surface); color: inherit; border-radius: 14px; width: min(640px, 100%); max-height: 90vh; overflow: auto; padding: 16px 18px 18px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 20px 60px rgb(0 0 0 / 0.3); }
@@ -79,5 +76,15 @@
 .tailor-spec p { margin: 0 0 4px; }
 .tailor-body { display: flex; flex-direction: column; gap: 8px; }
 .gaps { margin: 0; padding-left: 18px; color: #a15c00; }
-.proposal-list label { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
-.proposal-list, .proposal .applied { list-style: none; padding-left: 0; }
+.approval-mode { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin: 0 14px 8px; }
+.link-btn { background: none; border: 0; padding: 0; color: var(--accent, #2f55d4); cursor: pointer; font: inherit; text-decoration: underline; white-space: nowrap; }
+.proposal-actions { flex-wrap: wrap; }
+.btn kbd { font: inherit; font-size: 10px; margin-left: 6px; padding: 0 5px; border: 1px solid currentColor; border-radius: 4px; opacity: 0.65; line-height: 1.5; }
+
+/* Checkbox lists (review card, tailor dialog): one row per change, no bullets, comfortable padding */
+.proposal .applied, .proposal-list { list-style: none; margin: 0; padding: 6px 10px; display: grid; gap: 2px; }
+.proposal .applied li, .proposal-list li { margin: 0; padding: 0; }
+.proposal .applied label, .proposal-list label { display: flex; align-items: flex-start; gap: 10px; padding: 5px 0; cursor: pointer; line-height: 1.35; }
+.proposal .applied input[type="checkbox"], .proposal-list input[type="checkbox"] { width: 16px; height: 16px; min-height: 0; padding: 0; margin: 1px 0 0; flex: none; accent-color: var(--accent, #2f55d4); cursor: pointer; }
+.proposal .applied label:has(input:not(:checked)), .proposal-list label:has(input:not(:checked)) { opacity: 0.55; }
+.proposal .applied label:has(input:focus-visible), .proposal-list label:has(input:focus-visible) { outline: 2px solid var(--accent, #2f55d4); outline-offset: 2px; border-radius: 4px; }
