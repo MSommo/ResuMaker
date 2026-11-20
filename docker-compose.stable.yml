@@ -4,12 +4,12 @@
 # working tree, and there are no bind mounts: editing files in this repo cannot change what is running here.
 # Same project name and volume as the earlier dev stack, so your database carries over unchanged.
 #
-#   make stable-build   # build images from a git tag (default: stable-2), not from the working tree
+#   make stable-build   # build images from a git tag (default: stable), not from the working tree
 #   make stable-up      # start / update the frozen stack
 name: resumaker
 
 x-api: &api
-  image: resumaker-api:${STABLE_TAG:-stable-2}
+  image: resumaker-api:${STABLE_TAG:-stable}
   env_file:
     - path: .env            # GEMINI_API_KEY; optional (AI is simply off without it)
       required: false
@@ -69,7 +69,7 @@ services:
       retries: 12
 
   web:
-    image: resumaker-web:${STABLE_TAG:-stable-2}
+    image: resumaker-web:${STABLE_TAG:-stable}
     container_name: resumaker-web
     restart: unless-stopped
     ports:

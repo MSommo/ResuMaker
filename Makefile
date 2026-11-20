@@ -22,7 +22,7 @@ SCRATCH_REDIS := redis://localhost:6381/0
 
 # The frozen stack (docker-compose.stable.yml): pre-built images from a git tag, no bind mounts, your real data.
 -include stable.env               # local, git-ignored: written by `make stable-expose` / `stable-hide`
-STABLE_TAG      ?= stable-2
+STABLE_TAG      ?= stable
 STABLE_WEB_PORT ?= 5174
 STABLE_BIND     ?= 127.0.0.1      # 0.0.0.0 = reachable from the local network
 STABLE          := docker compose -f docker-compose.stable.yml
@@ -41,11 +41,17 @@ help: ## Show this help
 
 ##@ Frozen stack (the stable build, with your real data: no hot reload, immune to edits in this repo)
 
-.PHONY: stable-build stable-up stable-expose stable-hide stable-down stable-restart stable-ps stable-logs stable-status stable-backup stable-mcp
+.PHONY: stable-release stable-build stable-up stable-expose stable-hide stable-down stable-restart stable-ps stable-logs stable-status stable-backup stable-mcp
 stable-build: ## Build the frozen images from git tag STABLE_TAG (committed code only, never the working tree)
 	@git rev-parse --verify --quiet refs/tags/$(STABLE_TAG) >/dev/null || { echo "No git tag '$(STABLE_TAG)'."; exit 1; }
 	git archive $(STABLE_TAG):backend | docker build -t resumaker-api:$(STABLE_TAG) -
 	git archive $(STABLE_TAG) | docker build -f Dockerfile.web.static -t resumaker-web:$(STABLE_TAG) -
+
+stable-release: ## REBUILD the frozen app from the latest commit (moves the `stable` tag to HEAD, builds, restarts: brief downtime)
+	@test -z "$$(git status --porcelain)" || { echo "Commit or stash your changes first: the frozen app is built from a commit."; exit 1; }
+	git tag -f stable HEAD
+	@$(MAKE) --no-print-directory stable-build STABLE_TAG=stable
+	@$(MAKE) --no-print-directory stable-up STABLE_TAG=stable
 
 stable-up: ## Start / update the frozen stack (http://localhost:STABLE_WEB_PORT)
 	@$(MAKE) --no-print-directory check-ports WEB_PORT=$(STABLE_WEB_PORT) MAKECMDGOALS=stable-up
