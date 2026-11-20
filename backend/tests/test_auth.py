@@ -15,7 +15,7 @@ from tests.conftest import HEADERS, PASSWORD, make_user
 from tests.test_api import create
 
 # /api/metrics needs no session but its own bearer token (METRICS_TOKEN), and is a 404 without one: tests/test_telemetry.py.
-PUBLIC = {("GET", "/api/status"), ("GET", "/api/metrics"), ("POST", "/api/auth/login"), ("POST", "/api/auth/accept"), ("POST", "/api/auth/logout")}
+PUBLIC = {("GET", "/api/status"), ("GET", "/api/metrics"), ("POST", "/api/auth/login"), ("POST", "/api/auth/accept"), ("POST", "/api/auth/accept/check"), ("POST", "/api/auth/logout")}
 
 
 # ---------------------------------------------------------------- secure by default
@@ -287,7 +287,7 @@ async def test_admin_prepares_a_persona_then_invites_then_the_person_completes_i
 
 async def test_there_is_no_self_registration(app):
     paths = {p for p in app.openapi()["paths"] if p.startswith("/api/auth") or p.startswith("/api/account")}
-    assert paths == {"/api/auth/login", "/api/auth/accept", "/api/auth/logout", "/api/auth/me", "/api/auth/password", "/api/auth/logout-all", "/api/account/delete"}
+    assert paths == {"/api/auth/login", "/api/auth/accept", "/api/auth/accept/check", "/api/auth/logout", "/api/auth/me", "/api/auth/password", "/api/auth/logout-all", "/api/account/delete"}
     for p in ("/api/auth/register", "/api/auth/signup", "/api/users", "/api/personas"):
         assert p not in app.openapi()["paths"]
 
@@ -425,3 +425,15 @@ def test_login_normalisation():
     assert normalize_login("  Ada@Example.COM ") == "ada@example.com"
     for bad in ("", "ada", "a@b", "a b@c.d", "@x.org", "x" * 260 + "@a.b"):
         assert normalize_login(bad) is None
+
+
+async def test_invite_without_email_lets_the_person_choose_one(make_client, anon):
+    admin = await make_client(role="admin")
+    r = await admin.post("/api/admin/users", json={"firstName": "No", "lastName": "Mail"})
+    assert r.status_code == 201 and r.json()["login"] is None
+    link = (await admin.post(f"/api/admin/users/{r.json()['id']}/invite")).json()["link"]
+    token = link.split("#")[1]
+    assert (await anon.post("/api/auth/accept/check", json={"token": token})).json() == {"needsEmail": True}
+    assert (await anon.post("/api/auth/accept", json={"token": token, "password": PASSWORD})).status_code == 422  # no email given
+    ok = await anon.post("/api/auth/accept", json={"token": token, "password": PASSWORD, "login": "Chosen.Mail@Example.com"})
+    assert ok.status_code == 200 and ok.json()["login"] == "chosen.mail@example.com"

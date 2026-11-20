@@ -166,13 +166,34 @@ def link_url(settings: Settings, token: str) -> str:
     return f"{settings.base_url}/accept#{token}"  # in the fragment: never sent to a server, proxy or access log
 
 
-async def redeem_link(s: AsyncSession, settings: Settings, token: str, password: str) -> UserRow:
-    row = await s.scalar(select(UserTokenRow).where(UserTokenRow.token_hash == hash_token(token), UserTokenRow.purpose.in_(("invite", "reset"))).with_for_update())
+async def _live_link(s: AsyncSession, token: str, *, lock: bool = False) -> tuple[UserTokenRow, UserRow]:
+    q = select(UserTokenRow).where(UserTokenRow.token_hash == hash_token(token), UserTokenRow.purpose.in_(("invite", "reset")))
+    row = await s.scalar(q.with_for_update() if lock else q)
     if row is None or row.used_at is not None or (row.expires_at and row.expires_at <= utcnow()):
         raise TokenInvalid()
     user = await s.get(UserRow, row.user_id)
-    if user is None or not user.is_active or not user.login:
+    if user is None or not user.is_active:
         raise TokenInvalid()
+    return row, user
+
+
+async def link_needs_email(s: AsyncSession, token: str) -> bool:
+    """Whether the person must give the email they will sign in with (the admin didn't know it)."""
+    _, user = await _live_link(s, token)
+    return not user.login
+
+
+async def redeem_link(s: AsyncSession, settings: Settings, token: str, password: str, login: str | None = None) -> UserRow:
+    _, user = await _live_link(s, token, lock=True)
+    if not user.login:
+        norm = normalize_login(login or "")
+        if norm is None:
+            raise ValueError("Enter a valid email address to sign in with.")
+        if await s.scalar(select(UserRow.id).where(UserRow.login == norm)):
+            raise LoginTaken()
+        user.login = norm
+        if not user.email:
+            user.email = norm
     await set_password(s, settings, user, password)  # raises WeakPassword and leaves the link usable; spends it on success
     return user
 
@@ -212,16 +233,18 @@ async def _ensure_not_last_admin(s: AsyncSession, user: UserRow) -> None:
         raise LastAdmin()
 
 
-async def create_user(s: AsyncSession, *, login: str, first_name: str, last_name: str = "", role: str = "user") -> UserRow:
-    """A persona draft: name + sign-in email, no password. The contact email on its CVs starts as the same address."""
-    norm = normalize_login(login)
-    if norm is None:
-        raise ValueError("Enter a valid email address to sign in with.")
+async def create_user(s: AsyncSession, *, login: str | None, first_name: str, last_name: str = "", role: str = "user") -> UserRow:
+    """A persona draft: name, and optionally the sign-in email; no password. The contact email on its CVs starts as the same address."""
+    norm = None
+    if login and login.strip():
+        norm = normalize_login(login)
+        if norm is None:
+            raise ValueError("Enter a valid email address to sign in with.")
     if role not in ROLES:
         raise ValueError("Unknown role.")
-    if await s.scalar(select(UserRow.id).where(UserRow.login == norm)):
+    if norm and await s.scalar(select(UserRow.id).where(UserRow.login == norm)):
         raise LoginTaken()
-    user = UserRow(id=uuid.uuid4(), login=norm, first_name=first_name.strip(), last_name=last_name.strip(), email=norm, role=role)
+    user = UserRow(id=uuid.uuid4(), login=norm, first_name=first_name.strip(), last_name=last_name.strip(), email=norm or "", role=role)
     s.add(user)
     await s.commit()
     return user

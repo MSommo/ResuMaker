@@ -125,7 +125,9 @@ export interface Me {
 export const getMe = () => json<Me>('GET', '/auth/me')
 export const signIn = (login: string, password: string) => json<Me>('POST', '/auth/login', { login, password })
 export const signOut = async () => void (await request('POST', '/auth/logout'))
-export const acceptInvite = (token: string, password: string) => json<Me>('POST', '/auth/accept', { token, password })
+export const acceptInvite = (token: string, password: string, login?: string) => json<Me>('POST', '/auth/accept', { token, password, login })
+/** Does this one-time link still work, and must the person give the email they will sign in with? */
+export const checkInvite = (token: string) => json<{ needsEmail: boolean }>('POST', '/auth/accept/check', { token })
 export const changePassword = async (current: string, next: string) => void (await request('POST', '/auth/password', { current, new: next }))
 export const signOutEverywhere = async () => void (await request('POST', '/auth/logout-all'))
 export const deleteAccount = async (password: string) => void (await request('POST', '/account/delete', { password }))
@@ -210,7 +212,7 @@ export interface Invite {
 }
 export const listUsers = () => json<AdminUser[]>('GET', '/admin/users')
 /** Prepare a persona: a name and the email they will sign in with. No password, no link yet. */
-export const createDraft = (body: { firstName: string; lastName: string; login: string; role: Role }) => json<AdminUser>('POST', '/admin/users', body)
+export const createDraft = (body: { firstName: string; lastName: string; login?: string; role: Role }) => json<AdminUser>('POST', '/admin/users', body)
 export const patchUser = (id: string, body: { role?: Role; isActive?: boolean; login?: string; aiEnabled?: boolean }) => json<AdminUser>('PATCH', `/admin/users/${id}`, body)
 export const reissueInvite = (id: string) => json<Invite>('POST', `/admin/users/${id}/invite`)
 export const signUserOut = async (id: string) => void (await request('POST', `/admin/users/${id}/sign-out`))
