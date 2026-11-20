@@ -312,7 +312,7 @@ export function ChatBubble() {
               </div>
             </form>
           ) : (
-            <div className="chat-locked"><UpgradeNote feature="The assistant" compact /></div>
+            <div className="chat-locked"><UpgradeNote bar /></div>
           )}
           {auto && (
             <div className="ai-note approval-mode">
@@ -320,7 +320,7 @@ export function ChatBubble() {
               <button type="button" className="link-btn" onClick={() => changeAuto(false)}>Turn off</button>
             </div>
           )}
-          <small className="ai-note">Your CV text is sent to an AI service to answer. AI can make mistakes. Check the changes.</small>
+          {caps.ai && <small className="ai-note">Your CV text is sent to an AI service to answer. AI can make mistakes. Check the changes.</small>}
         </section>
       )}
       {tailoring && <TailorDialog id={id} onClose={() => setTailoring(false)} />}
