@@ -29,13 +29,13 @@ flowchart LR
 
 You need Docker and a Gemini key. There are **two completely separate stacks**, so work in progress can never disturb the app you actually use:
 
-| | **Frozen** (`make stable-*`) | **Scratch** (`make stack`, …) |
+| | **Stable** (`make stable-*`) | **Scratch** (`make stack`, …) |
 |---|---|---|
 | Purpose | The app you use, with your real data | A throwaway copy for testing changes |
 | Built from | A git tag (`stable-1`), never the working tree | The working tree |
 | Code in containers | Baked into the image: no bind mounts, no hot reload | Baked in too (`HOT=1` adds bind mounts and hot reload) |
 | Web (nginx) | **5174** | **5180** |
-| API / Postgres / Redis | 8100 / 5435 (`STABLE_PG_PORT`) / 6380 | 8180 / 5434 / 6381 |
+| API / Postgres / Redis | 8100 / 5433 / 6380 (`STABLE_API_PORT`, `STABLE_PG_PORT`, `STABLE_REDIS_PORT`) | 8180 / 5434 / 6381 (`API_PORT`, `SCRATCH_PG_PORT`, `SCRATCH_REDIS_PORT`) |
 | Data | volume `resumaker_resumaker-pgdata` | volume `resumaker-scratch_scratch-pgdata` (empty, disposable) |
 
 ```bash
@@ -47,7 +47,7 @@ make stack HOT=1                     # same, with hot reload (Vite HMR + uvicorn
 make test                            # backend tests against the scratch database
 make scratch-reset                   # wipe the scratch stack completely (asks first)
 
-# Frozen: the stable app
+# Stable: the app you use
 make stable-build                    # build images from git tag stable-1 (STABLE_TAG=… for another tag)
 make stable-up                       # start / update → http://localhost:5174
 make stable-expose                   # reachable from your local network (see below); make stable-hide undoes it
@@ -56,13 +56,13 @@ make stable-backup                   # dump the real database to backups/
 
 `make` lists every target (logs, MCP, graph, personas, PDFs, migrations…). If something already uses a port, `make` names the process and you can override it, e.g. `make stack WEB_PORT=5181`. Every address the Makefile prints or uses is built from variables (`APP_HOST`, `WEB_PORT`, `API_PORT`, `SCRATCH_PG_PORT`, `SCRATCH_REDIS_PORT`, `DEV_WEB_PORT`, `MCP_HOST`, `MCP_HTTP_PORT`), and the API itself has no built-in database or Redis address: they come from the environment (`.env.example` lists the local values).
 
-**To freeze a new build:** commit, `git tag -a stable-2 -m "…"`, `make stable-build STABLE_TAG=stable-2`, then `make stable-up STABLE_TAG=stable-2`. The database is migrated on startup, so take a `make stable-backup` first.
+**To release a new stable build:** commit, `git tag -a stable-2 -m "…"`, `make stable-build STABLE_TAG=stable-2`, then `make stable-up STABLE_TAG=stable-2`. The database is migrated on startup, so take a `make stable-backup` first.
 
 **Local network.** `make stable-expose` publishes only the web port on all interfaces (`http://<your-ip>:5174`, or `http://<hostname>.local:5174`); the API, Postgres and Redis stay on localhost. Traffic is plain HTTP, so passwords and sessions cross that network unencrypted: only do this on a network you trust (not guest Wi-Fi), or put a TLS proxy in front and set `PUBLIC_URL=https://…` in `.env` (cookies then become `Secure`).
 
 Frontend dependency changes need a rebuild (`make build-web`) unless you use `HOT=1`, where the `web` container runs `npm install` on every start.
 
-**Without Docker for the app:** `make infra` starts just the scratch Postgres and Redis, then `make local-api` and `make local-web` run the API and frontend on the host (needs Node 22+, [uv](https://docs.astral.sh/uv/) and Chrome). Host-side commands default to the **scratch** database, never the frozen one.
+**Without Docker for the app:** `make infra` starts just the scratch Postgres and Redis, then `make local-api` and `make local-web` run the API and frontend on the host (needs Node 22+, [uv](https://docs.astral.sh/uv/) and Chrome). Host-side commands default to the **scratch** database, never the stable one.
 
 ## Text formatting
 
@@ -83,7 +83,7 @@ The old `personas` table is now `users`: each person is an account with a sign-i
 - **Authentication.** `POST /api/auth/login` sets an opaque 256-bit session token in an `HttpOnly`, `SameSite=Strict` cookie scoped to `/api` (`Secure` over HTTPS). Only its SHA-256 is stored (`sessions` table), so a database leak yields no usable sessions. Sessions expire after 7 days idle / 30 days absolute, are replaced at every sign-in, and all other sessions end when the password changes. Wrong passwords lock the account for 15 minutes after 5 tries, sign-in is rate-limited per IP, and every failure returns the same message (no account enumeration, equal timing).
 - **Authorisation.** Every route requires a session unless it is explicitly public (`/status`, sign-in, accept-invite): routers are protected by default. Each `{resume_id}` / `{persona_id}` route depends on an ownership check; someone else's CV is a plain 404. `tests/test_auth.py` enumerates the OpenAPI schema and fails if a route is reachable without a session or a CV route skips the ownership check. Roles: `user` and `admin`. **Admins manage accounts only: they cannot read other people's CVs.** The last admin can't be removed, demoted or locked out; deleting an account re-asks for the password.
 - **No registration.** There is no sign-up. An admin prepares a **persona draft** on the Users page (just a name and the sign-in email; no password, nobody can sign in), then generates a one-time invite link when it's ready. The person opens it, chooses a password and the account is complete; they fill in the rest of their details themselves. Drafts are *Draft* (no link yet), *Invited* (link out, valid 72 h; expired links revert to Draft) or *Active*.
-- **Getting accounts.** The first admin comes from the CLI: `make user-create LOGIN=you@example.com FIRST=You ADMIN=1` (or `make stable-user-create …` for the frozen stack) prints a one-time link (`/accept#token`, valid 72 h, usable once, stored hashed, in the URL fragment so no server logs it). Your **existing personas became users with no password**, their sign-in email pre-filled from the persona's email: run `make stable-user-admin LOGIN=<your email>` to make yourself admin, then `make stable-user-invite LOGIN=<email>` (or Users page → *Reset password*) to claim each one. Lost password: `make user-invite` / `make user-passwd`.
+- **Getting accounts.** The first admin comes from the CLI: `make user-create LOGIN=you@example.com FIRST=You ADMIN=1` (or `make stable-user-create …` for the stable stack) prints a one-time link (`/accept#token`, valid 72 h, usable once, stored hashed, in the URL fragment so no server logs it). Your **existing personas became users with no password**, their sign-in email pre-filled from the persona's email: run `make stable-user-admin LOGIN=<your email>` to make yourself admin, then `make stable-user-invite LOGIN=<email>` (or Users page → *Reset password*) to claim each one. Lost password: `make user-invite` / `make user-passwd`.
 - **CSRF.** Unsafe requests need the `x-resumaker` header and, when the browser sends one, a same-site `Origin`; cookies are `SameSite=Strict`. nginx also sends a CSP, HSTS, `X-Frame-Options: DENY`, `nosniff`, and API responses are `no-store`.
 
 Everything in place, and what production refuses to start without, is listed in [SECURITY.md](SECURITY.md).
@@ -120,7 +120,7 @@ graph TD;
 
 **Memory.** The assistant remembers things about each person, so you don't repeat yourself: style *preferences* ("bullets under 12 words") and *facts* they confirmed ("Staff Engineer at Acme from 2021"). Nothing is saved silently: say "remember that…" in the chat (no approval card, since asking is the consent), or add items in the chat's Memory panel, where every item is listed and can be deleted. Stored per person in Postgres with pgvector (`memories` table, Gemini `gemini-embedding-001` at 768 dimensions; saying the same thing twice keeps one). On each request the writers get all of the person's preferences plus the few facts closest in meaning to the request (cosine distance cutoff 0.38, measured by `make eval-memory`). Memory is context, never truth: the prompt tells the model to trust the CV when they conflict and never to add a remembered fact unasked. If the lookup fails the assistant just runs without it. API: `GET/POST /api/personas/{id}/memories`, `DELETE /api/memories/{id}`; MCP: `list_memories`, `remember`, `forget_memory`. Not built yet: remembering "best bullets from past CVs".
 
-**Database image.** Both stacks run `pgvector/pgvector:pg16` (Debian). The frozen stack moved to it in the first pgvector build by dumping the old alpine database (`make stable-backup`) and restoring into a NEW volume, `resumaker_resumaker-pgdata-v2`; the old alpine volume `resumaker_resumaker-pgdata` is still there, untouched, as a rollback (delete it with `docker volume rm resumaker_resumaker-pgdata` once you are happy). To roll back: set `STABLE_TAG=stable-1`, restore the old image and volume lines in `docker-compose.stable.yml` from git history, and `make stable-up`.
+**Database image.** Both stacks run `pgvector/pgvector:pg16` (Debian). The stable stack moved to it in the first pgvector build by dumping the old alpine database (`make stable-backup`) and restoring into a NEW volume, `resumaker_resumaker-pgdata-v2`; the old alpine volume `resumaker_resumaker-pgdata` is still there, untouched, as a rollback (delete it with `docker volume rm resumaker_resumaker-pgdata` once you are happy). To roll back: set `STABLE_TAG=stable-1`, restore the old image and volume lines in `docker-compose.stable.yml` from git history, and `make stable-up`.
 
 **Tailor to a job.** In the chat, "Tailor to a job" takes a pasted posting (the server never fetches URLs). It analyses the posting against your CV into what the role needs, what your CV already shows, and what it lacks (those gaps are never invented), then creates a **new variant CV** and proposes the changes on it in review mode, so the original is never touched. Postings are untrusted web text: only the extracted summary and keywords reach the editing agent, never the raw posting, so instructions hidden in a posting can't steer it. Discarding deletes the variant. API: `POST /api/resumes/{id}/tailor/stream`, then `.../resumes/{variantId}/chat/{runId}/decide`. MCP: `tailor_to_posting`, `list_memories` + `remember` + `forget_memory`, then `decide_proposal` on the variant.
 
@@ -139,7 +139,7 @@ graph TD;
 Lets Claude Desktop / Claude Code list, read, edit, improve and export your CVs. It uses the same database and engine, so edits appear in the editor. (Deleting CVs is deliberately not exposed. `export_pdf` needs the frontend running; from the Docker server, files land in `backend/.data/pdfs/`.)
 
 ```bash
-# Claude Code, against your REAL data (the frozen stack must be running: make stable-up)
+# Claude Code, against your REAL data (the stable stack must be running: make stable-up)
 claude mcp add resumaker -- docker compose -f "$(pwd)/docker-compose.stable.yml" run --rm -T mcp
 
 # Against the scratch stack instead (empty database, for experiments): make mcp  /  make mcp-local

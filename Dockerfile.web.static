@@ -1,4 +1,4 @@
-# The web image (frozen and scratch stacks, and Railway): the React app is built once, at image build time, and served by
+# The web image (stable and scratch stacks, and Railway): the React app is built once, at image build time, and served by
 # nginx. No dev server, no bind mounts. nginx runs as an unprivileged user and listens on $PORT (8080 unless Railway sets it).
 FROM node:22-alpine AS build
 WORKDIR /app

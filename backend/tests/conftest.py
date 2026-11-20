@@ -6,7 +6,7 @@ import zlib
 
 # Tests use their own database and Redis db, never the dev data. Hosts/ports come from the environment so the same
 # tests run on the host (the scratch stack on localhost:5434) and inside the docker network (db:5432). The default
-# deliberately is NOT the frozen stack (5433), so a bare `pytest` can never touch its server.
+# deliberately is NOT the stable stack (5433), so a bare `pytest` can never touch its server.
 _HOST = os.environ.get("APP_HOST", "localhost")
 _DEV_DB = os.environ.get("DATABASE_URL", f"postgresql+asyncpg://resumaker:resumaker@{_HOST}:{os.environ.get('SCRATCH_PG_PORT', '5434')}/resumaker")
 _DEV_REDIS = os.environ.get("REDIS_URL", f"redis://{_HOST}:{os.environ.get('SCRATCH_REDIS_PORT', '6381')}/0")
@@ -31,6 +31,29 @@ from app.agent.tailor import JobSpec
 from app.config import get_settings
 from app.infra import Infra
 from app.main import create_app
+
+# One test run at a time per Postgres server. Every run wipes resumaker_test (and the fixed migration-test database) and
+# flushes Redis db 15, so two runs at once (two worktrees, a pre-push hook next to `make test-local`) would destroy each
+# other's data mid-test. A session-level advisory lock, held on its own connection until the run ends, makes the second
+# run wait; Postgres releases it by itself if a run crashes.
+_RUN_LOCK = 727299
+_run_lock_conn = None
+
+
+def pytest_sessionstart(session):
+    global _run_lock_conn
+    import psycopg
+
+    _run_lock_conn = psycopg.connect(ADMIN_DB_URL, autocommit=True)
+    if not _run_lock_conn.execute("select pg_try_advisory_lock(%s)", (_RUN_LOCK,)).fetchone()[0]:
+        print("\nAnother test run is using the test database; waiting for it to finish...", flush=True)
+        _run_lock_conn.execute("select pg_advisory_lock(%s)", (_RUN_LOCK,))
+
+
+def pytest_sessionfinish(session, exitstatus):
+    if _run_lock_conn is not None:
+        _run_lock_conn.close()  # releases the lock
+
 
 HEADERS = {"x-resumaker": "1"}
 PASSWORD = "correct horse battery staple"

@@ -1,11 +1,11 @@
-# ResuMaker, FROZEN stack: the stable build, with your real data.
+# ResuMaker, STABLE stack: the app you use, with your real data.
 #
 # It only references pre-built, tagged images (`make stable-build`), so `docker compose up` can never rebuild it from the
 # working tree, and there are no bind mounts: editing files in this repo cannot change what is running here.
 # Same project name and volume as the earlier dev stack, so your database carries over unchanged.
 #
 #   make stable-build   # build images from a git tag (default: stable), not from the working tree
-#   make stable-up      # start / update the frozen stack
+#   make stable-up      # start / update the stable stack
 name: resumaker
 
 x-api: &api

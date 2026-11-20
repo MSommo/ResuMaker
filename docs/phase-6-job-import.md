@@ -129,4 +129,4 @@ Unit tests with no network: fake resolver and fake transport injected into the f
 - A public career-page link goes to a tailored variant in two steps (read, then tailor), with the text shown in between.
 - Every address in the SSRF table is refused without a request.
 - LinkedIn and Indeed links fail kindly with a working fallback, and the Indeed MCP flow is documented.
-- `make test` is green with no network, and the frozen app has been rebuilt with `make stable-release`.
+- `make test` is green with no network, and the stable app has been rebuilt with `make stable-release`.

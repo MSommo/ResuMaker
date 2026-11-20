@@ -1,4 +1,4 @@
-# The API image: Python + Chromium (for PDF rendering). Runs as-is on the scratch and frozen stacks and on Railway;
+# The API image: Python + Chromium (for PDF rendering). Runs as-is on the scratch and stable stacks and on Railway;
 # docker-compose.hot.yml bind-mounts the code and adds --reload for development.
 FROM python:3.12-slim
 

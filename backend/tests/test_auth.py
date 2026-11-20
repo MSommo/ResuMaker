@@ -108,7 +108,11 @@ async def test_account_locks_after_repeated_failures_even_for_the_right_password
     assert (await anon.post("/api/auth/login", json={"login": u.login, "password": PASSWORD})).status_code == 200
 
 
-async def test_sign_in_attempts_are_rate_limited_per_ip(anon, infra):
+async def test_sign_in_attempts_are_rate_limited_per_ip(anon, infra, monkeypatch):
+    from app.api import deps
+
+    # Fixed 10-minute windows: a run that straddles a boundary (12:59:59 -> 13:00:00) would start counting again. Pin one window.
+    monkeypatch.setattr(deps, "window_key", lambda prefix, who, seconds=60: f"rl:{prefix}:{who}:pinned")
     infra.settings.login_rate_limit_per_ip = 3
     codes = [(await anon.post("/api/auth/login", json={"login": "x@example.com", "password": "nope nope nope"})).status_code for _ in range(5)]
     assert codes == [401, 401, 401, 429, 429]

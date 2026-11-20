@@ -1,6 +1,6 @@
 # ResuMaker, SCRATCH stack: a throwaway copy for testing work in progress. `make stack`  →  http://localhost:5180 (APP_HOST:WEB_PORT)
 #
-# Completely separate from the frozen stack (docker-compose.stable.yml), which holds your real data:
+# Completely separate from the stable stack (docker-compose.stable.yml), which holds your real data:
 #   • its own project name, containers, network and database volume (so migrations here can never touch real data)
 #   • its own host ports (web 5180, api 8180, postgres 5434, redis 6381; the Makefile can move them: WEB_PORT, API_PORT, SCRATCH_PG_PORT, SCRATCH_REDIS_PORT)
 #   • images are built from the working tree and run as-is: NO bind mounts and NO hot reload
@@ -65,7 +65,7 @@ services:
   web:
     build:
       context: .
-      dockerfile: Dockerfile.web.static   # the built app served by nginx, same as the frozen stack
+      dockerfile: Dockerfile.web.static   # the built app served by nginx, same as the stable stack
     ports:
       - "127.0.0.1:${WEB_PORT:-5180}:8080"
     depends_on:

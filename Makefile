@@ -1,7 +1,7 @@
 # ResuMaker: every way to build, run, test and poke the project. `make` (or `make help`) lists the targets.
 #
 # Two completely separate stacks:
-#   FROZEN   (stable-*)  your real data, pre-built images from a git tag, nothing here can change it. http://localhost:5174
+#   STABLE   (stable-*)  your real data, pre-built images from a git tag, nothing here can change it. http://localhost:5174
 #   SCRATCH  (the rest)  a throwaway copy with its own database, built from the working tree.       http://localhost:5180
 #
 # Every address below is built from variables (APP_HOST, *_PORT), so `make <target> APP_HOST=… WEB_PORT=…` moves it.
@@ -31,21 +31,25 @@ MCP_HTTP_PORT      ?= 8101
 export APP_HOST WEB_PORT API_PORT SCRATCH_PG_PORT SCRATCH_REDIS_PORT
 WEB_URL = http://$(APP_HOST):$(WEB_PORT)
 API_URL = http://$(APP_HOST):$(API_PORT)
-# Host-side targets (local-api, test-local, mcp-*) talk to the SCRATCH database/cache, never to the frozen stack's.
+# Host-side targets (local-api, test-local, mcp-*) talk to the SCRATCH database/cache, never to the stable stack's.
 SCRATCH_DB    ?= postgresql+asyncpg://resumaker:resumaker@$(APP_HOST):$(SCRATCH_PG_PORT)/resumaker
 SCRATCH_REDIS ?= redis://$(APP_HOST):$(SCRATCH_REDIS_PORT)/0
 SCRATCH_ENV    = DATABASE_URL=$(SCRATCH_DB) REDIS_URL=$(SCRATCH_REDIS)
 
-# The frozen stack (docker-compose.stable.yml): pre-built images from a git tag, no bind mounts, your real data.
+# The stable stack (docker-compose.stable.yml): pre-built images from a git tag, no bind mounts, your real data.
 -include stable.env               # local, git-ignored: written by `make stable-expose` / `stable-hide`
 STABLE_TAG      ?= stable
 STABLE_WEB_PORT ?= 5174
-STABLE_BIND     ?= 127.0.0.1      # 0.0.0.0 = reachable from the local network
+STABLE_API_PORT ?= 8100
+STABLE_PG_PORT  ?= 5433
+STABLE_REDIS_PORT ?= 6380
+# STABLE_BIND: 0.0.0.0 = reachable from the local network (no comment after the value: make would keep the spaces).
+STABLE_BIND     ?= 127.0.0.1
 STABLE_URL       = http://$(APP_HOST):$(STABLE_WEB_PORT)
 STABLE          := docker compose -f docker-compose.stable.yml
 LAN_IP          := $(shell ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || hostname -I 2>/dev/null | awk '{print $$1}')
 LAN_NAME        := $(shell scutil --get LocalHostName 2>/dev/null)
-export STABLE_TAG STABLE_WEB_PORT STABLE_BIND
+export STABLE_TAG STABLE_WEB_PORT STABLE_API_PORT STABLE_PG_PORT STABLE_REDIS_PORT STABLE_BIND
 
 ##@ Help
 
@@ -56,30 +60,30 @@ help: ## Show this help
 		/^[a-zA-Z0-9_-]+:.*##/{printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@echo
 
-##@ Frozen stack (the stable build, with your real data: no hot reload, immune to edits in this repo)
+##@ Stable stack (your real data: no hot reload, immune to edits in this repo)
 
 .PHONY: stable-release stable-build stable-up stable-expose stable-hide stable-down stable-restart stable-ps stable-logs stable-status stable-backup stable-mcp
-stable-build: ## Build the frozen images from git tag STABLE_TAG (committed code only, never the working tree)
+stable-build: ## Build the stable images from git tag STABLE_TAG (committed code only, never the working tree)
 	@git rev-parse --verify --quiet refs/tags/$(STABLE_TAG) >/dev/null || { echo "No git tag '$(STABLE_TAG)'."; exit 1; }
 	git archive $(STABLE_TAG):backend | docker build -t resumaker-api:$(STABLE_TAG) -
 	git archive $(STABLE_TAG) | docker build -f Dockerfile.web.static -t resumaker-web:$(STABLE_TAG) -
 
-stable-release: ## REBUILD the frozen app from the latest commit (moves the `stable` tag to HEAD, builds, restarts: brief downtime)
-	@test -z "$$(git status --porcelain)" || { echo "Commit or stash your changes first: the frozen app is built from a commit."; exit 1; }
+stable-release: ## REBUILD the stable app from the latest commit (moves the `stable` tag to HEAD, builds, restarts: brief downtime)
+	@test -z "$$(git status --porcelain)" || { echo "Commit or stash your changes first: the stable app is built from a commit."; exit 1; }
 	git tag -f stable HEAD
 	@$(MAKE) --no-print-directory stable-build STABLE_TAG=stable
 	@$(MAKE) --no-print-directory stable-up STABLE_TAG=stable
 
-stable-up: ## Start / update the frozen stack (http://APP_HOST:STABLE_WEB_PORT)
+stable-up: ## Start / update the stable stack (http://APP_HOST:STABLE_WEB_PORT)
 	@$(MAKE) --no-print-directory check-ports WEB_PORT=$(STABLE_WEB_PORT) MAKECMDGOALS=stable-up
 	$(STABLE) up -d --wait --remove-orphans
-	@echo; echo "  Frozen app  $(STABLE_URL)   (build: $(STABLE_TAG))"
+	@echo; echo "  Stable app  $(STABLE_URL)   (build: $(STABLE_TAG))"
 	@if [ "$(STABLE_BIND)" = "0.0.0.0" ]; then \
 		echo "  On the LAN  http://$(LAN_IP):$(STABLE_WEB_PORT)$(if $(LAN_NAME),   or   http://$(LAN_NAME).local:$(STABLE_WEB_PORT))"; \
 		echo "  ⚠ Exposed over plain HTTP: passwords and sessions cross the network unencrypted. Only on a network you trust."; \
 	fi; echo
 
-stable-expose: ## Make the frozen app reachable from the local network (web port only; persists in stable.env)
+stable-expose: ## Make the stable app reachable from the local network (web port only; persists in stable.env)
 	@echo "STABLE_BIND=0.0.0.0" > stable.env
 	@$(MAKE) --no-print-directory stable-up STABLE_BIND=0.0.0.0
 
@@ -87,26 +91,26 @@ stable-hide: ## Back to localhost-only
 	@echo "STABLE_BIND=127.0.0.1" > stable.env
 	@$(MAKE) --no-print-directory stable-up STABLE_BIND=127.0.0.1
 
-stable-down: ## Stop the frozen stack (containers removed, data kept)
+stable-down: ## Stop the stable stack (containers removed, data kept)
 	$(STABLE) down
 
-stable-restart: ## Restart the frozen containers
+stable-restart: ## Restart the stable containers
 	$(STABLE) restart
 
-stable-ps: ## Frozen stack status
+stable-ps: ## Stable stack status
 	$(STABLE) ps
 
-stable-logs: ## Follow frozen api + web logs
+stable-logs: ## Follow stable api + web logs
 	$(STABLE) logs -f --tail=100 api web
 
-stable-status: ## Frozen stack health: AI / PDF / database / cache
+stable-status: ## Stable stack health: AI / PDF / database / cache
 	@curl -fsS $(STABLE_URL)/api/status && echo
 
-stable-backup: ## Dump the frozen stack's database to backups/ (git-ignored: personal data)
+stable-backup: ## Dump the stable stack's database to backups/ (git-ignored: personal data)
 	@mkdir -p backups
 	@f=backups/resumaker-$$(date +%Y%m%d-%H%M%S).sql; $(STABLE) exec -T db pg_dump -U resumaker resumaker > $$f && echo "Wrote $$f"
 
-stable-mcp: ## MCP over stdio against the frozen stack
+stable-mcp: ## MCP over stdio against the stable stack
 	$(STABLE) run --rm -T mcp
 
 ##@ Scratch stack (throwaway: own database, built from the working tree; HOT=1 adds hot reload)
@@ -139,8 +143,8 @@ restart: check-ports ## Restart all containers
 down: ## Stop and remove the scratch containers (its database volume is kept)
 	$(COMPOSE) down
 
-down-volumes: ## Stop and DELETE the scratch database too (never the frozen stack's; asks first, FORCE=1 skips)
-	@if [ "$(FORCE)" != "1" ]; then read -r -p "This deletes the SCRATCH stack's database (the frozen stack is not touched). Type 'yes' to continue: " a; [ "$$a" = "yes" ] || { echo "Aborted."; exit 1; }; fi
+down-volumes: ## Stop and DELETE the scratch database too (never the stable stack's; asks first, FORCE=1 skips)
+	@if [ "$(FORCE)" != "1" ]; then read -r -p "This deletes the SCRATCH stack's database (the stable stack is not touched). Type 'yes' to continue: " a; [ "$$a" = "yes" ] || { echo "Aborted."; exit 1; }; fi
 	$(COMPOSE) down -v
 
 scratch-reset: down-volumes ## Same as down-volumes: wipe the scratch stack back to nothing
@@ -153,7 +157,7 @@ urls:
 	@echo "  Scratch app  $(WEB_URL)$(if $(HOT),   (hot reload),   (built, no hot reload))"
 	@echo "  API          $(API_URL)/api/status   (docs: /docs)"
 	@echo "  Agent        $(WEB_URL)/api/agent/graph   (sign in first)"
-	@echo "  Postgres     $(APP_HOST):$(SCRATCH_PG_PORT)   Redis  $(APP_HOST):$(SCRATCH_REDIS_PORT)   (scratch; your real data is on the frozen stack)"
+	@echo "  Postgres     $(APP_HOST):$(SCRATCH_PG_PORT)   Redis  $(APP_HOST):$(SCRATCH_REDIS_PORT)   (scratch; your real data is on the stable stack)"
 	@echo
 
 ##@ Images
@@ -286,21 +290,21 @@ mcp-token: ## Access token for the MCP server (it acts as this user; shown once)
 	$(call need-login,mcp-token)
 	$(COMPOSE) exec -T api $(CLI) token --login "$(LOGIN)" --name "$(or $(NAME),MCP)"
 
-stable-users: ## List users (frozen stack)
+stable-users: ## List users (stable stack)
 	$(STABLE) exec -T api $(CLI) list
-stable-user-create: ## As user-create, on the frozen stack
+stable-user-create: ## As user-create, on the stable stack
 	@test -n "$(LOGIN)" -a -n "$(FIRST)" || { echo "Usage: make stable-user-create LOGIN=<email> FIRST=<name> [LAST=<name>] [ADMIN=1]"; exit 1; }
 	$(STABLE) exec -T api $(CLI) create-user --login "$(LOGIN)" --first "$(FIRST)" --last "$(LAST)" $(if $(ADMIN),--admin)
-stable-user-invite: ## As user-invite, on the frozen stack
+stable-user-invite: ## As user-invite, on the stable stack
 	$(call need-login,stable-user-invite)
 	$(STABLE) exec -T api $(CLI) invite --login "$(LOGIN)"
-stable-user-passwd: ## As user-passwd, on the frozen stack
+stable-user-passwd: ## As user-passwd, on the stable stack
 	$(call need-login,stable-user-passwd)
 	$(STABLE) exec api $(CLI) set-password --login "$(LOGIN)"
-stable-user-admin: ## As user-admin, on the frozen stack
+stable-user-admin: ## As user-admin, on the stable stack
 	$(call need-login,stable-user-admin)
 	$(STABLE) exec -T api $(CLI) make-admin --login "$(LOGIN)" $(if $(REVOKE),--revoke)
-stable-mcp-token: ## As mcp-token, on the frozen stack
+stable-mcp-token: ## As mcp-token, on the stable stack
 	$(call need-login,stable-mcp-token)
 	$(STABLE) exec -T api $(CLI) token --login "$(LOGIN)" --name "$(or $(NAME),MCP)"
 
