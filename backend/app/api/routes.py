@@ -20,6 +20,7 @@ from ..services import personas as people
 from ..services import resumes as repo
 from ..services import versions as vers
 from ..services.chat import ProposalGone, decide, run_chat, stream_chat
+from ..services.tailor import stream_tailor
 from ..services.improve import improve_text
 from . import schemas as sc
 from .deps import get_infra, get_session, parse_id, rate_limit
@@ -265,6 +266,29 @@ async def chat_stream(resume_id: str, body: sc.ChatStreamIn, infra: Infra = Depe
         except Exception:  # noqa: BLE001  never leave a stream hanging without telling the client
             logging.getLogger("resumaker.api").exception("chat stream failed")
             yield _sse({"type": "error", "status": 500, "message": "Something went wrong while the assistant was working."})
+
+    return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@router.post("/resumes/{resume_id}/tailor/stream", dependencies=[Depends(rate_limit)])
+async def tailor_stream(resume_id: str, body: sc.TailorIn, infra: Infra = Depends(get_infra)):
+    """Tailor this CV to a pasted job posting, as Server-Sent Events: `status`, `spec` (what the role needs, what your CV
+    matches, what it lacks), `variant` (a NEW CV was created: the original is never touched), step/status, then `proposal`
+    to accept or reject with POST /resumes/{variant id}/chat/{runId}/decide, or `error`."""
+    _ai(infra)
+    rid = parse_id(resume_id)
+    async with infra.session() as s:
+        await _row(s, resume_id)
+
+    async def events():
+        try:
+            async for ev in stream_tailor(infra, rid, body.posting):
+                yield _sse(ev)
+        except LLMError as e:
+            yield _sse({"type": "error", "status": e.status, "message": str(e)})
+        except Exception:  # noqa: BLE001
+            logging.getLogger("resumaker.api").exception("tailor stream failed")
+            yield _sse({"type": "error", "status": 500, "message": "Something went wrong while tailoring the CV."})
 
     return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 

@@ -1,3 +1,4 @@
+import json
 import os
 import re
 
@@ -22,6 +23,7 @@ import pytest_asyncio
 from app.agent.graph import AgentPlan, Critique, Decomposition, Route
 from app.agent.llm import LLMError
 from app.agent.prompts import ANSWER_SYSTEM
+from app.agent.tailor import JobSpec
 from app.config import get_settings
 from app.infra import Infra
 from app.main import create_app
@@ -44,6 +46,8 @@ class FakeLLM:
         self.critiques: list[Critique | Exception] = []  # unscripted: the critic approves
         self.decompose_calls = 0
         self.critic_calls = 0
+        self.specs: list[JobSpec | Exception] = []  # unscripted: a plain spec
+        self.seen: list[str] = []  # everything the planning/writing calls were shown
         self.answers: list[str] = []
         self.json_calls = 0
         self.route_calls = 0
@@ -65,6 +69,11 @@ class FakeLLM:
             if isinstance(nxt, Exception):
                 raise nxt
             return nxt
+        if schema is JobSpec:
+            nxt = self.specs.pop(0) if self.specs else JobSpec(title="Backend Engineer", company="Acme", summary="Builds services.", keywords=["Go"], gaps=["Kubernetes"])
+            if isinstance(nxt, Exception):
+                raise nxt
+            return nxt
         if schema is Critique:
             self.critic_calls += 1
             nxt = self.critiques.pop(0) if self.critiques else Critique(ok=True)
@@ -78,6 +87,7 @@ class FakeLLM:
                 raise nxt
             return nxt
         self.json_calls += 1
+        self.seen.append(json.dumps(contents, default=str))
         nxt = self.plans.pop(0)
         if isinstance(nxt, Exception):
             raise nxt
@@ -130,7 +140,7 @@ async def client(infra):
     app = create_app(infra)
     app.state.infra = infra  # ASGITransport doesn't run lifespan; infra is already started
     llm = infra.llm
-    llm.plans.clear(), llm.routes.clear(), llm.decompositions.clear(), llm.critiques.clear(), llm.answers.clear(), llm.text_calls.clear(), llm.fast_flags.clear()
+    llm.plans.clear(), llm.routes.clear(), llm.decompositions.clear(), llm.specs.clear(), llm.seen.clear(), llm.critiques.clear(), llm.answers.clear(), llm.text_calls.clear(), llm.fast_flags.clear()
     llm.json_calls = llm.route_calls = llm.answer_calls = llm.decompose_calls = llm.critic_calls = 0
     infra.pdf.renders = 0
     infra.settings.ai_rate_limit_per_min = 1000

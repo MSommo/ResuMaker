@@ -28,6 +28,7 @@ from .services import personas as people
 from .services import resumes as repo
 from .services import versions
 from .services.chat import ProposalGone, decide, run_chat, stream_chat
+from .services.tailor import stream_tailor
 from .services.improve import improve_text
 
 _infra: Infra | None = None
@@ -230,6 +231,31 @@ async def propose_changes(resume_id: str, instruction: str) -> dict[str, Any]:
             if ev["type"] == "done":
                 o = ev["outcome"]
                 return {"reply": o.reply, "items": [], "changes": o.changes, "version": o.row.version}
+    except repo.NotFound:
+        raise ValueError("CV not found.") from None
+    except LLMError as e:
+        raise ValueError(str(e)) from None
+    raise ValueError("The assistant did not finish.")
+
+
+@mcp.tool()
+async def tailor_to_posting(resume_id: str, posting: str) -> dict[str, Any]:
+    """Tailor a CV to a job posting (paste the posting's text). Creates a NEW variant CV, so the original is never changed,
+    and returns "variantResumeId", what the role needs ("spec": matched / gaps), and a numbered list of proposed "items".
+    Nothing is applied yet: show the user, then call decide_proposal with resume_id=variantResumeId and the "runId".
+    To discard the variant instead, ask the user to delete it in the app."""
+    if len(posting.strip()) < 40:
+        raise ValueError("Paste the full text of the job posting.")
+    spec: dict[str, Any] = {}
+    variant = ""
+    try:
+        async for ev in stream_tailor(infra(), _uuid(resume_id), posting[:12000]):
+            if ev["type"] == "spec":
+                spec = {k: v for k, v in ev.items() if k != "type"}
+            elif ev["type"] == "variant":
+                variant = ev["resumeId"]
+            elif ev["type"] == "proposal":
+                return {"variantResumeId": variant, "spec": spec, **{k: ev[k] for k in ("runId", "reply", "items", "skipped", "changes")}}
     except repo.NotFound:
         raise ValueError("CV not found.") from None
     except LLMError as e:

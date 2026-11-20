@@ -122,6 +122,10 @@ class ChatStreamIn(BaseModel):
     mode: Literal["apply", "propose"] = "apply"
 
 
+class TailorIn(BaseModel):
+    posting: str = Field(min_length=40, max_length=12000)  # pasted text; the server never fetches URLs
+
+
 class DecideIn(BaseModel):
     # "all", "none", or the indices (from the proposal's `items`) of the changes to keep.
     accept: Literal["all", "none"] | list[int] = "all"
