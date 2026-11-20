@@ -1,4 +1,5 @@
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { useEffect, useRef } from 'react'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Avatar } from '../components/Avatar'
 import { Caret, SignOut, User, Users } from '../components/icons'
 import { Popover, MenuItem, MenuSep } from '../components/Popover'
@@ -64,13 +65,21 @@ function Footer() {
 }
 
 export default function Shell() {
+  // The page scrolls in its own box under the navbar: a new page starts at its top, as it would with the window.
+  const scroller = useRef<HTMLDivElement>(null)
+  const { pathname } = useLocation()
+  useEffect(() => {
+    scroller.current?.scrollTo(0, 0)
+  }, [pathname])
   return (
     <div className="shell">
       <Navbar />
-      <main id="main">
-        <Outlet />
-      </main>
-      <Footer />
+      <div className="shell-scroll" ref={scroller}>
+        <main id="main">
+          <Outlet />
+        </main>
+        <Footer />
+      </div>
     </div>
   )
 }
