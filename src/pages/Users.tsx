@@ -98,7 +98,8 @@ export default function Users() {
   }, [])
   useEffect(() => { void load() }, [load])
 
-  /** Run one row's action: one at a time per page, then say what happened next to that row. */
+  /** Run one row's action, one at a time per page. Errors show next to the row; so does `done`, for actions whose
+   *  effect the row can't show by itself (signing someone out). A badge or button that changes needs no message. */
   const act = async (u: AdminUser, fn: () => Promise<unknown>, done?: string) => {
     if (pending) return
     setPending(u.id)
@@ -142,10 +143,9 @@ export default function Users() {
               setBusy(true)
               setFormError('')
               try {
-                const u = await createDraft(form)
+                await createDraft(form)
                 closeForm()
                 await load()
-                setRowMsg({ id: u.id, text: `${u.firstName} was added. Generate their invite link when you’re ready.` })
               } catch (err) {
                 setFormError(err instanceof Error ? err.message : 'Something went wrong.')
               } finally {
@@ -189,7 +189,7 @@ export default function Users() {
                   u.status === 'draft' ? { label: 'Generate invite link', run: () => link(u) }
                   : u.status === 'invited' ? { label: 'New invite link', run: () => link(u) }
                   : u.status === 'locked' && !self ? { label: 'Unlock + reset link', run: () => link(u) }
-                  : u.status === 'disabled' && !self ? { label: 'Enable', run: () => act(u, () => patchUser(u.id, { isActive: true }), `${u.firstName} can sign in again.`) }
+                  : u.status === 'disabled' && !self ? { label: 'Enable', run: () => act(u, () => patchUser(u.id, { isActive: true })) }
                   : null
                 return (
                   <Fragment key={u.id}>
@@ -216,8 +216,8 @@ export default function Users() {
                             <span data-row-menu={u.id}>
                               <Menu label={`Actions for ${who}`}>
                                 {account && u.status !== 'locked' && <MenuItem icon={<Refresh />} disabled={busyRow} onSelect={() => void link(u)}>Password reset link</MenuItem>}
-                                {account && <MenuItem icon={<User />} disabled={busyRow} onSelect={() => void act(u, () => patchUser(u.id, { role: u.role === 'admin' ? 'user' : 'admin' }), u.role === 'admin' ? `${u.firstName} is no longer an administrator.` : `${u.firstName} is now an administrator.`)}>{u.role === 'admin' ? 'Remove administrator role' : 'Make administrator'}</MenuItem>}
-                                {account && u.status !== 'disabled' && <MenuItem icon={<Lock />} disabled={busyRow} onSelect={() => void act(u, () => patchUser(u.id, { isActive: false }), `${u.firstName} can no longer sign in.`)}>Disable sign-in</MenuItem>}
+                                {account && <MenuItem icon={<User />} disabled={busyRow} onSelect={() => void act(u, () => patchUser(u.id, { role: u.role === 'admin' ? 'user' : 'admin' }))}>{u.role === 'admin' ? 'Remove administrator role' : 'Make administrator'}</MenuItem>}
+                                {account && u.status !== 'disabled' && <MenuItem icon={<Lock />} disabled={busyRow} onSelect={() => void act(u, () => patchUser(u.id, { isActive: false }))}>Disable sign-in</MenuItem>}
                                 {account && u.status !== 'disabled' && <MenuItem icon={<SignOut />} disabled={busyRow} onSelect={() => void act(u, () => signUserOut(u.id), `${u.firstName} was signed out on every device.`)}>Sign out on every device</MenuItem>}
                                 {account && <MenuSep />}
                                 <MenuItem icon={<Trash />} danger disabled={busyRow} onSelect={() => (setRowMsg(null), setDeleting(u.id))}>Delete…</MenuItem>
