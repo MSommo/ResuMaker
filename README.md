@@ -96,25 +96,51 @@ Out of scope for now: e-mailed invites / resets (an admin shares the link), 2FA,
 
 `route` (a cheap model, `gemini-flash-lite-latest`) decides whether a message is a question or an edit request; if it fails, the message is treated as an edit. Questions go to `answer`, which replies in text and changes nothing. Edits go to `decompose` (the cheap model splits a big request, such as a whole-CV rewrite, tailoring or translation, into focused tasks: one per section, or per job; small requests stay one task, and any problem falls back to one task), then either to `plan` (one task) or, for several tasks, to one `write` per task, all at once (LangGraph `Send`, at most 4 concurrent model calls). Each writer plans and validates its part on its own copy of the CV, with its own repair rounds, and also sees the rest of the CV read-only so it can ground its work in real experience. `merge` then replays every writer's operations in task order on the original CV through the same validated engine, so the result is deterministic and saved once (one Undo). A `critic` reads the before/after of every changed section against the request and reports missing parts, invented or lost facts and inconsistencies; if it finds any, `revise` fixes exactly those, once (the critic never loops). A failed task is reported without sinking the others. A single task runs where Gemini returns a structured list of operations. `apply` runs them through the operations engine (deterministic, validated). If some fail, `repair` shows the model what failed and why and asks for corrected operations, up to twice. The model only *proposes*; validated code decides what changes.
 
+<!-- usage:start -->
 ```mermaid
 graph TD;
-  START --> route;
-  route -->|question| answer --> END;
-  route -->|remember| remember --> END;
-  route -->|edit| decompose;
-  decompose -->|one task| plan --> apply;
-  decompose -->|several tasks, in parallel| write --> merge --> critic;
-  critic -->|problems| revise;
+  START --> route["route<br/>flash-lite · 282 in / 28 out"];
+  route -->|question| answer["answer<br/>flash · 1.2k in / 188 out"] --> END;
+  route -->|remember| remember["remember<br/>flash-lite · 186 in / 30 out"] --> END;
+  route -->|edit| decompose["decompose<br/>flash-lite · 914 in / 88 out"];
+  decompose -->|one task| plan["plan<br/>flash · 2.7k in / 68 out"] --> apply["apply"];
+  decompose -->|several tasks, in parallel| write["write<br/>flash · 2.9k in / 113 out"] --> merge["merge"] --> critic["critic<br/>flash · 863 in / 157 out"];
+  critic -->|problems| revise["revise<br/>flash · 2.8k in / 82 out"];
   apply -->|all applied| END;
-  apply -->|some failed, retries left| repair --> apply;
-  apply -->|review mode| review --> finalize --> END;
+  apply -->|some failed, retries left| repair["repair"] --> apply;
+  apply -->|review mode| review["review"] --> finalize["finalize"] --> END;
 ```
+
+Node labels show the model and the typical (median) input / output tokens of one call on the normal CV. Measured 2026-11-20 by `make eval-usage`: the `usage_metadata` of every real Gemini call over 17 editing tasks on the normal CV and 3 on the 10-job CV, plus the router, memory and tailoring checks. Output includes the model's thinking tokens, which are billed as output.
+
+| Node / call | Model | System prompt | Normal CV: input / output per call | 10-job CV: input / output per call | Calls (normal / 10-job) |
+|---|---|---|---|---|---|
+| `route` | flash-lite | 272 | 282 / 28 (worst 332 / 38) | 298 / 23 (worst 332 / 33) | 21 / 3 |
+| `answer` | flash | 119 | 1.2k / 188 (worst 1.2k / 262) | – | 2 / 0 |
+| `remember` | flash-lite | 178 | 186 / 30 (worst 188 / 40) | – | 2 / 0 |
+| `decompose` | flash-lite | 283 | 914 / 88 (worst 961 / 407) | 1.1k / 657 (worst 1.1k / 858) | 17 / 3 |
+| `plan` | flash | 1.1k | 2.7k / 68 (worst 2.7k / 173) | – | 10 / 0 |
+| `write` | flash | 1.1k | 2.9k / 113 (worst 3.9k / 322) | 4.9k / 234 (worst 5.0k / 2.9k) | 21 / 30 |
+| `merge` | none (plain code) | – | – | – | – |
+| `critic` | flash | 171 | 863 / 157 (worst 2.0k / 538) | 5.0k / 10 (worst 6.4k / 10) | 7 / 3 |
+| `revise` | flash | 1.1k | 2.8k / 82 (worst 2.8k / 140) | – | 2 / 0 |
+| `apply` | none (plain code) | – | – | – | – |
+| `repair` | flash | 1.1k | – | – | 0 / 0 |
+| `review` | none (plain code) | – | – | – | – |
+| `finalize` | none (plain code) | – | – | – | – |
+| Improve text | flash | 237 | 251 / 8 (worst 251 / 8) | – | 1 / 0 |
+| Tailor: posting analysis | flash-lite | 194 | 1.3k / 224 (worst 1.3k / 224) | – | 1 / 0 |
+| Import a CV | flash | 498 | 581 / 366 (worst 581 / 366) | – | 1 / 0 |
+| Memory embedding | embedding | – | 12 / 0 (worst 18 / 0) | – | 2 / 0 |
+
+"System prompt" is the fixed system prompt alone, by Gemini's token counter; the input of a call is that plus the CV, the conversation, memory and the response schema. "Worst" is the largest single call seen, not a bound (single runs are noisy). A request is several calls: for example a whole-CV rewrite is `route`, `decompose`, one `write` per task, then `critic`.
+<!-- usage:end -->
 
 **Review mode (the default in the chat).** The assistant proposes and you approve; "Approve all for this session" (a button in the chat and on the review card) switches to applying right away until the browser tab session ends, and you can Undo either way. The API default is unchanged (`mode: "apply"`; send `"propose"` for review). The graph pauses at `review` and nothing is saved. The paused run is stored in Postgres by LangGraph's checkpointer (its own `checkpoint*` tables; Alembic ignores them), so it survives an API restart; unanswered proposals are pruned after 7 days. You then accept all, none, or some changes; `finalize` re-applies only the accepted ones. A proposal can be decided once (`410` afterwards), and if the CV changed meanwhile the decision fails with `409`.
 
 `make eval-router` runs a golden set of 20 messages (questions vs. edits) against the real fast model (a few cents; excluded from `make test`). It currently scores 20/20.
 
-`make eval-memory` checks memory live (embedding cutoffs, extraction, preferences applied, a wrong memory ignored). `make eval-tailor` checks tailoring honesty live: gaps are named, nothing is invented, and an injected instruction inside a posting is ignored. `make eval-agent` runs 20 end-to-end editing tasks (single edits, multi-part requests, whole-CV rewrites, and the same on a 10-job CV) through the real graph and checks the resulting CV deterministically (no LLM judge). It reports pass rate, repairs and latency and writes `backend/.data/eval-report.json`; `EVAL_DECOMPOSE=0` runs the one-shot baseline. `EVAL_DECOMPOSE=0` runs the one-shot baseline and `EVAL_CRITIC=0` skips the critic. Results so far (single runs are noisy, treat gaps as trends): one-shot 19/20 (long CV 2/3: it left every job of a tailoring request untouched), about 5.5 s per task; sequential tasks 20/20 at about 11.5 s; parallel writers with the critic 39/40 over two runs (long CV 5/6) at about 8 s, against 35/40 without the critic. The critic costs about 1.5 s on multi-part requests.
+`make eval-usage` records the `usage_metadata` of every model call (per node, normal and 10-job CV) and `make usage-table` prints the table and diagram above from it (`USAGE_WRITE=1` rewrites them in this README). `make eval-memory` checks memory live (embedding cutoffs, extraction, preferences applied, a wrong memory ignored). `make eval-tailor` checks tailoring honesty live: gaps are named, nothing is invented, and an injected instruction inside a posting is ignored. `make eval-agent` runs 20 end-to-end editing tasks (single edits, multi-part requests, whole-CV rewrites, and the same on a 10-job CV) through the real graph and checks the resulting CV deterministically (no LLM judge). It reports pass rate, repairs and latency and writes `backend/.data/eval-report.json`; `EVAL_DECOMPOSE=0` runs the one-shot baseline. `EVAL_DECOMPOSE=0` runs the one-shot baseline and `EVAL_CRITIC=0` skips the critic. Results so far (single runs are noisy, treat gaps as trends): one-shot 19/20 (long CV 2/3: it left every job of a tailoring request untouched), about 5.5 s per task; sequential tasks 20/20 at about 11.5 s; parallel writers with the critic 39/40 over two runs (long CV 5/6) at about 8 s, against 35/40 without the critic. The critic costs about 1.5 s on multi-part requests.
 
 **Import a CV.** On a person's page, "Import a CV from a file" reads a **PDF, DOCX or HTML** file (up to 10 MB) into an editable CV, shows you what it found (items per section, warnings such as year-only dates, skill levels that were not in the file, unplaced text, dates out of order) and any personal details that differ from the person's, and only creates the CV when you confirm. Old `.doc` and OpenDocument files are refused with a message to save as DOCX or PDF. Pipeline (plain functions, not a graph: it has no branching): `sniff` (what the bytes really are, ignoring the file name; zip-bomb limits) -> extract (PDFs go to Gemini directly, so layout and scans work without OCR; DOCX via python-docx incl. headers, tables, hyperlinks and text boxes; HTML via BeautifulSoup, dropping scripts and hidden elements) -> `ImportedCV` (Gemini structured output) -> a deterministic converter (new ids, dates to YYYY-MM in several languages, ISO country codes, level clamping, section to zone and icon mapping, size caps, ALL-CAPS names fixed) -> checks. The file is untrusted: the model's output is only ever data that the converter clamps and validates, never instructions. Nothing is stored. API: `POST /api/personas/{id}/imports/cv` (multipart `file`) returns a preview; creating is the normal `POST /api/personas/{id}/resumes`. `make eval-import` round-trips a known CV through DOCX, HTML and a real rendered PDF, plus a messy Italian CV, and compares (needs `make stack`). Not covered: scanned image-only PDFs have not been tested; no MCP tool yet (the Docker MCP server cannot see host file paths).
 

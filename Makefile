@@ -226,7 +226,13 @@ eval-router: ## Live router accuracy check against real Gemini (uses GEMINI_API_
 	cd backend && set -a && . ../.env && set +a && $(SCRATCH_ENV) uv run pytest -m live -s -q tests/test_router_eval.py
 
 eval-agent: ## Live end-to-end eval of the editing agent (13 tasks, real Gemini; prints pass rate, repairs, latency)
-	cd backend && set -a && . ../.env && set +a && $(SCRATCH_ENV) uv run pytest -m live -s -q tests/evals
+	cd backend && set -a && . ../.env && set +a && $(SCRATCH_ENV) uv run pytest -m live -s -q tests/evals/test_agent_eval.py
+
+eval-usage: ## Live token-usage measurement per node and call (real Gemini, a few cents; writes backend/.data/eval-usage.json)
+	cd backend && set -a && . ../.env && set +a && $(SCRATCH_ENV) uv run pytest -m live -s -q tests/evals/test_usage_eval.py
+
+usage-table: ## Print the README's model/token table and diagram from the last eval-usage run (USAGE_WRITE=1 rewrites the README)
+	cd backend && uv run python -m tests.evals.usage $(if $(USAGE_WRITE),--write)
 
 eval-tailor: ## Live eval of tailoring: honest gaps, nothing invented, prompt injection ignored (real Gemini)
 	cd backend && set -a && . ../.env && set +a && $(SCRATCH_ENV) uv run pytest -m live -s -q tests/evals/test_tailor_eval.py
@@ -255,7 +261,7 @@ hooks: ## Install the git hooks in .githooks (pre-commit: type-check + frontend 
 
 ##@ MCP server (for Claude Desktop / Claude Code)
 
-.PHONY: eval-router eval-agent eval-tailor eval-memory eval-import
+.PHONY: eval-router eval-agent eval-usage usage-table eval-tailor eval-memory eval-import
 .PHONY: mcp mcp-local mcp-http
 mcp: ## MCP over stdio, in Docker (what a client config runs)
 	$(COMPOSE) run --rm -T mcp

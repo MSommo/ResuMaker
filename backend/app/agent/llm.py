@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from contextvars import ContextVar
 from typing import Any, Protocol, TypeVar
 
 from google import genai
@@ -16,6 +17,9 @@ AI_NOT_INCLUDED = "AI features aren't included in your account."
 
 
 log = logging.getLogger("resumaker.llm")
+
+# The graph node (or service call) a model call belongs to. Only read when usage is being recorded (the evals), so it costs nothing otherwise.
+call_label: ContextVar[str] = ContextVar("llm_call_label", default="")
 
 
 def _api_error(e: "errors.APIError") -> "LLMError":
@@ -64,6 +68,7 @@ class GeminiLLM:
         self.dims = dims
         self.model = model
         self.fast_model = fast_model or model
+        self.usage: list[dict[str, Any]] | None = None  # set to a list to record the `usage_metadata` of every call (the evals do; see tests/evals/usage.py)
         self.client = genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=110_000, api_version="v1beta"))
 
     async def _generate(self, *, system: str, contents: Any, fast: bool = False, **config: Any) -> types.GenerateContentResponse:
@@ -72,7 +77,9 @@ class GeminiLLM:
         async def go(thinking: bool) -> types.GenerateContentResponse:
             extra = {"thinking_config": types.ThinkingConfig(thinking_level=types.ThinkingLevel.LOW)} if thinking else {}
             cfg = types.GenerateContentConfig(system_instruction=system, **config, **extra)
-            return await self.client.aio.models.generate_content(model=model, contents=contents, config=cfg)
+            resp = await self.client.aio.models.generate_content(model=model, contents=contents, config=cfg)
+            self._record(model, resp.usage_metadata)
+            return resp
 
         try:
             try:
@@ -86,6 +93,16 @@ class GeminiLLM:
             raise _api_error(e) from e
         except Exception as e:  # network, timeout…
             raise _unreachable(e) from e
+
+    def _record(self, model: str, u: Any) -> None:
+        if self.usage is not None and u is not None:
+            # Thinking tokens are billed as output, so they are kept apart but counted in the cost.
+            self.usage.append({"label": call_label.get(), "model": model, "input": u.prompt_token_count or 0, "output": u.candidates_token_count or 0, "thinking": u.thoughts_token_count or 0})
+
+    async def count_tokens(self, text: str, *, fast: bool = False) -> int:
+        """Tokens in `text` by Gemini's own counter (used to measure the fixed system prompts)."""
+        res = await self.client.aio.models.count_tokens(model=self.fast_model if fast else self.model, contents=text)
+        return res.total_tokens or 0
 
     @staticmethod
     def _check(resp: types.GenerateContentResponse) -> str:
@@ -118,6 +135,12 @@ class GeminiLLM:
             raise _api_error(e) from e
         except Exception as e:  # noqa: BLE001
             raise _unreachable(e) from e
+        if self.usage is not None:  # the embedding API reports no usage, so the input is counted separately
+            try:
+                n = (await self.client.aio.models.count_tokens(model=self.embedding_model, contents=texts)).total_tokens or 0
+            except Exception:  # noqa: BLE001 - a measurement must never break the call
+                n = 0
+            self.usage.append({"label": call_label.get(), "model": self.embedding_model, "input": n, "output": 0, "thinking": 0})
         vectors = [list(e.values or []) for e in (res.embeddings or [])]
         if len(vectors) != len(texts) or any(len(v) != self.dims for v in vectors):
             raise LLMError("The AI returned an unexpected answer.")

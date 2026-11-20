@@ -37,7 +37,7 @@ from ..domain.catalog import LAYOUTS, TEMPLATES
 from ..domain.diff import diff_resumes
 from ..domain.models import Resume
 from ..domain.ops import OP_NAMES, Op, apply_ops
-from .llm import LLM
+from .llm import LLM, call_label
 from .prompts import ANSWER_SYSTEM, CHAT_SYSTEM, CRITIC_SYSTEM, DECOMPOSE_SYSTEM, MEMORY_SYSTEM, REPAIR_NOTE, REVISE_NOTE, ROUTER_SYSTEM
 
 log = logging.getLogger("resumaker.agent")
@@ -290,6 +290,19 @@ def _route_contents(state: AgentState) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------- graph
 
 
+def _labelled(name: str, fn):
+    """Tag the model calls a node makes with its name, so the evals can report usage per node."""
+
+    async def run(state):
+        token = call_label.set(name)
+        try:
+            return await fn(state)
+        finally:
+            call_label.reset(token)
+
+    return run
+
+
 def build_graph(llm: LLM | None, checkpointer: Any = None, use_decompose: bool = True, use_critic: bool = True):
     """`checkpointer` makes runs durable: required for `review` to pause and resume (propose mode).
     `use_decompose=False` / `use_critic=False` switch those steps off (used by the evals to compare)."""
@@ -486,7 +499,7 @@ def build_graph(llm: LLM | None, checkpointer: Any = None, use_decompose: bool =
 
     g = StateGraph(AgentState)
     for name, fn in (("route", route), ("answer", answer), ("remember", remember), ("decompose", decompose), ("plan", plan), ("write", write), ("merge", merge), ("critic", critic), ("revise", revise), ("apply", apply), ("repair", repair), ("review", review), ("finalize", finalize)):
-        g.add_node(name, fn)
+        g.add_node(name, _labelled(name, fn))
     g.add_edge(START, "route")
     g.add_conditional_edges("route", after_route, {"answer": "answer", "remember": "remember", "decompose": "decompose"})
     g.add_edge("remember", END)
