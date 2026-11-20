@@ -16,7 +16,12 @@ ROLES = ("user", "admin")
 
 
 class AuthError(Exception):
-    """Wrong credentials, locked, disabled, unclaimed: deliberately one message, so it can't be used to probe for accounts."""
+    """Wrong credentials, locked, unclaimed: deliberately one message, so it can't be used to probe for accounts."""
+
+
+class AccountDisabled(Exception):
+    """The right password for an account an administrator turned off. Only someone who knows the password learns this,
+    so saying it doesn't reveal which emails have accounts; and it isn't a failed attempt, so it never locks the account."""
 
 
 class WeakPassword(ValueError):
@@ -69,7 +74,9 @@ async def authenticate(s: AsyncSession, settings: Settings, login: str, password
     ok = verify_password(user.password_hash if user else None, password)
     if user is None:
         raise AuthError()
-    if not ok or not user.is_active or not user.password_hash:
+    if ok and user.password_hash and not user.is_active:
+        raise AccountDisabled()
+    if not ok or not user.password_hash:
         if user.password_hash:  # unclaimed accounts have nothing to brute-force
             user.failed_logins += 1
             if user.failed_logins >= settings.login_max_failures:
