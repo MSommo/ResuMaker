@@ -172,9 +172,14 @@ def coalesce(ops: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
-def _replay(original: dict[str, Any], ops: list[dict[str, Any]]):
+def allowed_text(messages: list[dict[str, Any]], memory: str = "") -> str:
+    """What the person themselves wrote (their messages and saved memory): the only new links, emails and phone numbers an AI edit may use."""
+    return "\n".join([*(m["text"] for m in messages if m["role"] != "assistant"), memory or ""])
+
+
+def _replay(original: dict[str, Any], ops: list[dict[str, Any]], allowed: str | None = None):
     """Apply coalesced ops to the CV as it was; if anything fails to apply, report that so callers can fall back."""
-    return apply_ops(Resume.model_validate(original), [Op(**o) for o in coalesce(ops)])
+    return apply_ops(Resume.model_validate(original), [Op(**o) for o in coalesce(ops)], allowed)
 
 
 def to_ops(plan: AgentPlan) -> list[Op]:
@@ -363,7 +368,7 @@ def build_graph(llm: LLM | None, checkpointer: Any = None, use_decompose: bool =
                     ops = to_ops(p)
                     if not ops:
                         break
-                    res = apply_ops(cv, ops)
+                    res = apply_ops(cv, ops, allowed_text(payload["messages"], payload.get("memory", "")))
                     cv = res.resume
                     applied_ops += [o.model_dump(exclude_none=True) for o in res.applied_ops]
                     skipped = res.skipped  # only the latest round's failures matter: earlier ones were retried
@@ -413,7 +418,7 @@ def build_graph(llm: LLM | None, checkpointer: Any = None, use_decompose: bool =
             p = await llm.json(system=CHAT_SYSTEM, contents=_contents(state, REVISE_NOTE.format(problems=problems)), schema=AgentPlan, temperature=0.2)
             fixes = [o.model_dump(exclude_none=True) for o in to_ops(p)]
             # Replay everything on the original with repeated edits merged, so the proposal lists each change once.
-            res = _replay(state["original"], [*state.get("applied_ops", []), *fixes])
+            res = _replay(state["original"], [*state.get("applied_ops", []), *fixes], allowed_text(state["messages"], state.get("memory", "")))
             if res.failed or len(res.applied_ops) < len(coalesce([*state.get("applied_ops", []), *fixes])):
                 raise ValueError("coalesced replay did not apply cleanly")
         except Exception as e:  # noqa: BLE001
@@ -429,7 +434,7 @@ def build_graph(llm: LLM | None, checkpointer: Any = None, use_decompose: bool =
         ops = to_ops(AgentPlan.model_validate(state["plan"]))
         if not ops:  # nothing proposed: keep whatever failed earlier so it is still reported
             return {"failed": state.get("failed", [])}
-        res = apply_ops(Resume.model_validate(state["resume"]), ops)
+        res = apply_ops(Resume.model_validate(state["resume"]), ops, allowed_text(state["messages"], state.get("memory", "")))
         return {
             "resume": res.resume.model_dump(mode="json"),
             "applied": [*state.get("applied", []), *res.applied],

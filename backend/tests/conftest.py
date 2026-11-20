@@ -190,6 +190,7 @@ async def app(infra):
     llm.memos.clear(), llm.imports.clear(), llm.import_inputs.clear()
     infra.pdf.renders = 0
     infra.settings.ai_rate_limit_per_min = 1000
+    infra.settings.ai_daily_limit = 300
     infra.settings.login_rate_limit_per_ip = 1000
     await infra.redis.flushdb()
     return app

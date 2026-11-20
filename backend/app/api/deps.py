@@ -143,6 +143,8 @@ async def rate_limit(request: Request, infra: Infra = Depends(get_infra), me: Pr
     n = await infra.cache.hit(window_key("ai", str(me.id)), 60)
     if n > infra.settings.ai_rate_limit_per_min:
         raise HTTPException(429, "Too many AI requests. Please wait a minute.")
+    if infra.settings.ai_daily_limit and await infra.cache.hit(window_key("ai-day", str(me.id), 86400), 86400) > infra.settings.ai_daily_limit:
+        raise HTTPException(429, "You've reached today's AI limit. It resets within 24 hours.")
 
 
 async def login_rate_limit(request: Request, infra: Infra = Depends(get_infra)) -> None:
