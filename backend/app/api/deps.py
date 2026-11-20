@@ -13,7 +13,8 @@ from ..cache import window_key
 from ..config import Settings
 from ..db import ResumeRow, SessionRow, UserRow
 from ..infra import Infra
-from ..services import auth
+from ..observability import errors, metrics
+from ..services import ai_usage, auth
 
 UNSAFE = {"POST", "PUT", "PATCH", "DELETE"}
 SAFE_FOR_RENDER = {"GET", "HEAD", "OPTIONS"}
@@ -94,6 +95,7 @@ async def current(request: Request, infra: Infra = Depends(get_infra)) -> Princi
     if sess.kind == "render" and request.method not in SAFE_FOR_RENDER:
         raise HTTPException(403, "Forbidden.")
     request.state.principal = Principal(user, sess)
+    errors.set_user(user.id)  # error reports say who (by id only), never what
     return request.state.principal
 
 
@@ -131,12 +133,17 @@ def own_persona(persona_id: str, me: Principal = Depends(current)) -> uuid.UUID:
 AI_NOT_CONFIGURED = "AI is not configured. Ask the administrator to set it up."
 
 
-def require_ai(infra: Infra = Depends(get_infra), me: Principal = Depends(current)) -> None:
+def _feature(request: Request) -> str:
+    return getattr(request.state, "ai_feature", None) or "chat"
+
+
+async def require_ai(request: Request, infra: Infra = Depends(get_infra), me: Principal = Depends(current)) -> None:
     """Gate for every AI endpoint: the server must have AI (501 otherwise) and this account must be entitled to it (403).
     Runs before `rate_limit`, so a refused request doesn't use up the caller's AI quota."""
     if infra.llm is None:
         raise HTTPException(501, AI_NOT_CONFIGURED)
     if not me.user.has_ai:
+        await ai_usage.record_rejection(infra, me.id, _feature(request), "not_entitled")
         raise HTTPException(403, AI_NOT_INCLUDED)
 
 
@@ -144,12 +151,15 @@ async def rate_limit(request: Request, infra: Infra = Depends(get_infra), me: Pr
     """Protects the Gemini key (and the household's quota) from runaway loops: N AI calls per minute per user."""
     n = await infra.cache.hit(window_key("ai", str(me.id)), 60)
     if n > infra.settings.ai_rate_limit_per_min:
+        await ai_usage.record_rejection(infra, me.id, _feature(request), "rate_limit")
         raise HTTPException(429, "Too many AI requests. Please wait a minute.")
     if infra.settings.ai_daily_limit and await infra.cache.hit(window_key("ai-day", str(me.id), 86400), 86400) > infra.settings.ai_daily_limit:
+        await ai_usage.record_rejection(infra, me.id, _feature(request), "daily_limit")
         raise HTTPException(429, "You've reached today's AI limit. It resets within 24 hours.")
 
 
 async def login_rate_limit(request: Request, infra: Infra = Depends(get_infra)) -> None:
     n = await infra.cache.hit(window_key("login", client_ip(request), 600), 600)
     if n > infra.settings.login_rate_limit_per_ip:
+        metrics.REJECTED.labels("login").inc()
         raise HTTPException(429, "Too many sign-in attempts. Please wait a few minutes.")

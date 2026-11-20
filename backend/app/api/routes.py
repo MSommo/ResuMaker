@@ -1,18 +1,21 @@
 from __future__ import annotations
 
+import hmac
 import html
 import json
+import time
 import logging
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..agent.graph import MAX_REPAIRS, NODE_DOCS, build_graph
 from ..agent.llm import LLMError
-from ..cache import digest
+from ..cache import digest, window_key
+from ..observability import errors, metrics
 from ..domain.diff import diff_resumes
 from ..domain.models import Resume
 from ..domain.ops import apply_ops
@@ -23,6 +26,7 @@ from ..services import versions as vers
 from ..services.cv_import import parse_cv
 from ..services.importers import MAX_BYTES, ImportRejected
 from ..services.chat import ProposalGone, decide, run_chat, stream_chat
+from ..services import ai_usage
 from ..services import memory as mem
 from ..services.pdf import render_pdf
 from ..services.tailor import stream_tailor
@@ -32,9 +36,16 @@ from .deps import Principal, current, get_infra, get_session, owned_resume, own_
 
 # Every route here needs a signed-in user. The few public ones (status, sign-in) live in `public`.
 log = logging.getLogger("resumaker.api")
+CLIENT_ERRORS_PER_MIN = 10
 router = APIRouter(dependencies=[Depends(current)])
 public = APIRouter()
-AI = [Depends(require_ai), Depends(rate_limit)]  # every AI endpoint: entitled, then within the per-user quota
+def AI(feature: str) -> list:
+    """Every AI endpoint: entitled, then within the per-user quota. `feature` names it in the usage log (refusals included)."""
+
+    def name(request: Request) -> None:
+        request.state.ai_feature = feature
+
+    return [Depends(name), Depends(require_ai), Depends(rate_limit)]
 
 
 async def _row(s: AsyncSession, resume_id: uuid.UUID):
@@ -48,6 +59,33 @@ async def _row(s: AsyncSession, resume_id: uuid.UUID):
 @public.get("/status")
 async def status(infra: Infra = Depends(get_infra)):
     return await infra.status()
+
+
+@public.get("/metrics")
+async def prometheus_metrics(request: Request, infra: Infra = Depends(get_infra)):
+    """Prometheus metrics for a scraper holding METRICS_TOKEN (Authorization: Bearer ...). Without a token configured the
+    endpoint doesn't exist (404); a wrong token is a 401. No user ids or content: see observability/metrics.py."""
+    want = infra.settings.metrics_token
+    if not want:
+        raise HTTPException(404, "Not found.")
+    got = request.headers.get("authorization", "")
+    if not hmac.compare_digest(got.encode(), f"Bearer {want}".encode()):
+        raise HTTPException(401, "Unauthorized.")
+    body, ctype = await metrics.render(infra)
+    return Response(body, media_type=ctype)
+
+
+@router.post("/telemetry/client-errors", status_code=204)
+async def client_error(body: sc.ClientErrorIn, infra: Infra = Depends(get_infra), who: Principal = Depends(current)):
+    """A JavaScript error from the app, reported by the browser. Logged and, with SENTRY_DSN, sent on to Sentry by the API,
+    so the browser never contacts a third party. Message redacted (no emails or phone-like numbers), stack trimmed."""
+    if await infra.cache.hit(window_key("client-errors", str(who.id)), 60) > CLIENT_ERRORS_PER_MIN:
+        return Response(status_code=204)  # quietly dropped: an error loop in one tab must not flood the logs
+    message, stack, path = errors.redact(body.message), errors.redact(body.stack, 2000), body.path.split("?", 1)[0][:200]
+    metrics.CLIENT_ERRORS.inc()
+    log.warning("browser error on %s: %s", path, message)
+    errors.capture_client_error(who.id, message, stack, path, body.release[:64])
+    return Response(status_code=204)
 
 
 @router.get("/agent/graph", summary="Draw the LangGraph editing agent")
@@ -99,13 +137,14 @@ async def create_resume(*, body: sc.CreateResumeIn, pid: uuid.UUID = Depends(own
     return sc.ResumeOut.of(row, persona)
 
 
-@router.post("/personas/{persona_id}/imports/cv", response_model=sc.ImportOut, dependencies=AI)
+@router.post("/personas/{persona_id}/imports/cv", response_model=sc.ImportOut, dependencies=AI("import"))
 async def import_cv(*, pid: uuid.UUID = Depends(own_persona), file: UploadFile = File(...), infra: Infra = Depends(get_infra)):
     """Read a CV from a PDF, DOCX or HTML file (up to 10 MB) into our format. Saves nothing: it returns a preview with warnings to
     review, and the CV is created with the normal POST /personas/{id}/resumes. The file is processed in memory and not kept."""
     data = await file.read(MAX_BYTES + 1)
     try:
-        p = await parse_cv(infra.llm, data)
+        async with ai_usage.track(infra, "import", pid):
+            p = await parse_cv(infra.llm, data)
     except ImportRejected as e:
         raise HTTPException(e.status, str(e)) from None
     except LLMError as e:
@@ -125,12 +164,13 @@ async def list_memories(pid: uuid.UUID = Depends(own_persona), s: AsyncSession =
     return [_memory_out(m) for m in await mem.list_memories(s, pid)]
 
 
-@router.post("/personas/{persona_id}/memories", response_model=sc.MemoryOut, status_code=201, dependencies=AI)
+@router.post("/personas/{persona_id}/memories", response_model=sc.MemoryOut, status_code=201, dependencies=AI("memory"))
 async def add_memory(*, body: sc.MemoryIn, pid: uuid.UUID = Depends(own_persona), infra: Infra = Depends(get_infra)):
     """Save a preference or fact by hand (it is embedded with Gemini, so AI must be configured)."""
     async with infra.session() as s:
         try:
-            row, _ = await mem.add(s, infra.llm, pid, body.kind, body.text)
+            async with ai_usage.track(infra, "memory", pid):
+                row, _ = await mem.add(s, infra.llm, pid, body.kind, body.text)
         except mem.MemoryFull:
             raise HTTPException(409, f"Memory is full ({mem.MAX_PER_PERSONA} items). Delete some first.") from None
         except ValueError as e:
@@ -247,19 +287,21 @@ async def restore_version(*, rid: uuid.UUID = Depends(owned_resume), version_id:
 # ------------------------------------------------------------------ AI
 
 
-@router.post("/ai/improve", response_model=sc.ImproveOut, dependencies=AI)
-async def improve(body: sc.ImproveIn, infra: Infra = Depends(get_infra)):
+@router.post("/ai/improve", response_model=sc.ImproveOut, dependencies=AI("improve"))
+async def improve(body: sc.ImproveIn, infra: Infra = Depends(get_infra), who: Principal = Depends(current)):
     try:
-        text, cached = await improve_text(infra, kind=body.kind, text=body.text, instruction=body.instruction, context=body.context)
+        async with ai_usage.track(infra, "improve", who.id):
+            text, cached = await improve_text(infra, kind=body.kind, text=body.text, instruction=body.instruction, context=body.context)
     except LLMError as e:
         raise HTTPException(e.status, str(e)) from e
     return sc.ImproveOut(text=text, cached=cached)
 
 
-@router.post("/resumes/{resume_id}/chat", response_model=sc.ChatOut, dependencies=AI)
-async def chat(*, rid: uuid.UUID = Depends(owned_resume), body: sc.ChatIn, infra: Infra = Depends(get_infra)):
+@router.post("/resumes/{resume_id}/chat", response_model=sc.ChatOut, dependencies=AI("chat"))
+async def chat(*, rid: uuid.UUID = Depends(owned_resume), body: sc.ChatIn, infra: Infra = Depends(get_infra), who: Principal = Depends(current)):
     try:
-        out = await run_chat(infra, rid, body.message)
+        async with ai_usage.track(infra, "chat", who.id, resume_id=rid):
+            out = await run_chat(infra, rid, body.message)
     except repo.NotFound:
         raise HTTPException(404, "CV not found.") from None
     except repo.VersionConflict:
@@ -280,8 +322,8 @@ def _sse(event: dict) -> str:
     return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
 
 
-@router.post("/resumes/{resume_id}/chat/stream", dependencies=AI)
-async def chat_stream(*, rid: uuid.UUID = Depends(owned_resume), body: sc.ChatStreamIn, infra: Infra = Depends(get_infra)):
+@router.post("/resumes/{resume_id}/chat/stream", dependencies=AI("chat"))
+async def chat_stream(*, rid: uuid.UUID = Depends(owned_resume), body: sc.ChatStreamIn, infra: Infra = Depends(get_infra), who: Principal = Depends(current)):
     """The assistant turn as Server-Sent Events: `status` (what it is doing now), `step` (a graph node finished), then
     `done` with the result, or `proposal` (mode=propose: nothing is changed until you POST .../chat/{runId}/decide), or `error`."""
     async with infra.session() as s:
@@ -289,10 +331,11 @@ async def chat_stream(*, rid: uuid.UUID = Depends(owned_resume), body: sc.ChatSt
 
     async def events():
         try:
-            async for ev in stream_chat(infra, rid, body.message, body.mode):
-                if ev["type"] == "done":
-                    ev = {"type": "done", "result": _chat_out(ev["outcome"]).model_dump(mode="json")}
-                yield _sse(ev)
+            async with ai_usage.track(infra, "chat", who.id, resume_id=rid):
+                async for ev in stream_chat(infra, rid, body.message, body.mode):
+                    if ev["type"] == "done":
+                        ev = {"type": "done", "result": _chat_out(ev["outcome"]).model_dump(mode="json")}
+                    yield _sse(ev)
         except repo.VersionConflict:
             yield _sse({"type": "error", "status": 409, "message": "The CV changed while the assistant was working. Please try again."})
         except LLMError as e:
@@ -304,8 +347,8 @@ async def chat_stream(*, rid: uuid.UUID = Depends(owned_resume), body: sc.ChatSt
     return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
-@router.post("/resumes/{resume_id}/tailor/stream", dependencies=AI)
-async def tailor_stream(*, rid: uuid.UUID = Depends(owned_resume), body: sc.TailorIn, infra: Infra = Depends(get_infra)):
+@router.post("/resumes/{resume_id}/tailor/stream", dependencies=AI("tailor"))
+async def tailor_stream(*, rid: uuid.UUID = Depends(owned_resume), body: sc.TailorIn, infra: Infra = Depends(get_infra), who: Principal = Depends(current)):
     """Tailor this CV to a pasted job posting, as Server-Sent Events: `status`, `spec` (what the role needs, what your CV
     matches, what it lacks), `variant` (a NEW CV was created: the original is never touched), step/status, then `proposal`
     to accept or reject with POST /resumes/{variant id}/chat/{runId}/decide, or `error`."""
@@ -314,8 +357,9 @@ async def tailor_stream(*, rid: uuid.UUID = Depends(owned_resume), body: sc.Tail
 
     async def events():
         try:
-            async for ev in stream_tailor(infra, rid, body.posting):
-                yield _sse(ev)
+            async with ai_usage.track(infra, "tailor", who.id, resume_id=rid):
+                async for ev in stream_tailor(infra, rid, body.posting):
+                    yield _sse(ev)
         except LLMError as e:
             yield _sse({"type": "error", "status": e.status, "message": str(e)})
         except Exception:  # noqa: BLE001
@@ -325,7 +369,7 @@ async def tailor_stream(*, rid: uuid.UUID = Depends(owned_resume), body: sc.Tail
     return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
-@router.post("/resumes/{resume_id}/chat/{run_id}/decide", response_model=sc.ChatOut, dependencies=AI)
+@router.post("/resumes/{resume_id}/chat/{run_id}/decide", response_model=sc.ChatOut, dependencies=AI("chat"))
 async def chat_decide(*, rid: uuid.UUID = Depends(owned_resume), run_id: str, body: sc.DecideIn, infra: Infra = Depends(get_infra)):
     """Accept all, none, or some of the changes in a proposal. Resumes the paused run (stored in Postgres)."""
     try:
@@ -373,10 +417,13 @@ async def pdf(*, rid: uuid.UUID = Depends(owned_resume), who: Principal = Depend
     headers = {"content-disposition": 'attachment; filename="cv.pdf"'}
     if (hit := await infra.cache.get(key)) is not None:
         return Response(hit, media_type="application/pdf", headers={**headers, "x-cache": "hit"})
+    started = time.perf_counter()
     try:
         data = await render_pdf(infra, s, who.user, row.id)
+        metrics.PDF_SECONDS.observe(time.perf_counter() - started)
     except Exception as e:  # noqa: BLE001
         # The cause (internal addresses, Chrome's own messages) goes to the log, not to the browser.
+        metrics.PDF_FAILURES.inc()
         log.exception("PDF rendering failed for CV %s", row.id)
         raise HTTPException(502, "PDF rendering failed. Please try again.") from e
     await infra.cache.set(key, data, infra.settings.pdf_cache_ttl)

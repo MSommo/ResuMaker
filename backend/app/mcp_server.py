@@ -31,7 +31,7 @@ from .domain.models import PersonalDetails, Resume
 from .domain.ops import Op, apply_ops
 from .infra import Infra
 from .db import UserRow
-from .services import auth
+from .services import ai_usage, auth
 from .services import personas as people
 from .services import resumes as repo
 from .services import versions
@@ -88,16 +88,23 @@ def me() -> uuid.UUID:
     return _user_id
 
 
-async def _require_ai() -> None:
+async def _require_ai(feature: str) -> None:
     """Same gate as the web API: the server needs AI, and the acting user must be entitled to it. Read fresh on every call,
-    so an administrator switching AI off takes effect without restarting this server."""
+    so an administrator switching AI off takes effect without restarting this server. A refusal is in the usage log."""
     i = infra()
     if i.llm is None:
         raise ValueError("AI is not configured on this ResuMaker server.")
     async with i.session() as s:
         user = await s.get(UserRow, me())
     if user is None or not user.has_ai:
+        if user is not None:
+            await ai_usage.record_rejection(i, user.id, feature, "not_entitled", source="mcp")
         raise ValueError("AI features aren't included in this account.")
+
+
+def _track(feature: str, resume_id: uuid.UUID | None = None):
+    """Usage log for an MCP tool: same rows as the web app, marked source=mcp."""
+    return ai_usage.track(infra(), feature, me(), resume_id=resume_id, source="mcp")
 
 
 async def _own(resume_id: str) -> uuid.UUID:
@@ -222,9 +229,10 @@ async def restore_version(resume_id: str, version_id: str) -> dict[str, Any]:
 @mcp.tool(name="improve_text")
 async def improve_text_tool(text: str, kind: str = "text", instruction: str = "") -> str:
     """Rewrite CV text to be clearer and more impactful without inventing facts. kind: headline | summary | description | bullet | subheading | note | text. Results are cached."""
-    await _require_ai()
+    await _require_ai("improve")
     try:
-        out, _ = await improve_text(infra(), kind=kind, text=text, instruction=instruction)
+        async with _track("improve"):
+            out, _ = await improve_text(infra(), kind=kind, text=text, instruction=instruction)
     except (LLMError, RuntimeError) as e:
         raise ValueError(str(e)) from None
     return out
@@ -235,10 +243,11 @@ async def ask_assistant(resume_id: str, instruction: str) -> dict[str, Any]:
     """Delegate a natural-language request to ResuMaker's own LangGraph agent (route → plan → apply → repair). It edits the CV
     directly and returns "undoVersionId" (pass it to restore_version to undo). Questions are answered without changing anything.
     To review changes before they are applied, use propose_changes instead."""
-    await _require_ai()
+    await _require_ai("chat")
     rid = await _own(resume_id)
     try:
-        out = await run_chat(infra(), rid, instruction)
+        async with _track("chat", rid):
+            out = await run_chat(infra(), rid, instruction)
     except repo.NotFound:
         raise ValueError("CV not found.") from None
     except LLMError as e:
@@ -251,15 +260,16 @@ async def propose_changes(resume_id: str, instruction: str) -> dict[str, Any]:
     """Like ask_assistant, but NOTHING is changed yet: the agent plans and validates the changes, then pauses. You get
     "runId" and a numbered list of "items". Show them to the user, then call decide_proposal with the ones to keep.
     If the request was only a question there is nothing to review and you get the answer in "reply" directly."""
-    await _require_ai()
+    await _require_ai("chat")
     rid = await _own(resume_id)
     try:
-        async for ev in stream_chat(infra(), rid, instruction, "propose"):
-            if ev["type"] == "proposal":
-                return {k: ev[k] for k in ("runId", "reply", "items", "skipped", "changes")}
-            if ev["type"] == "done":
-                o = ev["outcome"]
-                return {"reply": o.reply, "items": [], "changes": o.changes, "version": o.row.version}
+        async with _track("chat", rid):
+            async for ev in stream_chat(infra(), rid, instruction, "propose"):
+                if ev["type"] == "proposal":
+                    return {k: ev[k] for k in ("runId", "reply", "items", "skipped", "changes")}
+                if ev["type"] == "done":
+                    o = ev["outcome"]
+                    return {"reply": o.reply, "items": [], "changes": o.changes, "version": o.row.version}
     except repo.NotFound:
         raise ValueError("CV not found.") from None
     except LLMError as e:
@@ -278,11 +288,12 @@ async def list_memories() -> list[dict[str, Any]]:
 async def remember(text: str, kind: str = "preference") -> dict[str, Any]:
     """Save one preference (how they want their CV written) or fact (something they confirmed about themselves). Only do this
     when the person asked you to remember it. Saying the same thing twice keeps one memory."""
-    await _require_ai()
+    await _require_ai("memory")
     i = infra()
     async with i.session() as s:
         try:
-            row, created = await mem.add(s, i.llm, me(), kind, text)
+            async with _track("memory"):
+                row, created = await mem.add(s, i.llm, me(), kind, text)
         except (ValueError, mem.MemoryNotFound, mem.MemoryFull, LLMError) as e:
             raise ValueError(str(e) or "Could not save that memory.") from None
     return {"id": str(row.id), "text": row.text, "created": created}
@@ -305,20 +316,21 @@ async def tailor_to_posting(resume_id: str, posting: str) -> dict[str, Any]:
     and returns "variantResumeId", what the role needs ("spec": matched / gaps), and a numbered list of proposed "items".
     Nothing is applied yet: show the user, then call decide_proposal with resume_id=variantResumeId and the "runId".
     To discard the variant instead, ask the user to delete it in the app."""
-    await _require_ai()
+    await _require_ai("tailor")
     if len(posting.strip()) < 40:
         raise ValueError("Paste the full text of the job posting.")
     rid = await _own(resume_id)
     spec: dict[str, Any] = {}
     variant = ""
     try:
-        async for ev in stream_tailor(infra(), rid, posting[:12000]):
-            if ev["type"] == "spec":
-                spec = {k: v for k, v in ev.items() if k != "type"}
-            elif ev["type"] == "variant":
-                variant = ev["resumeId"]
-            elif ev["type"] == "proposal":
-                return {"variantResumeId": variant, "spec": spec, **{k: ev[k] for k in ("runId", "reply", "items", "skipped", "changes")}}
+        async with _track("tailor", rid):
+            async for ev in stream_tailor(infra(), rid, posting[:12000]):
+                if ev["type"] == "spec":
+                    spec = {k: v for k, v in ev.items() if k != "type"}
+                elif ev["type"] == "variant":
+                    variant = ev["resumeId"]
+                elif ev["type"] == "proposal":
+                    return {"variantResumeId": variant, "spec": spec, **{k: ev[k] for k in ("runId", "reply", "items", "skipped", "changes")}}
     except repo.NotFound:
         raise ValueError("CV not found.") from None
     except LLMError as e:
@@ -330,7 +342,7 @@ async def tailor_to_posting(resume_id: str, posting: str) -> dict[str, Any]:
 async def decide_proposal(resume_id: str, run_id: str, accept: list[int] | str = "all") -> dict[str, Any]:
     """Apply a proposal from propose_changes. accept: "all", "none", or the list of item indices to keep (e.g. [0, 2]).
     A proposal can be decided once; if the CV changed in the meantime this fails and you should propose again."""
-    await _require_ai()
+    await _require_ai("chat")
     if isinstance(accept, str) and accept not in ("all", "none"):
         raise ValueError('accept must be "all", "none" or a list of item indices.')
     rid = await _own(resume_id)

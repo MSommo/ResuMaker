@@ -9,6 +9,8 @@ from google import genai
 from google.genai import errors, types
 from pydantic import BaseModel
 
+from .. import usage
+
 T = TypeVar("T", bound=BaseModel)
 
 
@@ -90,6 +92,8 @@ class GeminiLLM:
 
     @staticmethod
     def _check(resp: types.GenerateContentResponse) -> str:
+        if (u := resp.usage_metadata) is not None:  # thinking is billed as output
+            usage.report_tokens(u.prompt_token_count, (u.candidates_token_count or 0) + (u.thoughts_token_count or 0))
         text = resp.text or ""
         if not text.strip():
             blocked = getattr(resp.prompt_feedback, "block_reason", None)
@@ -119,6 +123,7 @@ class GeminiLLM:
             raise _api_error(e) from e
         except Exception as e:  # noqa: BLE001
             raise _unreachable(e) from e
+        usage.report_tokens(sum(len(t) for t in texts) // 4, 0)  # the embedding API reports no token count: ~4 characters per token
         vectors = [list(e.values or []) for e in (res.embeddings or [])]
         if len(vectors) != len(texts) or any(len(v) != self.dims for v in vectors):
             raise LLMError("The AI returned an unexpected answer.")

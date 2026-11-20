@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { createDraft, deleteUser, listUsers, patchUser, reissueInvite, signUserOut, type AdminUser, type Invite, type Role } from '../api/client'
 import { useMe } from '../auth/AuthContext'
@@ -6,6 +6,7 @@ import { Back, Lock, Plus, Refresh, SignOut, Trash, User } from '../components/i
 import { PasswordConfirm } from '../components/PasswordConfirm'
 import { Menu, MenuItem, MenuSep } from '../components/Popover'
 import { timeAgo } from '../model/relativeTime'
+import { hasUsage, limitState, UsageCell, UsageDetail } from './users/AiUsage'
 
 /** Short badge label, and what it means (on hover and for screen readers). */
 const STATUS: Record<AdminUser['status'], [string, string]> = {
@@ -67,6 +68,22 @@ const fullName = (u: AdminUser) => [u.firstName, u.lastName].filter(Boolean).joi
 const hasAccount = (u: AdminUser) => u.status !== 'draft' && u.status !== 'invited'
 const cvs = (n: number) => (n === 1 ? 'their 1 CV' : `their ${n} CVs`)
 
+type Sort = 'added' | 'name' | 'ai-today' | 'ai-month' | 'ai-cost' | 'ai-last'
+type Filter = 'all' | 'ai' | 'limit'
+const SORTS: Record<Sort, [string, (a: AdminUser, b: AdminUser) => number]> = {
+  added: ['Date added', () => 0], // the server's order
+  name: ['Name', (a, b) => fullName(a).localeCompare(fullName(b))],
+  'ai-today': ['AI use today', (a, b) => (b.aiUsage?.today ?? 0) - (a.aiUsage?.today ?? 0)],
+  'ai-month': ['AI use, 30 days', (a, b) => (b.aiUsage?.month ?? 0) - (a.aiUsage?.month ?? 0)],
+  'ai-cost': ['AI cost, 30 days', (a, b) => (b.aiUsage?.costUsd ?? 0) - (a.aiUsage?.costUsd ?? 0)],
+  'ai-last': ['Last AI use', (a, b) => (b.aiUsage?.lastUsedAt ?? '').localeCompare(a.aiUsage?.lastUsedAt ?? '')],
+}
+const FILTERS: Record<Filter, [string, (u: AdminUser) => boolean]> = {
+  all: ['Everyone', () => true],
+  ai: ['Used AI in the last 30 days', (u) => hasUsage(u.aiUsage) && (u.aiUsage?.month ?? 0) > 0],
+  limit: ['Near or at the daily limit', (u) => limitState(u.aiUsage) !== 'ok'],
+}
+
 export default function Users() {
   const me = useMe()
   const [users, setUsers] = useState<AdminUser[] | null>(null)
@@ -80,6 +97,12 @@ export default function Users() {
   const [form, setForm] = useState({ login: '', firstName: '', lastName: '', role: 'user' as Role })
   const [busy, setBusy] = useState(false)
   const [adding, setAdding] = useState(false)
+  const [sort, setSort] = useState<Sort>('added')
+  const [filter, setFilter] = useState<Filter>('all')
+  /** The row whose AI usage is open underneath it (one at a time). */
+  const [usageOpen, setUsageOpen] = useState<string | null>(null)
+  const shown = useMemo(() => (users ? [...users].filter(FILTERS[filter][1]).sort(SORTS[sort][1]) : []), [users, sort, filter])
+  const nearLimit = users?.filter((u) => limitState(u.aiUsage) !== 'ok').length ?? 0
   const firstField = useRef<HTMLInputElement>(null)
   useEffect(() => { if (adding) firstField.current?.focus() }, [adding])
   const closeForm = () => {
@@ -175,10 +198,26 @@ export default function Users() {
           : <div className="state-box" aria-busy="true"><p>Loading…</p></div>
       ) : (
         <div className="table-wrap">
-          <table className="users-table" aria-label={`${users.length} ${users.length === 1 ? 'person' : 'people'}`}>
-            <thead><tr><th>Person</th><th>Status</th><th>CVs</th><th>AI</th><th>Last sign-in</th><th><span className="sr-only">Actions</span></th></tr></thead>
+          <div className="users-toolbar">
+            <label>Show
+              <select value={filter} onChange={(e) => setFilter(e.target.value as Filter)}>
+                {Object.entries(FILTERS).map(([k, [label]]) => <option key={k} value={k}>{label}{k === 'limit' && nearLimit ? ` (${nearLimit})` : ''}</option>)}
+              </select>
+            </label>
+            <label>Sort by
+              <select value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
+                {Object.entries(SORTS).map(([k, [label]]) => <option key={k} value={k}>{label}</option>)}
+              </select>
+            </label>
+            {shown.length !== users.length && <span className="muted" role="status">{shown.length} of {users.length} shown</span>}
+          </div>
+          {shown.length === 0 ? (
+            <div className="state-box inline"><p>Nobody matches “{FILTERS[filter][0].toLowerCase()}”.</p><button type="button" className="btn" onClick={() => setFilter('all')}>Show everyone</button></div>
+          ) : (
+          <table className="users-table" aria-label={`${shown.length} ${shown.length === 1 ? 'person' : 'people'}`}>
+            <thead><tr><th>Person</th><th>Status</th><th>CVs</th><th>AI</th><th>AI use</th><th>Last sign-in</th><th><span className="sr-only">Actions</span></th></tr></thead>
             <tbody>
-              {users.map((u) => {
+              {shown.map((u) => {
                 const self = u.id === me.persona.id
                 const who = fullName(u)
                 const busyRow = pending === u.id
@@ -193,7 +232,7 @@ export default function Users() {
                   : null
                 return (
                   <Fragment key={u.id}>
-                    <tr className={deleting === u.id ? 'confirming' : undefined}>
+                    <tr className={deleting === u.id ? 'confirming' : usageOpen === u.id ? 'usage-open' : undefined}>
                       <td data-label="Person" className="person"><strong>{who}</strong>{self && ' (you)'}<br /><small>{u.login ?? 'no sign-in email'}{u.role === 'admin' ? ' · administrator' : ''}</small></td>
                       <td data-label="Status"><span className={`status s-${u.status}`} title={STATUS[u.status][1]}>{STATUS[u.status][0]}<span className="sr-only">: {STATUS[u.status][1]}</span></span></td>
                       <td data-label="CVs">{u.resumeCount}</td>
@@ -205,6 +244,7 @@ export default function Users() {
                           </label>
                         )}
                       </td>
+                      <td data-label="AI use"><UsageCell user={u} open={usageOpen === u.id} onToggle={() => setUsageOpen(usageOpen === u.id ? null : u.id)} /></td>
                       <td data-label="Last sign-in">{u.lastLoginAt ? <time dateTime={u.lastLoginAt} title={new Date(u.lastLoginAt).toLocaleString()}>{timeAgo(u.lastLoginAt)}</time> : 'Never'}</td>
                       <td className="actions-cell" aria-busy={busyRow}>
                         <div className="row-actions">
@@ -229,9 +269,19 @@ export default function Users() {
                         {msg && <p className={msg.error ? 'form-error row-msg' : 'row-msg'} role={msg.error ? 'alert' : 'status'}>{msg.text}</p>}
                       </td>
                     </tr>
+                    {usageOpen === u.id && deleting !== u.id && (
+                      <tr className="usage-row">
+                        <td colSpan={7}>
+                          <UsageDetail user={u} onClose={() => {
+                            setUsageOpen(null)
+                            requestAnimationFrame(() => document.querySelector<HTMLElement>(`[aria-controls="usage-${u.id}"]`)?.focus())
+                          }} />
+                        </td>
+                      </tr>
+                    )}
                     {deleting === u.id && (
                       <tr className="confirm-row">
-                        <td colSpan={6}>
+                        <td colSpan={7}>
                           <p><strong>Delete {who}</strong>{u.resumeCount ? ` and ${cvs(u.resumeCount)}` : ''}? This can’t be undone.</p>
                           <PasswordConfirm
                             label={`Delete ${u.firstName}`}
@@ -246,6 +296,7 @@ export default function Users() {
               })}
             </tbody>
           </table>
+          )}
         </div>
       )}
     </div>

@@ -222,6 +222,28 @@ class ConfirmIn(BaseModel):
     password: str = Field(min_length=1, max_length=256)
 
 
+class AiUsageSummaryOut(BaseModel):
+    """One person's AI use, for the Users list (admins only). Requests leave out refused attempts, counted in `rejected`."""
+
+    today: int  # UTC day, like the daily limit
+    week: int
+    month: int  # last 30 days, like everything below
+    tokens: int
+    costUsd: float  # noqa: N815  # estimated, from AI_PRICES
+    errors: int
+    rejected: int
+    offTopicShare: float | None  # noqa: N815  # of the chat turns the router classified; None = no chat yet
+    lastUsedAt: datetime | None  # noqa: N815
+    dailyLimit: int  # noqa: N815  # 0 = unlimited
+
+    @classmethod
+    def of(cls, u: Any, daily_limit: int) -> "AiUsageSummaryOut":
+        return cls(
+            today=u.today, week=u.week, month=u.month, tokens=u.tokens_month, costUsd=round(u.cost_month, 6), errors=u.errors_month,
+            rejected=u.rejected_month, offTopicShare=u.off_topic_share, lastUsedAt=u.last_used_at, dailyLimit=daily_limit,
+        )
+
+
 class AdminUserOut(BaseModel):
     id: str
     login: str | None
@@ -234,15 +256,16 @@ class AdminUserOut(BaseModel):
     resumeCount: int  # noqa: N815
     lastLoginAt: datetime | None  # noqa: N815
     createdAt: datetime  # noqa: N815
+    aiUsage: AiUsageSummaryOut | None = None  # noqa: N815
 
     @classmethod
-    def of(cls, u: UserRow, resume_count: int, invited: bool = False) -> "AdminUserOut":
+    def of(cls, u: UserRow, resume_count: int, invited: bool = False, ai_usage: AiUsageSummaryOut | None = None) -> "AdminUserOut":
         from ..services.auth import is_locked
 
         status = "disabled" if not u.is_active else "locked" if is_locked(u) else "active" if u.password_hash else "invited" if invited else "draft"
         return cls(
             id=str(u.id), login=u.login, firstName=u.first_name, lastName=u.last_name, role=u.role, isActive=u.is_active, aiEnabled=u.ai_enabled,  # type: ignore[arg-type]
-            status=status, resumeCount=resume_count, lastLoginAt=u.last_login_at, createdAt=u.created_at,
+            status=status, resumeCount=resume_count, lastLoginAt=u.last_login_at, createdAt=u.created_at, aiUsage=ai_usage,
         )
 
 
@@ -260,6 +283,84 @@ class AdminUserPatch(BaseModel):
     isActive: bool | None = None  # noqa: N815
     aiEnabled: bool | None = None  # noqa: N815
     login: str | None = Field(default=None, min_length=3, max_length=254)
+
+
+class AiUsageDayOut(BaseModel):
+    day: str  # YYYY-MM-DD, UTC
+    requests: int
+    tokens: int
+    cost: float
+    errors: int
+    rejected: int
+
+
+class AiUsageFeatureOut(BaseModel):
+    feature: str
+    requests: int
+    tokens: int
+    cost: float
+    errors: int
+    rejected: int
+
+
+class AiUsageModelOut(BaseModel):
+    model: str
+    calls: int
+    inputTokens: int  # noqa: N815
+    outputTokens: int  # noqa: N815
+    errors: int
+    cost: float  # at today's prices
+
+
+class AiUsageRecordOut(BaseModel):
+    """One request, metadata only: there is no prompt, CV or chat text to show."""
+
+    id: str
+    at: datetime
+    feature: str
+    source: str
+    intent: str | None
+    status: str
+    reason: str | None
+    model: str | None
+    calls: int
+    inputTokens: int  # noqa: N815
+    outputTokens: int  # noqa: N815
+    costUsd: float  # noqa: N815
+    latencyMs: int  # noqa: N815
+    opsApplied: int  # noqa: N815
+    opsRejected: int  # noqa: N815
+    guardRejections: int  # noqa: N815
+    requestId: str | None  # noqa: N815
+
+    @classmethod
+    def of(cls, r: Any) -> "AiUsageRecordOut":
+        return cls(
+            id=str(r.id), at=r.created_at, feature=r.feature, source=r.source, intent=r.intent, status=r.status, reason=r.reason, model=r.model,
+            calls=r.calls, inputTokens=r.input_tokens, outputTokens=r.output_tokens, costUsd=round(r.cost_usd, 6), latencyMs=r.latency_ms,
+            opsApplied=r.ops_applied, opsRejected=r.ops_rejected, guardRejections=r.guard_rejections, requestId=r.request_id,
+        )
+
+
+class AiUsageDetailOut(BaseModel):
+    userId: str  # noqa: N815
+    start: datetime
+    end: datetime
+    summary: AiUsageSummaryOut
+    series: list[AiUsageDayOut]
+    byFeature: list[AiUsageFeatureOut]  # noqa: N815
+    byModel: list[AiUsageModelOut]  # noqa: N815
+    recent: list[AiUsageRecordOut]
+    pricesConfigured: bool  # noqa: N815  # False: no price for the models used, so costs read 0
+
+
+class ClientErrorIn(BaseModel):
+    """A browser error. Sizes are capped: it's a report, not a log upload."""
+
+    message: str = Field(max_length=1000)
+    stack: str = Field(default="", max_length=8000)
+    path: str = Field(default="", max_length=500)  # location.pathname: ids at most, never the query
+    release: str = Field(default="", max_length=100)
 
 
 class InviteOut(BaseModel):

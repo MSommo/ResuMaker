@@ -13,6 +13,7 @@ from typing import Any, Callable
 import pycountry
 from pydantic import BaseModel, Field
 
+from .. import usage
 from .catalog import LAYOUTS, accepts, get_layout, get_template, new_id
 from .models import (
     Entry,
@@ -364,6 +365,7 @@ def apply_ops(resume: Resume, ops: list[Op], allowed_text: str | None = None) ->
             if handler is None:
                 raise OpError(f"unsupported operation “{op.op}”")
             if known is not None and (new := contacts_in(op.model_dump_json(exclude_none=True)) - known):
+                usage.guard_rejected()
                 raise OpError(f"it adds {', '.join(sorted(new))}, which is not in the CV or in what the user wrote; only use links, emails and phone numbers the user provided")
             res.applied.append(handler(op))
             res.applied_ops.append(op)

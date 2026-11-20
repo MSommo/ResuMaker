@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import ResumeRow, UserRow
 from ..infra import Infra
-from ..services import auth
+from ..services import ai_usage, auth
 from . import schemas as sc
 from .deps import COOKIE, Principal, clear_session_cookie, client_ip, current, get_infra, get_session, login_rate_limit, parse_id, require_admin, set_session_cookie
 
@@ -140,19 +141,53 @@ def _invite_out(infra: Infra, user: UserRow, token: str, n: int = 0) -> sc.Invit
     return sc.InviteOut(user=sc.AdminUserOut.of(user, n, user.password_hash is None), link=auth.link_url(infra.settings, token), expiresInHours=infra.settings.invite_ttl_hours)
 
 
-async def _admin_out(s: AsyncSession, u: UserRow) -> sc.AdminUserOut:
-    return sc.AdminUserOut.of(u, await _count(s, u.id), u.id in await auth.pending_invites(s))
+def _usage_out(infra: Infra, found: dict[uuid.UUID, ai_usage.Summary], user_id: uuid.UUID) -> sc.AiUsageSummaryOut:
+    return sc.AiUsageSummaryOut.of(found.get(user_id) or ai_usage.Summary(), infra.settings.ai_daily_limit)
+
+
+async def _admin_out(s: AsyncSession, u: UserRow, infra: Infra | None = None) -> sc.AdminUserOut:
+    usage = _usage_out(infra, await ai_usage.summaries(s, [u.id]), u.id) if infra is not None else None
+    return sc.AdminUserOut.of(u, await _count(s, u.id), u.id in await auth.pending_invites(s), usage)
 
 
 @admin.get("/users", response_model=list[sc.AdminUserOut])
-async def list_users(s: AsyncSession = Depends(get_session)):
+async def list_users(infra: Infra = Depends(get_infra), s: AsyncSession = Depends(get_session)):
     q = select(UserRow, func.count(ResumeRow.id)).join(ResumeRow, ResumeRow.persona_id == UserRow.id, isouter=True).group_by(UserRow.id).order_by(UserRow.created_at)
     invited = await auth.pending_invites(s)
-    return [sc.AdminUserOut.of(u, n, u.id in invited) for u, n in (await s.execute(q)).all()]
+    rows = (await s.execute(q)).all()
+    found = await ai_usage.summaries(s, [u.id for u, _ in rows])  # one query for everyone, not one per row
+    return [sc.AdminUserOut.of(u, n, u.id in invited, _usage_out(infra, found, u.id)) for u, n in rows]
+
+
+MAX_USAGE_DAYS = 90  # = the retention period: older rows are gone anyway
+
+
+@admin.get("/users/{user_id}/ai-usage", response_model=sc.AiUsageDetailOut)
+async def user_ai_usage(user_id: str, start: datetime | None = Query(None, alias="from"), end: datetime | None = Query(None, alias="to"),
+                        infra: Infra = Depends(get_infra), s: AsyncSession = Depends(get_session)):
+    """One person's AI use between `from` and `to` (default: the last 30 days): per UTC day, per feature, per model, and the
+    latest requests. Metadata only: no prompt, CV or chat text is ever stored."""
+    user = await _user(s, user_id)
+    end = _aware(end) or datetime.now(timezone.utc)
+    start = _aware(start) or end - timedelta(days=30)
+    if start >= end:
+        raise HTTPException(422, "`from` must be before `to`.")
+    if end - start > timedelta(days=MAX_USAGE_DAYS):
+        raise HTTPException(422, f"At most {MAX_USAGE_DAYS} days at a time.")
+    d = await ai_usage.detail(s, infra.settings, user.id, start, end)
+    return sc.AiUsageDetailOut(
+        userId=str(user.id), start=start, end=end, summary=_usage_out(infra, await ai_usage.summaries(s, [user.id]), user.id),
+        series=d["series"], byFeature=d["byFeature"], byModel=d["byModel"], recent=[sc.AiUsageRecordOut.of(r) for r in d["recent"]],
+        pricesConfigured=all(m["model"] in infra.settings.ai_prices for m in d["byModel"]),
+    )
+
+
+def _aware(t: datetime | None) -> datetime | None:
+    return t.replace(tzinfo=timezone.utc) if t is not None and t.tzinfo is None else t
 
 
 @admin.post("/users", response_model=sc.AdminUserOut, status_code=201)
-async def create_draft(body: sc.AdminUserIn, s: AsyncSession = Depends(get_session)):
+async def create_draft(body: sc.AdminUserIn, infra: Infra = Depends(get_infra), s: AsyncSession = Depends(get_session)):
     """Prepare a persona (name + sign-in email). Nobody can sign in yet: generate the invite link when ready (POST .../invite)."""
     try:
         user = await auth.create_user(s, login=body.login, first_name=body.firstName, last_name=body.lastName, role=body.role)
@@ -160,11 +195,11 @@ async def create_draft(body: sc.AdminUserIn, s: AsyncSession = Depends(get_sessi
         raise HTTPException(409, "Someone already signs in with that email.") from None
     except ValueError as e:
         raise HTTPException(422, str(e)) from None
-    return await _admin_out(s, user)
+    return await _admin_out(s, user, infra)
 
 
 @admin.patch("/users/{user_id}", response_model=sc.AdminUserOut)
-async def update_user(user_id: str, body: sc.AdminUserPatch, who: Principal = Depends(current), s: AsyncSession = Depends(get_session)):
+async def update_user(user_id: str, body: sc.AdminUserPatch, who: Principal = Depends(current), infra: Infra = Depends(get_infra), s: AsyncSession = Depends(get_session)):
     user = await _user(s, user_id)
     if user.id == who.id and (body.isActive is False or body.role == "user"):
         raise HTTPException(409, "You can't lock yourself out. Ask another administrator.")
@@ -176,7 +211,7 @@ async def update_user(user_id: str, body: sc.AdminUserPatch, who: Principal = De
         raise HTTPException(409, "Someone already signs in with that email.") from None
     except ValueError as e:
         raise HTTPException(422, str(e)) from None
-    return await _admin_out(s, user)
+    return await _admin_out(s, user, infra)
 
 
 @admin.post("/users/{user_id}/invite", response_model=sc.InviteOut)

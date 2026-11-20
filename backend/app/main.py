@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -15,22 +15,30 @@ from .api.routes import router
 from .config import get_settings
 from .services import auth
 from .infra import Infra
-
-logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+from .observability import errors, metrics
+from .observability.logs import setup_logging
+from .observability.middleware import Telemetry
 
 
 def create_app(infra: Infra | None = None) -> FastAPI:
     settings = get_settings()
     settings.check()  # production refuses to boot with unsafe settings (http PUBLIC_URL, default passwords, ...)
+    setup_logging(settings.json_logs)  # request id on every line; JSON lines in production
+    errors.init(settings)  # Sentry, only with SENTRY_DSN (once per process)
+    metrics.install(settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.infra = await (infra or Infra(settings)).start()
+        housekeeping: asyncio.Task | None = None
         try:
             async with app.state.infra.session() as s:
                 await auth.purge_expired(s, settings)
+            housekeeping = asyncio.create_task(app.state.infra.housekeeping())  # AI usage retention
             yield
         finally:
+            if housekeeping is not None:
+                housekeeping.cancel()
             await app.state.infra.stop()
 
     # The API description is a map for attackers too: development only.
@@ -64,6 +72,7 @@ def create_app(infra: Infra | None = None) -> FastAPI:
         app.include_router(r, prefix="/api")
     for r in (router, auth_routes.protected, auth_routes.admin):
         app.include_router(r, prefix="/api")
+    app.add_middleware(Telemetry)  # outermost: the request id exists before anything else runs, and timing covers it all
     return app
 
 

@@ -144,7 +144,65 @@ export interface AdminUser {
   resumeCount: number
   lastLoginAt: string | null
   createdAt: string
+  /** Counts only: the server never stores what anyone asked the AI. Absent on older servers. */
+  aiUsage?: AiUsageSummary | null
 }
+/** One person's AI use. "Requests" leave out refused attempts (rate limit, daily limit, no AI), counted in `rejected`. */
+export interface AiUsageSummary {
+  /** Today, as a UTC day: the same day the daily limit counts. */
+  today: number
+  week: number
+  /** The last 30 days, like every field below. */
+  month: number
+  tokens: number
+  /** Estimated, from the server's AI_PRICES. */
+  costUsd: number
+  errors: number
+  rejected: number
+  /** Share of chat turns the router judged unrelated to the CV; null = no chat yet. */
+  offTopicShare: number | null
+  lastUsedAt: string | null
+  /** AI requests per person per day; 0 = unlimited. */
+  dailyLimit: number
+}
+export type AiFeature = 'chat' | 'improve' | 'tailor' | 'import' | 'memory'
+export interface AiUsageRecord {
+  id: string
+  at: string
+  feature: AiFeature
+  source: 'web' | 'mcp'
+  intent: 'edit' | 'answer' | 'remember' | 'off_topic' | null
+  status: 'ok' | 'error' | 'rejected' | 'cancelled'
+  reason: string | null
+  model: string | null
+  calls: number
+  inputTokens: number
+  outputTokens: number
+  costUsd: number
+  latencyMs: number
+  opsApplied: number
+  opsRejected: number
+  guardRejections: number
+  requestId: string | null
+}
+export interface AiUsageDetail {
+  userId: string
+  start: string
+  end: string
+  summary: AiUsageSummary
+  series: { day: string; requests: number; tokens: number; cost: number; errors: number; rejected: number }[]
+  byFeature: { feature: AiFeature; requests: number; tokens: number; cost: number; errors: number; rejected: number }[]
+  byModel: { model: string; calls: number; inputTokens: number; outputTokens: number; errors: number; cost: number }[]
+  recent: AiUsageRecord[]
+  /** False when a model used has no price configured: its cost reads 0. */
+  pricesConfigured: boolean
+}
+export const getAiUsage = (id: string, signal?: AbortSignal) => json<AiUsageDetail>('GET', `/admin/users/${id}/ai-usage`, undefined, { signal })
+
+/** A JavaScript error, for the server's logs (and its error tracker, if configured). Never throws: reporting must not cause errors. */
+export const reportClientError = (body: { message: string; stack?: string; path: string; release?: string }) =>
+  fetch('/api/telemetry/client-errors', { method: 'POST', headers: { 'content-type': 'application/json', 'x-resumaker': '1' }, body: JSON.stringify(body), keepalive: true }).catch(() => undefined)
+
 export interface Invite {
   user: AdminUser
   link: string

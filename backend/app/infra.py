@@ -14,6 +14,7 @@ from psycopg_pool import AsyncConnectionPool
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import usage
 from .agent.graph import build_graph
 from .agent.llm import LLM, GeminiLLM
 from .cache import Cache
@@ -47,7 +48,9 @@ class Infra:
         await asyncio.to_thread(run_migrations)  # alembic drives its own event loop, so it gets its own thread
         self.redis = Redis.from_url(s.redis_url)
         self.cache = Cache(self.redis)
-        self.llm: LLM | None = self._llm_override or (GeminiLLM(s.gemini_api_key, s.gemini_model, s.gemini_fast_model or None, s.gemini_embedding_model, s.embedding_dims) if s.gemini_api_key else None)
+        raw = self._llm_override or (GeminiLLM(s.gemini_api_key, s.gemini_model, s.gemini_fast_model or None, s.gemini_embedding_model, s.embedding_dims) if s.gemini_api_key else None)
+        # Every model call is metered (usage log, metrics, traces), whichever LLM this is: the tests' fake goes the same way.
+        self.llm: LLM | None = usage.Metered(raw) if raw is not None else None
 
         # LangGraph's own tables (checkpoints) live in the same database but are created and versioned by the library,
         # not by Alembic (migrations/env.py ignores them). Runs that pause for review are stored here.
@@ -87,7 +90,24 @@ class Infra:
         except Exception as e:  # noqa: BLE001
             logging.getLogger("resumaker.infra").warning("could not prune old proposals: %s", e)
 
+    async def housekeeping(self, every_hours: float = 6) -> None:
+        """Runs for the life of the API process: drops AI usage rows past their retention period. Best effort."""
+        from .services import ai_usage
+
+        log = logging.getLogger("resumaker.infra")
+        while True:
+            try:
+                async with self.session() as s:
+                    if n := await ai_usage.purge(s, self.settings):
+                        log.info("deleted %d AI usage rows older than %d days", n, self.settings.ai_usage_retention_days)
+            except Exception as e:  # noqa: BLE001
+                log.warning("AI usage cleanup failed: %s", e)
+            await asyncio.sleep(every_hours * 3600)
+
     async def stop(self) -> None:
+        from .services import ai_usage
+
+        await ai_usage.flush()  # usage rows still being written
         await self.pdf.close()
         await self._pool.close()
         await self.redis.aclose()

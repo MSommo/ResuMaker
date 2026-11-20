@@ -42,6 +42,24 @@ class Settings(BaseSettings):
     ai_rate_limit_per_min: int = 30
     ai_daily_limit: int = 300  # AI requests per user per day (0 = unlimited): a backstop against runaway cost
 
+    # ---- AI usage log (issue #25): metadata only, never prompt or CV text
+    ai_usage_retention_days: int = 90
+    # USD per million tokens, [input, output], per model, for the *estimated* cost on the Users page and in the metrics.
+    # Check https://ai.google.dev/gemini-api/docs/pricing and override with AI_PRICES='{"model": [in, out], ...}'.
+    # A model missing here costs 0 (shown as such). The defaults are deliberately on the high side.
+    ai_prices: dict[str, tuple[float, float]] = {
+        "gemini-flash-latest": (1.50, 9.00),
+        "gemini-flash-lite-latest": (0.30, 1.50),
+        "gemini-embedding-001": (0.15, 0.0),
+    }
+
+    # ---- telemetry (issue #24): all off unless configured
+    sentry_dsn: str = ""  # error reports and traces for the API and (through the API) the browser
+    sentry_traces_sample_rate: float = 0.1  # share of requests traced (AI runs: one span per graph node)
+    release: str = ""  # shown with error reports; on Railway, RAILWAY_GIT_COMMIT_SHA is used when this is empty
+    metrics_token: str = ""  # bearer token for GET /api/metrics (Prometheus). Empty = the endpoint answers 404
+    log_format: Literal["auto", "json", "text"] = "auto"  # auto: JSON lines in production, readable text otherwise
+
     # ---- authentication
     # Sent only over HTTPS when true. None = decide from FRONTEND_URL / PUBLIC_URL (https => secure). Plain http is for localhost only.
     cookie_secure: bool | None = None
@@ -77,6 +95,15 @@ class Settings(BaseSettings):
         return self.app_env == "production"
 
     @property
+    def json_logs(self) -> bool:
+        return self.log_format == "json" or (self.log_format == "auto" and self.production)
+
+    def cost_usd(self, model: str | None, input_tokens: int, output_tokens: int) -> float:
+        """Estimated, from AI_PRICES. Unknown model = 0."""
+        p_in, p_out = self.ai_prices.get(model or "", (0.0, 0.0))
+        return (input_tokens * p_in + output_tokens * p_out) / 1_000_000
+
+    @property
     def secure_cookies(self) -> bool:
         if self.cookie_secure is not None:
             return self.cookie_secure
@@ -102,6 +129,8 @@ class Settings(BaseSettings):
             out.append("DATABASE_URL has no password, or the local development one.")
         if not urlsplit(self.redis_url).password:
             out.append("REDIS_URL has no password: anyone who can reach Redis can read cached CVs and reset rate limits.")
+        if self.metrics_token and len(self.metrics_token) < 24:
+            out.append("METRICS_TOKEN is shorter than 24 characters: use a long random one (e.g. `openssl rand -hex 32`).")
         if insecure := [o for o in self.cors_origins if not o.startswith("https://")]:
             out.append(f"CORS_ORIGINS must all be https:// in production (got {insecure}).")
         return out
