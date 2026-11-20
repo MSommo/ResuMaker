@@ -4,6 +4,7 @@ import { accepts, type Zone } from '../layouts/registry'
 import { KIND_LABEL, type Section } from '../model/types'
 import { Chevron, Close, Edit, Grip, KindIcon } from '../components/icons'
 import type { DragState } from './dnd'
+import { useResume } from '../state/ResumeContext'
 
 /** Where a dropped card was let go (viewport), so it can glide from there into its place. Cleared once used. */
 export type Landing = MutableRefObject<{ id: string; left: number; top: number } | null>
@@ -201,15 +202,17 @@ export const ZoneBox = ({ zone, ...rest }: Shared & { zone: Zone }) => <Column z
 
 /** The header: name and headline (always first, editable, not movable), then the few components the layout lets you place there. */
 export function HeaderBlock({ zone, onSelectHeader, ...rest }: Shared & { zone: Zone | undefined; onSelectHeader: () => void }) {
+  const { resume } = useResume()
+  const headline = resume.basics.headline
   if (!zone) return null
   const lead = (
     <li className="card">
-      <button type="button" className="card-main" onClick={onSelectHeader} title="Edit the headline">
+      <button type="button" className="card-main" onClick={onSelectHeader} title="Edit the headline (your name is in Personal info)">
         <Edit className="card-kind" />
-        <span className="card-text"><strong>Your name</strong><small>Main headline</small></span>
+        <span className="card-text"><strong>Headline</strong><small>{headline.trim() || 'Not set yet'}</small></span>
         <Chevron className="card-go" />
       </button>
     </li>
   )
-  return <Column zone={zone} title="Header" hint="Name and headline, always at the top" lead={lead} collapsible {...rest} />
+  return <Column zone={zone} title="Header" hint="Your name and headline, always at the top" lead={lead} collapsible {...rest} />
 }

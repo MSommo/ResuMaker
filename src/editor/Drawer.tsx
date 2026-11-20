@@ -65,7 +65,8 @@ export function Drawer({ open, onClose, removed, onAddTemplate, onAddRemoved, on
         )}
         <h3>Add new</h3>
         <ul>
-          {TEMPLATES.map((t) => (
+          {/* A removed section of the same name is listed above, with its content: don't offer an empty twin. */}
+          {TEMPLATES.filter((t) => !removed.some((s) => s.kind === t.kind && s.title.trim().toLowerCase() === t.label.trim().toLowerCase())).map((t) => (
             <Item key={t.id} id={`tpl:${t.id}`} data={{ type: 'template', tid: t.id }} kind={t.kind} title={t.label} blurb={t.blurb} onAdd={() => onAddTemplate(t)} />
           ))}
         </ul>
