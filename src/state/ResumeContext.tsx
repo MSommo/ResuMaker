@@ -30,11 +30,7 @@ const Ctx = createContext<Api | null>(null)
 const SAVE_DELAY = 700
 
 export const LAST_KEY = 'resumaker:lastId'
-export const LAST_PERSONA = 'resumaker:lastPersona' // JSON {id, name}, shown in the navbar
 
-export const rememberPersona = (id: string, name: string) => {
-  try { localStorage.setItem(LAST_PERSONA, JSON.stringify({ id, name })) } catch { /* ignore */ }
-}
 
 /** The CV minus the persona's details: what the CV endpoint actually stores. */
 const cvPart = (r: Resume) => JSON.stringify({ ...r, basics: { headline: r.basics.headline } })
@@ -75,7 +71,6 @@ export function ResumeProvider({ id, children }: { id: string; children: ReactNo
         setR(d.resume)
         setSaveState('saved')
         try { localStorage.setItem(LAST_KEY, id) } catch { /* ignore */ }
-        rememberPersona(d.personaId, fullName(d.resume.basics))
       })
       .catch((e) => live && setError(e instanceof ApiError && e.status === 404 ? 'This CV doesn’t exist (it may have been deleted).' : e.message))
     return () => {

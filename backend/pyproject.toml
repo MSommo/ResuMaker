@@ -5,6 +5,7 @@ description = "ResuMaker backend: FastAPI + LangGraph agent + MCP server, on Pos
 requires-python = ">=3.11"
 dependencies = [
     "alembic>=1.20.1",
+    "argon2-cffi>=25.1.0",
     "asyncpg>=0.32.0",
     "beautifulsoup4>=4.15.0",
     "fastapi>=0.165.0",

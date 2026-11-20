@@ -46,12 +46,15 @@ class PdfRenderer:
                 self._browser = await self._pw.chromium.launch(executable_path=self.executable, headless=True, args=args)
             return self._browser
 
-    async def render(self, url: str) -> bytes:
+    async def render(self, url: str, cookie: dict | None = None) -> bytes:
+        """`cookie` (a Playwright cookie dict) signs the browser in as the CV's owner for this render only."""
         if not self.available:
             raise RuntimeError("Chrome was not found. Set CHROME_PATH in .env.")
         browser = await self._get_browser()
         ctx = await browser.new_context(viewport={"width": 1200, "height": 900})
         try:
+            if cookie:
+                await ctx.add_cookies([cookie])
             page = await ctx.new_page()
             await page.goto(url, wait_until="load", timeout=30_000)
             await page.evaluate("document.fonts.ready")
@@ -77,3 +80,20 @@ class PdfRenderer:
         if self._pw:
             await self._pw.stop()
         self._browser = self._pw = None
+
+
+async def render_pdf(infra, s, user, resume_id) -> bytes:
+    """Render a CV the way its owner sees it. The app needs a session to load the CV, so we mint a 2-minute, read-only one for
+    the headless browser and revoke it as soon as the page has rendered: the user's own cookie never leaves the browser."""
+    from urllib.parse import urlsplit
+
+    from ..api.deps import COOKIE
+    from ..services import auth
+
+    token, sess = await auth.create_session(s, infra.settings, user, kind="render")
+    front = infra.settings.frontend_url
+    cookie = {"name": COOKIE, "value": token, "domain": urlsplit(front).hostname, "path": "/api", "httpOnly": True, "sameSite": "Strict", "secure": urlsplit(front).scheme == "https"}
+    try:
+        return await infra.pdf.render(f"{front}/preview/{resume_id}", cookie)
+    finally:
+        await auth.revoke_session(s, token)

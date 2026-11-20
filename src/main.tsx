@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { CapsProvider } from './api/Caps'
+import { AuthProvider } from './auth/AuthContext'
 import App from './App'
 import './styles/base.css'
 import './styles/shell.css'
@@ -12,9 +13,11 @@ import './styles/ai.css'
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
-      <CapsProvider>
-        <App />
-      </CapsProvider>
+      <AuthProvider>
+        <CapsProvider>
+          <App />
+        </CapsProvider>
+      </AuthProvider>
     </BrowserRouter>
   </StrictMode>,
 )

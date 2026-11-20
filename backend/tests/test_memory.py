@@ -40,20 +40,21 @@ async def test_saying_the_same_thing_twice_keeps_one_memory(client):
     assert again["id"] == first["id"] and len(await memories(client, pid)) == 1
 
 
-async def test_validation_and_unknown_persona(client):
+async def test_validation(client):
     pid = (await create(client))["personaId"]
     assert (await remember(client, pid, "")).status_code == 422
     assert (await remember(client, pid, "x" * 301)).status_code == 422
     assert (await remember(client, pid, "ok", "opinion")).status_code == 422
-    assert (await remember(client, "00000000-0000-0000-0000-000000000000", "ok")).status_code == 404
 
 
-async def test_memory_belongs_to_the_person_and_goes_with_them(client):
-    a, b = (await create(client))["personaId"], (await create(client))["personaId"]
-    await remember(client, a, PREF)
-    assert await memories(client, b) == []
-    assert (await client.delete(f"/api/personas/{a}")).status_code == 204
-    assert (await client.get(f"/api/personas/{a}/memories")).status_code == 404
+async def test_memory_belongs_to_the_person_and_nobody_else_can_touch_it(client, make_client):
+    a = (await create(client))["personaId"]
+    saved = (await remember(client, a, PREF)).json()
+    other = await make_client()
+    assert (await remember(other, a, "mine now")).status_code == 404  # someone else's persona: not found
+    assert (await other.get(f"/api/personas/{a}/memories")).status_code == 404
+    assert (await other.delete(f"/api/memories/{saved['id']}")).status_code == 404
+    assert [m["text"] for m in await memories(client, a)] == [PREF]  # untouched
 
 
 # ---------------------------------------------------------------- "remember that…" in the chat
@@ -111,11 +112,12 @@ async def test_preferences_and_relevant_facts_reach_the_writers_and_unrelated_on
     assert "peanuts" not in seen  # the unrelated fact is not
 
 
-async def test_one_persons_memory_never_reaches_another_persons_cv(client, infra):
-    a, b = await create(client), await create(client)
+async def test_one_persons_memory_never_reaches_another_persons_cv(client, make_client, infra):
+    other = await make_client()
+    a, b = await create(client), await create(other)
     await remember(client, a["personaId"], PREF)
     infra.llm.plans.append(plan("Done.", PlanOp(op="update_basics", patch=Patch(headline="Lead"))))
-    await client.post(f"/api/resumes/{b['id']}/chat", json={"message": "headline Lead"})
+    await other.post(f"/api/resumes/{b['id']}/chat", json={"message": "headline Lead"})
     assert PREF not in " ".join(infra.llm.seen) and "MEMORY" not in " ".join(infra.llm.seen)
 
 

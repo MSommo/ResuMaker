@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..agent.llm import LLM, LLMError
-from ..db import MemoryRow, PersonaRow
+from ..db import MemoryRow, UserRow
 
 log = logging.getLogger("resumaker.memory")
 
@@ -46,7 +46,7 @@ async def add(s: AsyncSession, llm: LLM, persona_id: uuid.UUID, kind: str, text:
         raise ValueError("A memory needs a kind (preference or fact) and some text.")
     if len(text) > MAX_TEXT:
         raise ValueError(f"A memory can be at most {MAX_TEXT} characters.")
-    if await s.get(PersonaRow, persona_id) is None:
+    if await s.get(UserRow, persona_id) is None:
         raise MemoryNotFound("persona")
     [vec] = await llm.embed([text])
     near = (
@@ -65,9 +65,10 @@ async def add(s: AsyncSession, llm: LLM, persona_id: uuid.UUID, kind: str, text:
     return row, True
 
 
-async def delete(s: AsyncSession, memory_id: uuid.UUID) -> None:
+async def delete(s: AsyncSession, memory_id: uuid.UUID, *, owner: uuid.UUID) -> None:
+    """Only the owner's memories can be deleted; anyone else's looks like it doesn't exist."""
     row = await s.get(MemoryRow, memory_id)
-    if row is None:
+    if row is None or row.persona_id != owner:
         raise MemoryNotFound(str(memory_id))
     await s.delete(row)
     await s.commit()

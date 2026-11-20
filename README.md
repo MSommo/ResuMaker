@@ -2,7 +2,7 @@
 
 Build CVs from layouts: pick a layout, fill in your details once, rearrange sections with a drag-and-drop drawer, get AI help, download a PDF.
 
-Built for a household, so there is no login: you pick a **persona** (yourself, a family member), see their CVs, or create another CV or another persona.
+Built for a household, with real accounts: every person signs in, sees only their own CVs, and an administrator manages who has access (see [Accounts and security](#accounts-and-security)).
 
 ```mermaid
 flowchart LR
@@ -58,7 +58,7 @@ make stable-backup                   # dump the real database to backups/
 
 **To freeze a new build:** commit, `git tag -a stable-2 -m "…"`, `make stable-build STABLE_TAG=stable-2`, then `make stable-up STABLE_TAG=stable-2`. The database is migrated on startup, so take a `make stable-backup` first.
 
-**Local network.** `make stable-expose` publishes only the web port on all interfaces (`http://<your-ip>:5174`, or `http://<hostname>.local:5174`); the API, Postgres and Redis stay on localhost. There is no login, so anyone on that network can read and edit every CV. Only do this on a network you trust (not guest Wi-Fi).
+**Local network.** `make stable-expose` publishes only the web port on all interfaces (`http://<your-ip>:5174`, or `http://<hostname>.local:5174`); the API, Postgres and Redis stay on localhost. Traffic is plain HTTP, so passwords and sessions cross that network unencrypted: only do this on a network you trust (not guest Wi-Fi), or put a TLS proxy in front and set `PUBLIC_URL=https://…` in `.env` (cookies then become `Secure`).
 
 Frontend dependency changes need a rebuild (`make build-web`) unless you use `HOT=1`, where the `web` container runs `npm install` on every start.
 
@@ -72,9 +72,23 @@ Rendering is safe by design: raw HTML is never rendered and images are not shown
 
 ## Personas and CVs
 
-A **persona** is a person: name, email, phone, address, birth date and place, nationality. A persona owns any number of **CVs**. A CV stores only its own content and its **headline** (the role it targets, e.g. "AI Strategy Lead" vs "Senior Software Engineer"). The personal details are read live from the persona, so editing them in any CV, or on the persona page, updates all of that person's CVs. Deleting a persona deletes its CVs (the UI asks first).
+A **persona** is a user's profile: name, email, phone, address, birth date and place, nationality. A persona owns any number of **CVs**. A CV stores only its own content and its **headline** (the role it targets, e.g. "AI Strategy Lead" vs "Senior Software Engineer"). The personal details are read live from the persona, so editing them in any CV, or on the persona page, updates all of that person's CVs. Deleting a persona deletes its CVs (the UI asks first).
 
 Schema changes go through Alembic (`backend/migrations/`); the API applies them on startup. `make migration m="..."` creates one, and `make db-backup` dumps the database first (into the git-ignored `backups/`). Migration `0002` introduced personas: it backfilled a persona for every existing CV, merging CVs of the same person by name and email.
+
+## Accounts and security
+
+The old `personas` table is now `users`: each person is an account with a sign-in email (`login`, separate from the contact email on their CV, which anyone may edit) and an Argon2id password hash. Their CVs, history and memories belong to them and to nobody else.
+
+- **Authentication.** `POST /api/auth/login` sets an opaque 256-bit session token in an `HttpOnly`, `SameSite=Strict` cookie scoped to `/api` (`Secure` over HTTPS). Only its SHA-256 is stored (`sessions` table), so a database leak yields no usable sessions. Sessions expire after 7 days idle / 30 days absolute, are replaced at every sign-in, and all other sessions end when the password changes. Wrong passwords lock the account for 15 minutes after 5 tries, sign-in is rate-limited per IP, and every failure returns the same message (no account enumeration, equal timing).
+- **Authorisation.** Every route requires a session unless it is explicitly public (`/status`, sign-in, accept-invite): routers are protected by default. Each `{resume_id}` / `{persona_id}` route depends on an ownership check; someone else's CV is a plain 404. `tests/test_auth.py` enumerates the OpenAPI schema and fails if a route is reachable without a session or a CV route skips the ownership check. Roles: `user` and `admin`. **Admins manage accounts only: they cannot read other people's CVs.** The last admin can't be removed, demoted or locked out; deleting an account re-asks for the password.
+- **No registration.** There is no sign-up. An admin prepares a **persona draft** on the Users page (just a name and the sign-in email; no password, nobody can sign in), then generates a one-time invite link when it's ready. The person opens it, chooses a password and the account is complete; they fill in the rest of their details themselves. Drafts are *Draft* (no link yet), *Invited* (link out, valid 72 h; expired links revert to Draft) or *Active*.
+- **Getting accounts.** The first admin comes from the CLI: `make user-create LOGIN=you@example.com FIRST=You ADMIN=1` (or `make stable-user-create …` for the frozen stack) prints a one-time link (`/accept#token`, valid 72 h, usable once, stored hashed, in the URL fragment so no server logs it). Your **existing personas became users with no password**, their sign-in email pre-filled from the persona's email: run `make stable-user-admin LOGIN=<your email>` to make yourself admin, then `make stable-user-invite LOGIN=<email>` (or Users page → *Reset password*) to claim each one. Lost password: `make user-invite` / `make user-passwd`.
+- **CSRF.** Unsafe requests need the `x-resumaker` header and, when the browser sends one, a same-site `Origin`; cookies are `SameSite=Strict`. nginx also sends a CSP, `X-Frame-Options: DENY`, `nosniff`, and API responses are `no-store`.
+- **PDFs.** Headless Chrome gets a 2-minute, read-only session for that one render, revoked immediately; it never sees the user's own cookie.
+- **MCP.** The MCP server acts as **one user**, identified by `RESUMAKER_TOKEN` (`make mcp-token LOGIN=you@example.com`; hashed in the database, expires in a year) and refuses to start without it. Every tool is scoped to that user's CVs. Add it to the client config `env`.
+
+Out of scope for now: e-mailed invites / resets (an admin shares the link), 2FA, per-token scopes.
 
 ## The agent
 

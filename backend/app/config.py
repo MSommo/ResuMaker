@@ -31,8 +31,32 @@ class Settings(BaseSettings):
     # Per client IP, per minute, for the endpoints that call Gemini.
     ai_rate_limit_per_min: int = 30
 
+    # ---- authentication
+    # Sent only over HTTPS when true. None = decide from FRONTEND_URL / PUBLIC_URL (https => secure). Plain http is for localhost only.
+    cookie_secure: bool | None = None
+    public_url: str = ""  # the address people open in a browser (invite links); defaults to FRONTEND_URL
+    session_idle_hours: int = 24 * 7  # signed out after this long without activity
+    session_max_days: int = 30  # ...and at the latest after this, however active
+    render_session_seconds: int = 120  # the throw-away session used by the PDF renderer
+    login_max_failures: int = 5  # consecutive wrong passwords before the account is locked...
+    login_lock_minutes: int = 15  # ...for this long
+    login_rate_limit_per_ip: int = 20  # sign-in attempts per IP per 10 minutes
+    invite_ttl_hours: int = 72
+    min_password_length: int = 12
+
     improve_cache_ttl: int = 60 * 60 * 24
     pdf_cache_ttl: int = 60 * 60
+
+
+    @property
+    def secure_cookies(self) -> bool:
+        if self.cookie_secure is not None:
+            return self.cookie_secure
+        return (self.public_url or self.frontend_url).startswith("https://")
+
+    @property
+    def base_url(self) -> str:
+        return (self.public_url or self.frontend_url).rstrip("/")
 
 
 @lru_cache

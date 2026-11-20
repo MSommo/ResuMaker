@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { createResume, deletePersona, deleteResume, getPersona, getResume, saveResume, updatePersona, type Persona, type ResumeDoc, type ResumeSummary } from '../api/client'
+import { createResume, deleteResume, getPersona, getResume, saveResume, updatePersona, type Persona, type ResumeDoc, type ResumeSummary } from '../api/client'
 import { Avatar } from '../components/Avatar'
 import { PageThumb } from '../components/CvView'
 import { ImportDialog } from '../ai/ImportDialog'
@@ -10,7 +10,6 @@ import { Menu, MenuItem, MenuSep } from '../components/Popover'
 import { layouts } from '../layouts/registry'
 import { fullName } from '../model/format'
 import { sampleResume } from '../model/sample'
-import { rememberPersona } from '../state/ResumeContext'
 import { personalOf } from '../model/types'
 
 function ago(iso: string) {
@@ -139,7 +138,6 @@ export default function PersonaPage() {
       const d = await getPersona(personaId)
       setPersona(d.persona)
       setCvs(d.resumes)
-      rememberPersona(d.persona.id, fullName(d.persona))
       setError('')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.')
@@ -163,24 +161,12 @@ export default function PersonaPage() {
     await deleteResume(cv.id)
     await load()
   }
-  const removePersona = async () => {
-    if (!persona) return
-    const n = cvs.length
-    if (!window.confirm(`Delete ${fullName(persona)}${n ? ` and their ${n} CV${n > 1 ? 's' : ''}` : ''} permanently? This can’t be undone.`)) return
-    await deletePersona(persona.id)
-    try {
-      localStorage.removeItem('resumaker:lastPersona')
-      localStorage.removeItem('resumaker:lastId')
-    } catch { /* ignore */ }
-    nav('/')
-  }
-
   if (error && !persona)
     return (
       <div className="state-box" role="alert">
-        <h2>Couldn’t open this persona</h2>
+        <h2>Couldn’t open this page</h2>
         <p>{error}</p>
-        <p><Link className="btn" to="/">Everyone</Link></p>
+        <p><Link className="btn" to="/">My CVs</Link></p>
       </div>
     )
   if (!persona) return <div className="state-box" aria-busy="true"><p>Loading…</p></div>
@@ -188,8 +174,6 @@ export default function PersonaPage() {
   const contact = [persona.email, persona.phone, persona.address.city].filter(Boolean).join(' · ')
   return (
     <div className="container home">
-      <Link to="/" className="back"><Back /> Everyone</Link>
-
       <header className="persona-head">
         <Avatar id={persona.id} first={persona.firstName} last={persona.lastName} size={72} />
         <div className="persona-id">
@@ -198,9 +182,6 @@ export default function PersonaPage() {
         </div>
         <div className="persona-actions">
           {!editing && <button type="button" className="btn" onClick={() => setEditing(true)}>Edit details</button>}
-          <Menu label={`Actions for ${persona.firstName}`} triggerClassName="btn icon">
-            <MenuItem icon={<Trash />} danger onSelect={() => void removePersona()}>Delete persona…</MenuItem>
-          </Menu>
         </div>
       </header>
 

@@ -9,8 +9,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .api.deps import require_app_header
+from .api import auth_routes
+from .api.routes import public as public_routes
 from .api.routes import router
 from .config import get_settings
+from .services import auth
 from .infra import Infra
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -23,6 +26,8 @@ def create_app(infra: Infra | None = None) -> FastAPI:
     async def lifespan(app: FastAPI):
         app.state.infra = await (infra or Infra(settings)).start()
         try:
+            async with app.state.infra.session() as s:
+                await auth.purge_expired(s, settings)
             yield
         finally:
             await app.state.infra.stop()
@@ -43,7 +48,19 @@ def create_app(infra: Infra | None = None) -> FastAPI:
         where = ".".join(str(p) for p in first.get("loc", []) if p != "body")
         return JSONResponse(status_code=422, content={"error": f"Invalid request: {where} {first.get('msg', '')}".strip()})
 
-    app.include_router(router, prefix="/api")
+    @app.middleware("http")
+    async def no_store(request: Request, call_next):
+        """API responses hold personal data and per-user state: never let a browser or proxy cache them."""
+        resp = await call_next(request)
+        resp.headers.setdefault("Cache-Control", "no-store")
+        resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+        return resp
+
+    # Public: health, sign-in, accepting an invite. Everything else requires a session (see api/deps.py: `current`).
+    for r in (public_routes, auth_routes.public):
+        app.include_router(r, prefix="/api")
+    for r in (router, auth_routes.protected, auth_routes.admin):
+        app.include_router(r, prefix="/api")
     return app
 
 

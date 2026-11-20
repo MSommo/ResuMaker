@@ -8,7 +8,7 @@ import uuid
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..db import ChatMessageRow, PersonaRow, ResumeRow, utcnow
+from ..db import ChatMessageRow, UserRow, ResumeRow, utcnow
 from ..domain.catalog import blank_resume, sample_resume
 from ..domain.models import Basics, PersonalDetails, Resume
 from . import versions
@@ -20,17 +20,17 @@ class NotFound(Exception):
 
 
 class VersionConflict(Exception):
-    def __init__(self, current: ResumeRow, persona: PersonaRow):
+    def __init__(self, current: ResumeRow, persona: UserRow):
         self.current, self.persona = current, persona
 
 
-def merged_from(data: dict, persona: PersonaRow) -> Resume:
+def merged_from(data: dict, persona: UserRow) -> Resume:
     """The complete CV for stored CV `data` (the live row or a version snapshot): the persona's details + its own content."""
     headline = (data.get("basics") or {}).get("headline", "")
     return Resume.model_validate({**data, "basics": {**to_details(persona).model_dump(), "headline": headline}})
 
 
-def merged(row: ResumeRow, persona: PersonaRow) -> Resume:
+def merged(row: ResumeRow, persona: UserRow) -> Resume:
     """The complete CV: the persona's details + this CV's own content and headline."""
     return merged_from(row.data, persona)
 
@@ -45,15 +45,15 @@ def _personal(resume: Resume) -> PersonalDetails:
     return PersonalDetails.model_validate(resume.basics.model_dump(exclude={"headline"}))
 
 
-async def get_resume(s: AsyncSession, rid: uuid.UUID) -> tuple[ResumeRow, PersonaRow]:
+async def get_resume(s: AsyncSession, rid: uuid.UUID) -> tuple[ResumeRow, UserRow]:
     row = await s.get(ResumeRow, rid)
     if row is None:
         raise NotFound(str(rid))
-    return row, await s.get(PersonaRow, row.persona_id)  # type: ignore[return-value]
+    return row, await s.get(UserRow, row.persona_id)  # type: ignore[return-value]
 
 
-async def create_resume(s: AsyncSession, persona_id: uuid.UUID, *, resume: Resume | None = None, layout_id: str = "sidebar", template: str = "blank") -> tuple[ResumeRow, PersonaRow]:
-    persona = await s.get(PersonaRow, persona_id)
+async def create_resume(s: AsyncSession, persona_id: uuid.UUID, *, resume: Resume | None = None, layout_id: str = "sidebar", template: str = "blank") -> tuple[ResumeRow, UserRow]:
+    persona = await s.get(UserRow, persona_id)
     if persona is None:
         raise PersonaNotFound(str(persona_id))
     base = resume or (sample_resume(layout_id) if template == "sample" else blank_resume(layout_id))
@@ -68,7 +68,7 @@ async def create_resume(s: AsyncSession, persona_id: uuid.UUID, *, resume: Resum
 
 async def save_resume(
     s: AsyncSession, rid: uuid.UUID, resume: Resume, expected_version: int | None, *, update_persona: bool, checkpoint: bool = False
-) -> tuple[ResumeRow, PersonaRow]:
+) -> tuple[ResumeRow, UserRow]:
     """Replace the CV. With `expected_version` it is an optimistic-lock save (409 if someone else saved in between).
 
     `update_persona`: also write the personal details in `resume.basics` to the persona. The web editor edits those through
@@ -79,7 +79,7 @@ async def save_resume(
     row = await s.scalar(select(ResumeRow).where(ResumeRow.id == rid).with_for_update())
     if row is None:
         raise NotFound(str(rid))
-    persona = await s.get(PersonaRow, row.persona_id)
+    persona = await s.get(UserRow, row.persona_id)
     assert persona is not None
     if expected_version is not None and row.version != expected_version:
         raise VersionConflict(row, persona)

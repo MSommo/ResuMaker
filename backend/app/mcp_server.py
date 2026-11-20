@@ -5,12 +5,18 @@
 
 It talks to the same Postgres, Redis and operations engine as the web app, so edits show up in the editor.
 Deleting CVs is intentionally not exposed.
+
+Authentication: the server acts as ONE user, identified by the access token in RESUMAKER_TOKEN (create it with
+`make mcp-token LOGIN=you@example.com`). Without a valid token it refuses to start. Every tool is scoped to that user's own CVs,
+exactly like the web app: another person's CV looks like it doesn't exist.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -24,34 +30,46 @@ from .domain.diff import diff_resumes
 from .domain.models import PersonalDetails, Resume
 from .domain.ops import Op, apply_ops
 from .infra import Infra
+from .services import auth
 from .services import personas as people
 from .services import resumes as repo
 from .services import versions
 from .services.chat import ProposalGone, decide, run_chat, stream_chat
 from .services import memory as mem
+from .services.pdf import render_pdf
 from .services.tailor import stream_tailor
 from .services.improve import improve_text
 
 _infra: Infra | None = None
+_user_id: uuid.UUID | None = None  # who this server acts as; fixed at startup from RESUMAKER_TOKEN
 PDF_DIR = Path(__file__).resolve().parents[1] / ".data" / "pdfs"
 
 
 @asynccontextmanager
 async def lifespan(_: MCPServer):
-    global _infra
+    global _infra, _user_id
+    token = os.environ.get("RESUMAKER_TOKEN", "").strip()
+    if not token:
+        sys.exit("RESUMAKER_TOKEN is not set. Create one with `make mcp-token LOGIN=<your sign-in email>` and put it in the MCP client's env.")
     _infra = await Infra().start()
+    async with _infra.session() as s:
+        user = await auth.resolve_api_token(s, token)
+    if user is None:
+        await _infra.stop()
+        sys.exit("RESUMAKER_TOKEN is invalid, expired, or its user is disabled.")
+    _user_id = user.id
     try:
         yield
     finally:
         await _infra.stop()
-        _infra = None
+        _infra = _user_id = None
 
 
 mcp = MCPServer(
     "resumaker",
     instructions=(
-        "Tools to read and edit CVs stored in ResuMaker. CVs belong to personas (people): start with list_personas, then list_resumes for a persona, "
-        "then get_resume to see ids. Personal details belong to the persona and are shared by all their CVs; the headline is per CV. "
+        "Tools to read and edit the signed-in user's CVs in ResuMaker (you act as that one user; you cannot see anyone else's). Start with list_resumes, "
+        "then get_resume to see ids. Personal details belong to the user's profile and are shared by all their CVs; the headline is per CV. "
         "Use apply_operations for precise edits (ids come from get_resume) or ask_assistant to delegate a natural-language request. "
         "Never invent facts about the person; ask the user when information is missing."
     ),
@@ -62,6 +80,17 @@ mcp = MCPServer(
 def infra() -> Infra:
     assert _infra is not None, "server not started"
     return _infra
+
+
+def me() -> uuid.UUID:
+    assert _user_id is not None, "server not started"
+    return _user_id
+
+
+async def _own(resume_id: str) -> uuid.UUID:
+    async with infra().session() as s:
+        row, _ = await _cv(s, resume_id)
+        return row.id
 
 
 def _uuid(resume_id: str) -> uuid.UUID:
@@ -75,61 +104,45 @@ READ_ONLY = ToolAnnotations(read_only_hint=True)  # lets MCP clients auto-approv
 
 
 async def _cv(s, resume_id: str):
+    """(CV row, persona): only the acting user's own CVs; anything else is reported as not found."""
     try:
-        return await repo.get_resume(s, _uuid(resume_id))
+        row, persona = await repo.get_resume(s, _uuid(resume_id))
     except repo.NotFound:
         raise ValueError("CV not found.") from None
+    if row.persona_id != me():
+        raise ValueError("CV not found.")
+    return row, persona
 
 
 @mcp.tool(annotations=READ_ONLY)
-async def list_personas() -> list[dict[str, Any]]:
-    """List the people (personas) whose CVs are stored, with how many CVs each has."""
+async def whoami() -> dict[str, Any]:
+    """The user these tools act as (name, sign-in, role) and how many CVs they have. You can only see and change this user's CVs."""
     async with infra().session() as s:
-        return [{"id": str(p.id), "name": p.display_name, "email": p.email, "resumeCount": n} for p, n in await people.list_personas(s)]
-
-
-@mcp.tool()
-async def create_persona(first_name: str, last_name: str = "", email: str = "", phone: str = "") -> dict[str, str]:
-    """Create a persona (a person who owns CVs). More details can be set later with apply_operations (update_basics)."""
-    async with infra().session() as s:
-        p = await people.create_persona(s, PersonalDetails(firstName=first_name, lastName=last_name, email=email, phone=phone))
-        return {"id": str(p.id), "name": p.display_name}
+        u = await people.get_persona(s, me())
+        return {"id": str(u.id), "name": u.display_name, "login": u.login, "role": u.role, "resumeCount": len(await people.persona_resumes(s, u.id))}
 
 
 @mcp.tool(annotations=READ_ONLY)
-async def list_resumes(persona_id: str = "") -> list[dict[str, Any]]:
-    """List CVs (id, title, layout, version, last update). Pass persona_id for one person's CVs; omit it for everyone's."""
+async def list_resumes() -> list[dict[str, Any]]:
+    """List your CVs (id, title, layout, version, last update)."""
     async with infra().session() as s:
-        if persona_id:
-            try:
-                await people.get_persona(s, _uuid(persona_id))
-            except people.PersonaNotFound:
-                raise ValueError("Persona not found. Call list_personas to see ids.") from None
-            rows = await people.persona_resumes(s, _uuid(persona_id))
-        else:
-            rows = [r for p, _ in await people.list_personas(s) for r in await people.persona_resumes(s, p.id)]
-        return [{"id": str(r.id), "personaId": str(r.persona_id), "title": r.title, "layoutId": r.layout_id, "version": r.version, "updatedAt": r.updated_at.isoformat()} for r in rows]
+        rows = await people.persona_resumes(s, me())
+        return [{"id": str(r.id), "title": r.title, "layoutId": r.layout_id, "version": r.version, "updatedAt": r.updated_at.isoformat()} for r in rows]
 
 
 @mcp.tool(annotations=READ_ONLY)
 async def get_resume(resume_id: str) -> dict[str, Any]:
     """Get a complete CV as JSON: basics (the persona's details + this CV's headline) plus sections with ids for sections and their items. Sections with zone=null are not shown in the CV."""
     async with infra().session() as s:
-        try:
-            row, persona = await repo.get_resume(s, _uuid(resume_id))
-        except repo.NotFound:
-            raise ValueError("CV not found.") from None
+        row, persona = await _cv(s, resume_id)
         return repo.merged(row, persona).model_dump(mode="json")
 
 
 @mcp.tool()
-async def create_resume(persona_id: str, layout_id: str = "sidebar", template: str = "blank") -> dict[str, str]:
-    """Create a new CV for a persona. layout_id: 'sidebar' or 'timeline'. template: 'blank' or 'sample' (sample text; the persona's own details are always used)."""
+async def create_resume(layout_id: str = "sidebar", template: str = "blank") -> dict[str, str]:
+    """Create a new CV for you. layout_id: 'sidebar' or 'timeline'. template: 'blank' or 'sample' (sample text; your own details are always used)."""
     async with infra().session() as s:
-        try:
-            row, _ = await repo.create_resume(s, _uuid(persona_id), layout_id=layout_id, template=template)
-        except people.PersonaNotFound:
-            raise ValueError("Persona not found. Call list_personas to see ids.") from None
+        row, _ = await repo.create_resume(s, me(), layout_id=layout_id, template=template)
         return {"id": str(row.id), "title": row.title}
 
 
@@ -150,10 +163,7 @@ async def apply_operations(resume_id: str, operations: list[Op], dry_run: bool =
     In an entry's bullets, a line starting with "# " is a subheading.
     """
     async with infra().session() as s:
-        try:
-            row, persona = await repo.get_resume(s, _uuid(resume_id))
-        except repo.NotFound:
-            raise ValueError("CV not found.") from None
+        row, persona = await _cv(s, resume_id)
         before = repo.merged(row, persona)
         res = apply_ops(before, operations)
         undo_id = None
@@ -211,8 +221,9 @@ async def ask_assistant(resume_id: str, instruction: str) -> dict[str, Any]:
     """Delegate a natural-language request to ResuMaker's own LangGraph agent (route → plan → apply → repair). It edits the CV
     directly and returns "undoVersionId" (pass it to restore_version to undo). Questions are answered without changing anything.
     To review changes before they are applied, use propose_changes instead."""
+    rid = await _own(resume_id)
     try:
-        out = await run_chat(infra(), _uuid(resume_id), instruction)
+        out = await run_chat(infra(), rid, instruction)
     except repo.NotFound:
         raise ValueError("CV not found.") from None
     except LLMError as e:
@@ -225,8 +236,9 @@ async def propose_changes(resume_id: str, instruction: str) -> dict[str, Any]:
     """Like ask_assistant, but NOTHING is changed yet: the agent plans and validates the changes, then pauses. You get
     "runId" and a numbered list of "items". Show them to the user, then call decide_proposal with the ones to keep.
     If the request was only a question there is nothing to review and you get the answer in "reply" directly."""
+    rid = await _own(resume_id)
     try:
-        async for ev in stream_chat(infra(), _uuid(resume_id), instruction, "propose"):
+        async for ev in stream_chat(infra(), rid, instruction, "propose"):
             if ev["type"] == "proposal":
                 return {k: ev[k] for k in ("runId", "reply", "items", "skipped", "changes")}
             if ev["type"] == "done":
@@ -240,14 +252,14 @@ async def propose_changes(resume_id: str, instruction: str) -> dict[str, Any]:
 
 
 @mcp.tool(annotations=ToolAnnotations(read_only_hint=True))
-async def list_memories(persona_id: str) -> list[dict[str, Any]]:
-    """What ResuMaker remembers about a person: style preferences and facts they confirmed. The editing agent uses these."""
+async def list_memories() -> list[dict[str, Any]]:
+    """What ResuMaker remembers about you: style preferences and facts you confirmed. The editing agent uses these."""
     async with infra().session() as s:
-        return [{"id": str(m.id), "kind": m.kind, "text": m.text} for m in await mem.list_memories(s, _uuid(persona_id))]
+        return [{"id": str(m.id), "kind": m.kind, "text": m.text} for m in await mem.list_memories(s, me())]
 
 
 @mcp.tool()
-async def remember(persona_id: str, text: str, kind: str = "preference") -> dict[str, Any]:
+async def remember(text: str, kind: str = "preference") -> dict[str, Any]:
     """Save one preference (how they want their CV written) or fact (something they confirmed about themselves). Only do this
     when the person asked you to remember it. Saying the same thing twice keeps one memory."""
     i = infra()
@@ -255,7 +267,7 @@ async def remember(persona_id: str, text: str, kind: str = "preference") -> dict
         raise ValueError("AI is not configured, so memory (which uses embeddings) is unavailable.")
     async with i.session() as s:
         try:
-            row, created = await mem.add(s, i.llm, _uuid(persona_id), kind, text)
+            row, created = await mem.add(s, i.llm, me(), kind, text)
         except (ValueError, mem.MemoryNotFound, mem.MemoryFull, LLMError) as e:
             raise ValueError(str(e) or "Could not save that memory.") from None
     return {"id": str(row.id), "text": row.text, "created": created}
@@ -266,7 +278,7 @@ async def forget_memory(memory_id: str) -> str:
     """Delete one saved memory by id (from list_memories)."""
     async with infra().session() as s:
         try:
-            await mem.delete(s, _uuid(memory_id))
+            await mem.delete(s, _uuid(memory_id), owner=me())
         except mem.MemoryNotFound:
             raise ValueError("Memory not found.") from None
     return "Forgotten."
@@ -280,10 +292,11 @@ async def tailor_to_posting(resume_id: str, posting: str) -> dict[str, Any]:
     To discard the variant instead, ask the user to delete it in the app."""
     if len(posting.strip()) < 40:
         raise ValueError("Paste the full text of the job posting.")
+    rid = await _own(resume_id)
     spec: dict[str, Any] = {}
     variant = ""
     try:
-        async for ev in stream_tailor(infra(), _uuid(resume_id), posting[:12000]):
+        async for ev in stream_tailor(infra(), rid, posting[:12000]):
             if ev["type"] == "spec":
                 spec = {k: v for k, v in ev.items() if k != "type"}
             elif ev["type"] == "variant":
@@ -303,8 +316,9 @@ async def decide_proposal(resume_id: str, run_id: str, accept: list[int] | str =
     A proposal can be decided once; if the CV changed in the meantime this fails and you should propose again."""
     if isinstance(accept, str) and accept not in ("all", "none"):
         raise ValueError('accept must be "all", "none" or a list of item indices.')
+    rid = await _own(resume_id)
     try:
-        out = await decide(infra(), _uuid(resume_id), run_id, accept)
+        out = await decide(infra(), rid, run_id, accept)
     except ProposalGone:
         raise ValueError("This proposal was already decided, or has expired. Propose again.") from None
     except repo.VersionConflict:
@@ -321,11 +335,8 @@ async def export_pdf(resume_id: str) -> str:
     """Render a CV to PDF and return the file path. Requires the frontend to be running (FRONTEND_URL) and Chrome installed."""
     i = infra()
     async with i.session() as s:
-        try:
-            row, _ = await repo.get_resume(s, _uuid(resume_id))
-        except repo.NotFound:
-            raise ValueError("CV not found.") from None
-    data = await i.pdf.render(f"{i.settings.frontend_url}/preview/{row.id}")
+        row, persona = await _cv(s, resume_id)
+        data = await render_pdf(i, s, persona, row.id)
     PDF_DIR.mkdir(parents=True, exist_ok=True)
     path = PDF_DIR / f"{row.title.lower().replace(' ', '-').replace('/', '-')}-{str(row.id)[:8]}.pdf"
     path.write_bytes(data)

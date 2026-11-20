@@ -76,9 +76,16 @@ async function request(method: string, path: string, body?: unknown, init: Reque
   }
   if (!res.ok) {
     const data = await res.json().catch(() => null)
+    notifyIfSignedOut(path, res.status)
     throw new ApiError(data?.error ?? `Request failed (${res.status})`, res.status, data)
   }
   return res
+}
+
+/** A 401 anywhere (session expired, ended elsewhere, user disabled) sends the app back to the sign-in page. Sign-in's own 401 is just "wrong password". */
+export const UNAUTHORIZED = 'resumaker:unauthorized'
+function notifyIfSignedOut(path: string, status: number) {
+  if (status === 401 && !path.startsWith('/auth/login') && !path.startsWith('/auth/accept')) window.dispatchEvent(new Event(UNAUTHORIZED))
 }
 
 const json = async <T,>(method: string, path: string, body?: unknown, init?: RequestInit): Promise<T> => (await request(method, path, body, init)).json()
@@ -92,12 +99,50 @@ export const getCaps = async (): Promise<Caps> => {
   }
 }
 
-// Personas (people who own CVs)
-export const listPersonas = () => json<Persona[]>('GET', '/personas')
+// Accounts. The session is an HttpOnly cookie the browser sends by itself: this code never sees or stores a credential.
+export type Role = 'user' | 'admin'
+export interface Me {
+  login: string
+  role: Role
+  persona: Persona
+}
+export const getMe = () => json<Me>('GET', '/auth/me')
+export const signIn = (login: string, password: string) => json<Me>('POST', '/auth/login', { login, password })
+export const signOut = async () => void (await request('POST', '/auth/logout'))
+export const acceptInvite = (token: string, password: string) => json<Me>('POST', '/auth/accept', { token, password })
+export const changePassword = async (current: string, next: string) => void (await request('POST', '/auth/password', { current, new: next }))
+export const signOutEverywhere = async () => void (await request('POST', '/auth/logout-all'))
+export const deleteAccount = async (password: string) => void (await request('POST', '/account/delete', { password }))
+
+// Administration (admins manage accounts; they cannot open anyone's CVs)
+export interface AdminUser {
+  id: string
+  login: string | null
+  firstName: string
+  lastName: string
+  role: Role
+  isActive: boolean
+  status: 'draft' | 'invited' | 'active' | 'locked' | 'disabled'
+  resumeCount: number
+  lastLoginAt: string | null
+  createdAt: string
+}
+export interface Invite {
+  user: AdminUser
+  link: string
+  expiresInHours: number
+}
+export const listUsers = () => json<AdminUser[]>('GET', '/admin/users')
+/** Prepare a persona: a name and the email they will sign in with. No password, no link yet. */
+export const createDraft = (body: { firstName: string; lastName: string; login: string; role: Role }) => json<AdminUser>('POST', '/admin/users', body)
+export const patchUser = (id: string, body: { role?: Role; isActive?: boolean; login?: string }) => json<AdminUser>('PATCH', `/admin/users/${id}`, body)
+export const reissueInvite = (id: string) => json<Invite>('POST', `/admin/users/${id}/invite`)
+export const signUserOut = async (id: string) => void (await request('POST', `/admin/users/${id}/sign-out`))
+export const deleteUser = async (id: string, password: string) => void (await request('POST', `/admin/users/${id}/delete`, { password }))
+
+// Your profile and CVs
 export const getPersona = (id: string) => json<{ persona: Persona; resumes: ResumeSummary[] }>('GET', `/personas/${id}`)
-export const createPersona = (details: PersonalDetails) => json<Persona>('POST', '/personas', details)
 export const updatePersona = (id: string, details: PersonalDetails) => json<Persona>('PUT', `/personas/${id}`, details)
-export const deletePersona = async (id: string) => void (await request('DELETE', `/personas/${id}`))
 
 // CVs
 export const createResume = (personaId: string, body: { resume?: Resume; layoutId?: string; template?: 'blank' | 'sample' }) => json<ResumeDoc>('POST', `/personas/${personaId}/resumes`, body)
@@ -216,6 +261,7 @@ export async function importCv(personaId: string, file: File, signal?: AbortSign
   }
   if (!res.ok) {
     const data = await res.json().catch(() => null)
+    notifyIfSignedOut('/imports', res.status)
     throw new ApiError(data?.error ?? `Import failed (${res.status})`, res.status, data)
   }
   return res.json()

@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from ..db import PersonaRow, ResumeRow, ResumeVersionRow
+from ..db import UserRow, ResumeRow, ResumeVersionRow
 from ..domain.models import PersonalDetails, Resume
 from ..domain.ops import Op
 from ..services.personas import to_details
@@ -23,7 +23,7 @@ class PersonaOut(PersonalDetails):
     updatedAt: datetime  # noqa: N815
 
     @classmethod
-    def of(cls, p: PersonaRow, resume_count: int = 0) -> "PersonaOut":
+    def of(cls, p: UserRow, resume_count: int = 0) -> "PersonaOut":
         return cls(id=str(p.id), resumeCount=resume_count, createdAt=p.created_at, updatedAt=p.updated_at, **to_details(p).model_dump())
 
 
@@ -46,7 +46,7 @@ class ResumeOut(ResumeSummary):
     resume: Resume  # complete: persona details merged in
 
     @classmethod
-    def of(cls, row: ResumeRow, persona: PersonaRow) -> "ResumeOut":  # type: ignore[override]
+    def of(cls, row: ResumeRow, persona: UserRow) -> "ResumeOut":  # type: ignore[override]
         return cls(
             id=str(row.id), personaId=str(row.persona_id), title=row.title, layoutId=row.layout_id, version=row.version,
             updatedAt=row.updated_at, createdAt=row.created_at, persona=PersonaOut.of(persona), resume=merged(row, persona),
@@ -172,3 +172,85 @@ class ImportOut(BaseModel):
     language: str = ""
     warnings: list[str] = []
     stats: dict[str, int] = {}  # items per section
+
+
+# ------------------------------------------------------------------ accounts
+
+
+class LoginIn(BaseModel):
+    login: str = Field(min_length=1, max_length=254)
+    password: str = Field(min_length=1, max_length=256)
+
+
+class MeOut(BaseModel):
+    """The signed-in user: their profile (as a persona) plus what they may do."""
+
+    login: str
+    role: Literal["user", "admin"]
+    persona: PersonaOut
+
+    @classmethod
+    def of(cls, u: UserRow, resume_count: int = 0) -> "MeOut":
+        return cls(login=u.login or "", role=u.role, persona=PersonaOut.of(u, resume_count))  # type: ignore[arg-type]
+
+
+class PasswordIn(BaseModel):
+    current: str = Field(min_length=1, max_length=256)
+    new: str = Field(min_length=1, max_length=256)
+
+
+class AcceptIn(BaseModel):
+    token: str = Field(min_length=10, max_length=200)
+    password: str = Field(min_length=1, max_length=256)
+
+
+class ConfirmIn(BaseModel):
+    """Destructive actions ask for the caller's own password again."""
+
+    password: str = Field(min_length=1, max_length=256)
+
+
+class AdminUserOut(BaseModel):
+    id: str
+    login: str | None
+    firstName: str  # noqa: N815
+    lastName: str  # noqa: N815
+    role: Literal["user", "admin"]
+    isActive: bool  # noqa: N815
+    status: Literal["draft", "invited", "active", "locked", "disabled"]  # draft: prepared by an admin, no link sent yet
+    resumeCount: int  # noqa: N815
+    lastLoginAt: datetime | None  # noqa: N815
+    createdAt: datetime  # noqa: N815
+
+    @classmethod
+    def of(cls, u: UserRow, resume_count: int, invited: bool = False) -> "AdminUserOut":
+        from ..services.auth import is_locked
+
+        status = "disabled" if not u.is_active else "locked" if is_locked(u) else "active" if u.password_hash else "invited" if invited else "draft"
+        return cls(
+            id=str(u.id), login=u.login, firstName=u.first_name, lastName=u.last_name, role=u.role, isActive=u.is_active,  # type: ignore[arg-type]
+            status=status, resumeCount=resume_count, lastLoginAt=u.last_login_at, createdAt=u.created_at,
+        )
+
+
+class AdminUserIn(BaseModel):
+    """A persona draft: just a name and the email the person will sign in with. No password, no link yet."""
+
+    firstName: str = Field(min_length=1, max_length=100)  # noqa: N815
+    lastName: str = Field(default="", max_length=100)  # noqa: N815
+    login: str = Field(min_length=3, max_length=254)
+    role: Literal["user", "admin"] = "user"
+
+
+class AdminUserPatch(BaseModel):
+    role: Literal["user", "admin"] | None = None
+    isActive: bool | None = None  # noqa: N815
+    login: str | None = Field(default=None, min_length=3, max_length=254)
+
+
+class InviteOut(BaseModel):
+    """Shown once. The link is the only copy: only its hash is stored. Share it privately; it expires and works once."""
+
+    user: AdminUserOut
+    link: str
+    expiresInHours: int  # noqa: N815

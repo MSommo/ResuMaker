@@ -59,7 +59,7 @@ stable-up: ## Start / update the frozen stack (http://localhost:STABLE_WEB_PORT)
 	@echo; echo "  Frozen app  http://localhost:$(STABLE_WEB_PORT)   (build: $(STABLE_TAG))"
 	@if [ "$(STABLE_BIND)" = "0.0.0.0" ]; then \
 		echo "  On the LAN  http://$(LAN_IP):$(STABLE_WEB_PORT)$(if $(LAN_NAME),   or   http://$(LAN_NAME).local:$(STABLE_WEB_PORT))"; \
-		echo "  ⚠ Exposed: there is no login, so anyone on this network can read and edit every CV."; \
+		echo "  ⚠ Exposed over plain HTTP: passwords and sessions cross the network unencrypted. Only on a network you trust."; \
 	fi; echo
 
 stable-expose: ## Make the frozen app reachable from the local network (web port only; persists in stable.env)
@@ -240,35 +240,65 @@ mcp-local: ## MCP over stdio, on the host (scratch database)
 mcp-http: ## MCP over streamable HTTP on the host, scratch database: http://127.0.0.1:8101/mcp
 	cd backend && DATABASE_URL=$(SCRATCH_DB) REDIS_URL=$(SCRATCH_REDIS) uv run python -m app.mcp_server --http
 
+##@ Users and access (accounts are created by an administrator; the CLI is for the first one and for recovery)
+
+.PHONY: users user-create user-invite user-passwd user-admin mcp-token stable-users stable-user-create stable-user-invite stable-user-passwd stable-user-admin stable-mcp-token
+CLI        := python -m app.cli
+need-login = @test -n "$(LOGIN)" || { echo "Usage: make $(1) LOGIN=<sign-in email>"; exit 1; }
+
+users: ## List users (scratch stack)
+	$(COMPOSE) exec -T api $(CLI) list
+user-create: ## New user + one-time invite link: make user-create LOGIN=a@b.org FIRST=Ada [LAST=Lovelace] [ADMIN=1]
+	@test -n "$(LOGIN)" -a -n "$(FIRST)" || { echo "Usage: make user-create LOGIN=<email> FIRST=<name> [LAST=<name>] [ADMIN=1]"; exit 1; }
+	$(COMPOSE) exec -T api $(CLI) create-user --login "$(LOGIN)" --first "$(FIRST)" --last "$(LAST)" $(if $(ADMIN),--admin)
+user-invite: ## New one-time link (not claimed yet, or forgotten password): make user-invite LOGIN=a@b.org
+	$(call need-login,user-invite)
+	$(COMPOSE) exec -T api $(CLI) invite --login "$(LOGIN)"
+user-passwd: ## Set a password at the terminal (prompted, not echoed): make user-passwd LOGIN=a@b.org
+	$(call need-login,user-passwd)
+	$(COMPOSE) exec api $(CLI) set-password --login "$(LOGIN)"
+user-admin: ## Make someone an administrator (REVOKE=1 to undo): make user-admin LOGIN=a@b.org
+	$(call need-login,user-admin)
+	$(COMPOSE) exec -T api $(CLI) make-admin --login "$(LOGIN)" $(if $(REVOKE),--revoke)
+mcp-token: ## Access token for the MCP server (it acts as this user; shown once): make mcp-token LOGIN=a@b.org [NAME="Claude Desktop"]
+	$(call need-login,mcp-token)
+	$(COMPOSE) exec -T api $(CLI) token --login "$(LOGIN)" --name "$(or $(NAME),MCP)"
+
+stable-users: ## List users (frozen stack)
+	$(STABLE) exec -T api $(CLI) list
+stable-user-create: ## As user-create, on the frozen stack
+	@test -n "$(LOGIN)" -a -n "$(FIRST)" || { echo "Usage: make stable-user-create LOGIN=<email> FIRST=<name> [LAST=<name>] [ADMIN=1]"; exit 1; }
+	$(STABLE) exec -T api $(CLI) create-user --login "$(LOGIN)" --first "$(FIRST)" --last "$(LAST)" $(if $(ADMIN),--admin)
+stable-user-invite: ## As user-invite, on the frozen stack
+	$(call need-login,stable-user-invite)
+	$(STABLE) exec -T api $(CLI) invite --login "$(LOGIN)"
+stable-user-passwd: ## As user-passwd, on the frozen stack
+	$(call need-login,stable-user-passwd)
+	$(STABLE) exec api $(CLI) set-password --login "$(LOGIN)"
+stable-user-admin: ## As user-admin, on the frozen stack
+	$(call need-login,stable-user-admin)
+	$(STABLE) exec -T api $(CLI) make-admin --login "$(LOGIN)" $(if $(REVOKE),--revoke)
+stable-mcp-token: ## As mcp-token, on the frozen stack
+	$(call need-login,stable-mcp-token)
+	$(STABLE) exec -T api $(CLI) token --login "$(LOGIN)" --name "$(or $(NAME),MCP)"
+
 ##@ Inspect the running stack
 
-.PHONY: status graph graph-mermaid graph-json graph-html personas cvs pdf psql redis-cli shell-api shell-web
+.PHONY: status graph graph-mermaid graph-json graph-html psql redis-cli shell-api shell-web
 status: ## API health: AI / PDF / database / cache
 	@curl -fsS localhost:$(API_PORT)/api/status && echo
 
-graph: ## Draw the LangGraph agent as ASCII
-	@curl -fsS "localhost:$(API_PORT)/api/agent/graph"
+graph: ## Draw the LangGraph agent as ASCII (needs a session: this one runs inside the api container)
+	@$(COMPOSE) exec -T api python -c "from app.agent.graph import build_graph; print(build_graph(None).get_graph().draw_ascii())"
 
 graph-mermaid: ## The agent graph as Mermaid source
-	@curl -fsS "localhost:$(API_PORT)/api/agent/graph?format=mermaid"
+	@$(COMPOSE) exec -T api python -c "from app.agent.graph import build_graph; print(build_graph(None).get_graph().draw_mermaid())"
 
-graph-json: ## The agent graph as JSON (nodes, edges, descriptions)
-	@curl -fsS "localhost:$(API_PORT)/api/agent/graph?format=json"; echo
+graph-json: ## Removed: the HTTP endpoint needs a signed-in session (sign in to the app, then open /api/agent/graph?format=json)
+	@echo "Sign in to the app in your browser, then open  http://localhost:$(WEB_PORT)/api/agent/graph?format=json"
 
-graph-html: ## URL of the agent graph rendered in a browser
-	@echo "http://localhost:$(API_PORT)/api/agent/graph?format=html"
-
-personas: ## List the personas (people) and how many CVs each has
-	@curl -fsS localhost:$(API_PORT)/api/personas | python3 -c "import sys,json; [print(f\"{p['id']}  {p['firstName']} {p['lastName']}  ({p['resumeCount']} CV)\") for p in json.load(sys.stdin)]"
-
-cvs: ## List one persona's CVs: make cvs PERSONA=<persona id>   (ids: make personas)
-	@test -n "$(PERSONA)" || { echo "Usage: make cvs PERSONA=<persona id>   (ids: make personas)"; exit 1; }
-	@curl -fsS localhost:$(API_PORT)/api/personas/$(PERSONA) | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['persona']['firstName'], d['persona']['lastName']); [print(f\"  {r['id']}  {r['title']}  [{r['layoutId']}]\") for r in d['resumes']]"
-
-pdf: ## Download a CV as PDF: make pdf ID=<cv id> [OUT=cv.pdf]
-	@test -n "$(ID)" || { echo "Usage: make pdf ID=<cv id>   (ids: make personas, then make cvs PERSONA=...)"; exit 1; }
-	curl -fS -X POST -H 'x-resumaker: 1' -o "$(or $(OUT),cv.pdf)" localhost:$(API_PORT)/api/resumes/$(ID)/pdf
-	@echo "Saved $(or $(OUT),cv.pdf)"
+graph-html: ## URL of the agent graph rendered in a browser (sign in first)
+	@echo "http://localhost:$(WEB_PORT)/api/agent/graph?format=html   (sign in to the app first)"
 
 psql: ## Postgres shell
 	$(COMPOSE) exec db psql -U resumaker resumaker

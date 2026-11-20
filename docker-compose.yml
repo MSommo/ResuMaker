@@ -15,6 +15,7 @@ x-api-env: &api-env
   environment:
     DATABASE_URL: postgresql+asyncpg://resumaker:resumaker@db:5432/resumaker
     REDIS_URL: redis://redis:6379/0
+    PUBLIC_URL: ${PUBLIC_URL:-http://localhost:${WEB_PORT:-5180}}   # what people open in a browser: used in invite links
     FRONTEND_URL: http://web      # headless Chrome in the api container loads the app from nginx to render PDFs
 
 services:
@@ -81,6 +82,8 @@ services:
     build: ./backend
     profiles: ["mcp"]
     command: ["python", "-m", "app.mcp_server"]
+    environment:
+      RESUMAKER_TOKEN: ${RESUMAKER_TOKEN:-}   # who the server acts as: `make mcp-token LOGIN=you@example.com`
     stdin_open: true
     depends_on:
       db: { condition: service_healthy }

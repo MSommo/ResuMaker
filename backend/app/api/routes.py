@@ -3,6 +3,7 @@ from __future__ import annotations
 import html
 import json
 import logging
+import uuid
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
@@ -23,12 +24,15 @@ from ..services.cv_import import parse_cv
 from ..services.importers import MAX_BYTES, ImportRejected
 from ..services.chat import ProposalGone, decide, run_chat, stream_chat
 from ..services import memory as mem
+from ..services.pdf import render_pdf
 from ..services.tailor import stream_tailor
 from ..services.improve import improve_text
 from . import schemas as sc
-from .deps import get_infra, get_session, parse_id, rate_limit
+from .deps import Principal, current, get_infra, get_session, owned_resume, own_persona, parse_id, rate_limit
 
-router = APIRouter()
+# Every route here needs a signed-in user. The few public ones (status, sign-in) live in `public`.
+router = APIRouter(dependencies=[Depends(current)])
+public = APIRouter()
 
 
 def _ai(infra: Infra) -> None:
@@ -36,15 +40,15 @@ def _ai(infra: Infra) -> None:
         raise HTTPException(501, "AI is not configured. Add GEMINI_API_KEY to .env and restart the API.")
 
 
-async def _row(s: AsyncSession, resume_id: str):
-    """(CV row, its persona row)"""
+async def _row(s: AsyncSession, resume_id: uuid.UUID):
+    """(CV row, its persona row). `resume_id` comes from `owned_resume`, so it is already known to be the caller's."""
     try:
-        return await repo.get_resume(s, parse_id(resume_id))
+        return await repo.get_resume(s, resume_id)
     except repo.NotFound:
         raise HTTPException(404, "CV not found.") from None
 
 
-@router.get("/status")
+@public.get("/status")
 async def status(infra: Infra = Depends(get_infra)):
     return await infra.status()
 
@@ -79,57 +83,30 @@ async def agent_graph(format: Literal["ascii", "mermaid", "json", "html"] = "asc
 # ------------------------------------------------------------------ Personas
 
 
-async def _persona(s: AsyncSession, persona_id: str):
-    try:
-        return await people.get_persona(s, parse_id(persona_id))
-    except people.PersonaNotFound:
-        raise HTTPException(404, "Persona not found.") from None
-
-
-@router.get("/personas", response_model=list[sc.PersonaOut])
-async def list_personas(s: AsyncSession = Depends(get_session)):
-    return [sc.PersonaOut.of(p, n) for p, n in await people.list_personas(s)]
-
-
-@router.post("/personas", response_model=sc.PersonaOut, status_code=201)
-async def create_persona(body: sc.PersonaIn, s: AsyncSession = Depends(get_session)):
-    return sc.PersonaOut.of(await people.create_persona(s, body))
-
-
 @router.get("/personas/{persona_id}", response_model=sc.PersonaDetail)
-async def get_persona(persona_id: str, s: AsyncSession = Depends(get_session)):
-    p = await _persona(s, persona_id)
+async def get_persona(pid: uuid.UUID = Depends(own_persona), s: AsyncSession = Depends(get_session)):
+    """Your own profile and CVs. (Accounts are created by an administrator: see /admin/users.)"""
+    p = await people.get_persona(s, pid)
     rows = await people.persona_resumes(s, p.id)
     return sc.PersonaDetail(persona=sc.PersonaOut.of(p, len(rows)), resumes=[sc.ResumeSummary.of(r) for r in rows])
 
 
 @router.put("/personas/{persona_id}", response_model=sc.PersonaOut)
-async def update_persona(persona_id: str, body: sc.PersonaIn, s: AsyncSession = Depends(get_session)):
-    await _persona(s, persona_id)
-    return sc.PersonaOut.of(await people.update_persona(s, parse_id(persona_id), body))
-
-
-@router.delete("/personas/{persona_id}", status_code=204)
-async def delete_persona(persona_id: str, s: AsyncSession = Depends(get_session)):
-    await _persona(s, persona_id)
-    await people.delete_persona(s, parse_id(persona_id))
-    return Response(status_code=204)
+async def update_persona(*, body: sc.PersonaIn, pid: uuid.UUID = Depends(own_persona), s: AsyncSession = Depends(get_session)):
+    return sc.PersonaOut.of(await people.update_persona(s, pid, body))
 
 
 @router.post("/personas/{persona_id}/resumes", response_model=sc.ResumeOut, status_code=201)
-async def create_resume(persona_id: str, body: sc.CreateResumeIn, s: AsyncSession = Depends(get_session)):
-    await _persona(s, persona_id)
-    row, persona = await repo.create_resume(s, parse_id(persona_id), resume=body.resume, layout_id=body.layoutId, template=body.template)
+async def create_resume(*, body: sc.CreateResumeIn, pid: uuid.UUID = Depends(own_persona), s: AsyncSession = Depends(get_session)):
+    row, persona = await repo.create_resume(s, pid, resume=body.resume, layout_id=body.layoutId, template=body.template)
     return sc.ResumeOut.of(row, persona)
 
 
 @router.post("/personas/{persona_id}/imports/cv", response_model=sc.ImportOut, dependencies=[Depends(rate_limit)])
-async def import_cv(persona_id: str, file: UploadFile = File(...), infra: Infra = Depends(get_infra)):
+async def import_cv(*, pid: uuid.UUID = Depends(own_persona), file: UploadFile = File(...), infra: Infra = Depends(get_infra)):
     """Read a CV from a PDF, DOCX or HTML file (up to 10 MB) into our format. Saves nothing: it returns a preview with warnings to
     review, and the CV is created with the normal POST /personas/{id}/resumes. The file is processed in memory and not kept."""
     _ai(infra)
-    async with infra.session() as s:
-        await _persona(s, persona_id)
     data = await file.read(MAX_BYTES + 1)
     try:
         p = await parse_cv(infra.llm, data)
@@ -148,19 +125,17 @@ def _memory_out(m) -> sc.MemoryOut:
 
 
 @router.get("/personas/{persona_id}/memories", response_model=list[sc.MemoryOut])
-async def list_memories(persona_id: str, s: AsyncSession = Depends(get_session)):
-    await _persona(s, persona_id)
-    return [_memory_out(m) for m in await mem.list_memories(s, parse_id(persona_id))]
+async def list_memories(pid: uuid.UUID = Depends(own_persona), s: AsyncSession = Depends(get_session)):
+    return [_memory_out(m) for m in await mem.list_memories(s, pid)]
 
 
 @router.post("/personas/{persona_id}/memories", response_model=sc.MemoryOut, status_code=201, dependencies=[Depends(rate_limit)])
-async def add_memory(persona_id: str, body: sc.MemoryIn, infra: Infra = Depends(get_infra)):
+async def add_memory(*, body: sc.MemoryIn, pid: uuid.UUID = Depends(own_persona), infra: Infra = Depends(get_infra)):
     """Save a preference or fact by hand (it is embedded with Gemini, so AI must be configured)."""
     _ai(infra)
     async with infra.session() as s:
-        await _persona(s, persona_id)
         try:
-            row, _ = await mem.add(s, infra.llm, parse_id(persona_id), body.kind, body.text)
+            row, _ = await mem.add(s, infra.llm, pid, body.kind, body.text)
         except mem.MemoryFull:
             raise HTTPException(409, f"Memory is full ({mem.MAX_PER_PERSONA} items). Delete some first.") from None
         except ValueError as e:
@@ -171,9 +146,9 @@ async def add_memory(persona_id: str, body: sc.MemoryIn, infra: Infra = Depends(
 
 
 @router.delete("/memories/{memory_id}", status_code=204)
-async def delete_memory(memory_id: str, s: AsyncSession = Depends(get_session)):
+async def delete_memory(memory_id: str, who: Principal = Depends(current), s: AsyncSession = Depends(get_session)):
     try:
-        await mem.delete(s, parse_id(memory_id))
+        await mem.delete(s, parse_id(memory_id, "Memory"), owner=who.id)
     except mem.MemoryNotFound:
         raise HTTPException(404, "Memory not found.") from None
 
@@ -182,15 +157,15 @@ async def delete_memory(memory_id: str, s: AsyncSession = Depends(get_session)):
 
 
 @router.get("/resumes/{resume_id}", response_model=sc.ResumeOut)
-async def get_resume(resume_id: str, s: AsyncSession = Depends(get_session)):
-    return sc.ResumeOut.of(*await _row(s, resume_id))
+async def get_resume(*, rid: uuid.UUID = Depends(owned_resume), s: AsyncSession = Depends(get_session)):
+    return sc.ResumeOut.of(*await _row(s, rid))
 
 
 @router.put("/resumes/{resume_id}", response_model=sc.ResumeOut)
-async def save_resume(resume_id: str, body: sc.SaveIn, s: AsyncSession = Depends(get_session)):
+async def save_resume(*, rid: uuid.UUID = Depends(owned_resume), body: sc.SaveIn, s: AsyncSession = Depends(get_session)):
     """Save the CV's content and headline. Personal details are ignored here: they belong to the persona (PUT /personas/{id})."""
     try:
-        return sc.ResumeOut.of(*await repo.save_resume(s, parse_id(resume_id), body.resume, body.version, update_persona=False, checkpoint=True))
+        return sc.ResumeOut.of(*await repo.save_resume(s, rid, body.resume, body.version, update_persona=False, checkpoint=True))
     except repo.NotFound:
         raise HTTPException(404, "CV not found.") from None
     except repo.VersionConflict as e:
@@ -198,20 +173,20 @@ async def save_resume(resume_id: str, body: sc.SaveIn, s: AsyncSession = Depends
 
 
 @router.delete("/resumes/{resume_id}", status_code=204)
-async def delete_resume(resume_id: str, s: AsyncSession = Depends(get_session)):
+async def delete_resume(*, rid: uuid.UUID = Depends(owned_resume), s: AsyncSession = Depends(get_session)):
     try:
-        await repo.delete_resume(s, parse_id(resume_id))
+        await repo.delete_resume(s, rid)
     except repo.NotFound:
         raise HTTPException(404, "CV not found.") from None
     return Response(status_code=204)
 
 
 @router.post("/resumes/{resume_id}/ops", response_model=sc.OpsOut)
-async def apply_resume_ops(resume_id: str, body: sc.OpsIn, s: AsyncSession = Depends(get_session)):
+async def apply_resume_ops(*, rid: uuid.UUID = Depends(owned_resume), body: sc.OpsIn, s: AsyncSession = Depends(get_session)):
     """Apply validated edit operations directly (the same engine the agent and the MCP server use).
 
     With `dryRun` nothing is saved: you get what would be applied, what would be skipped, and a readable list of changes."""
-    row, persona = await _row(s, resume_id)
+    row, persona = await _row(s, rid)
     before = repo.merged(row, persona)
     res = apply_ops(before, body.ops)
     changes = diff_resumes(before, res.resume)
@@ -228,8 +203,8 @@ async def apply_resume_ops(resume_id: str, body: sc.OpsIn, s: AsyncSession = Dep
 
 
 @router.get("/resumes/{resume_id}/versions", response_model=list[sc.VersionOut])
-async def list_versions(resume_id: str, s: AsyncSession = Depends(get_session)):
-    row, _ = await _row(s, resume_id)
+async def list_versions(*, rid: uuid.UUID = Depends(owned_resume), s: AsyncSession = Depends(get_session)):
+    row, _ = await _row(s, rid)
     return [sc.VersionOut.of(v) for v in await vers.list_versions(s, row.id)]
 
 
@@ -241,25 +216,25 @@ async def _version(s: AsyncSession, row, version_id: str):
 
 
 @router.get("/resumes/{resume_id}/versions/{version_id}", response_model=Resume)
-async def get_version(resume_id: str, version_id: str, s: AsyncSession = Depends(get_session)):
+async def get_version(*, rid: uuid.UUID = Depends(owned_resume), version_id: str, s: AsyncSession = Depends(get_session)):
     """The CV as it was in that snapshot (with the persona's current details)."""
-    row, persona = await _row(s, resume_id)
+    row, persona = await _row(s, rid)
     v = await _version(s, row, version_id)
     return repo.merged_from(v.data, persona)
 
 
 @router.get("/resumes/{resume_id}/versions/{version_id}/diff", response_model=sc.DiffOut)
-async def diff_version(resume_id: str, version_id: str, s: AsyncSession = Depends(get_session)):
+async def diff_version(*, rid: uuid.UUID = Depends(owned_resume), version_id: str, s: AsyncSession = Depends(get_session)):
     """What restoring this version would change: the snapshot compared with the CV as it is now."""
-    row, persona = await _row(s, resume_id)
+    row, persona = await _row(s, rid)
     v = await _version(s, row, version_id)
     return sc.DiffOut(changes=diff_resumes(repo.merged(row, persona), repo.merged_from(v.data, persona)))
 
 
 @router.post("/resumes/{resume_id}/versions/{version_id}/restore", response_model=sc.ResumeOut)
-async def restore_version(resume_id: str, version_id: str, s: AsyncSession = Depends(get_session)):
+async def restore_version(*, rid: uuid.UUID = Depends(owned_resume), version_id: str, s: AsyncSession = Depends(get_session)):
     """Make the CV match that snapshot. The current state is snapshotted first, so a restore can be undone too."""
-    row, _ = await _row(s, resume_id)
+    row, _ = await _row(s, rid)
     await _version(s, row, version_id)
     return sc.ResumeOut.of(*await vers.restore(s, row.id, parse_id(version_id)))
 
@@ -278,10 +253,10 @@ async def improve(body: sc.ImproveIn, infra: Infra = Depends(get_infra)):
 
 
 @router.post("/resumes/{resume_id}/chat", response_model=sc.ChatOut, dependencies=[Depends(rate_limit)])
-async def chat(resume_id: str, body: sc.ChatIn, infra: Infra = Depends(get_infra)):
+async def chat(*, rid: uuid.UUID = Depends(owned_resume), body: sc.ChatIn, infra: Infra = Depends(get_infra)):
     _ai(infra)
     try:
-        out = await run_chat(infra, parse_id(resume_id), body.message)
+        out = await run_chat(infra, rid, body.message)
     except repo.NotFound:
         raise HTTPException(404, "CV not found.") from None
     except repo.VersionConflict:
@@ -303,13 +278,12 @@ def _sse(event: dict) -> str:
 
 
 @router.post("/resumes/{resume_id}/chat/stream", dependencies=[Depends(rate_limit)])
-async def chat_stream(resume_id: str, body: sc.ChatStreamIn, infra: Infra = Depends(get_infra)):
+async def chat_stream(*, rid: uuid.UUID = Depends(owned_resume), body: sc.ChatStreamIn, infra: Infra = Depends(get_infra)):
     """The assistant turn as Server-Sent Events: `status` (what it is doing now), `step` (a graph node finished), then
     `done` with the result, or `proposal` (mode=propose: nothing is changed until you POST .../chat/{runId}/decide), or `error`."""
     _ai(infra)
-    rid = parse_id(resume_id)
     async with infra.session() as s:
-        await _row(s, resume_id)  # 404 as a normal JSON error before the stream starts
+        await _row(s, rid)  # 404 as a normal JSON error before the stream starts
 
     async def events():
         try:
@@ -329,14 +303,13 @@ async def chat_stream(resume_id: str, body: sc.ChatStreamIn, infra: Infra = Depe
 
 
 @router.post("/resumes/{resume_id}/tailor/stream", dependencies=[Depends(rate_limit)])
-async def tailor_stream(resume_id: str, body: sc.TailorIn, infra: Infra = Depends(get_infra)):
+async def tailor_stream(*, rid: uuid.UUID = Depends(owned_resume), body: sc.TailorIn, infra: Infra = Depends(get_infra)):
     """Tailor this CV to a pasted job posting, as Server-Sent Events: `status`, `spec` (what the role needs, what your CV
     matches, what it lacks), `variant` (a NEW CV was created: the original is never touched), step/status, then `proposal`
     to accept or reject with POST /resumes/{variant id}/chat/{runId}/decide, or `error`."""
     _ai(infra)
-    rid = parse_id(resume_id)
     async with infra.session() as s:
-        await _row(s, resume_id)
+        await _row(s, rid)
 
     async def events():
         try:
@@ -352,11 +325,11 @@ async def tailor_stream(resume_id: str, body: sc.TailorIn, infra: Infra = Depend
 
 
 @router.post("/resumes/{resume_id}/chat/{run_id}/decide", response_model=sc.ChatOut, dependencies=[Depends(rate_limit)])
-async def chat_decide(resume_id: str, run_id: str, body: sc.DecideIn, infra: Infra = Depends(get_infra)):
+async def chat_decide(*, rid: uuid.UUID = Depends(owned_resume), run_id: str, body: sc.DecideIn, infra: Infra = Depends(get_infra)):
     """Accept all, none, or some of the changes in a proposal. Resumes the paused run (stored in Postgres)."""
     _ai(infra)
     try:
-        out = await decide(infra, parse_id(resume_id), run_id, body.accept)
+        out = await decide(infra, rid, run_id, body.accept)
     except ProposalGone:
         raise HTTPException(410, "This proposal was already decided, or has expired. Ask again.") from None
     except repo.NotFound:
@@ -369,8 +342,8 @@ async def chat_decide(resume_id: str, run_id: str, body: sc.DecideIn, infra: Inf
 
 
 @router.get("/resumes/{resume_id}/chat", response_model=list[sc.ChatMessageOut])
-async def chat_history(resume_id: str, s: AsyncSession = Depends(get_session)):
-    row, _ = await _row(s, resume_id)
+async def chat_history(*, rid: uuid.UUID = Depends(owned_resume), s: AsyncSession = Depends(get_session)):
+    row, _ = await _row(s, rid)
     return [
         sc.ChatMessageOut(
             id=str(m.id), role=m.role, text=m.text, applied=m.applied or [], skipped=m.skipped or [],
@@ -381,8 +354,8 @@ async def chat_history(resume_id: str, s: AsyncSession = Depends(get_session)):
 
 
 @router.delete("/resumes/{resume_id}/chat", status_code=204)
-async def clear_chat(resume_id: str, s: AsyncSession = Depends(get_session)):
-    row, _ = await _row(s, resume_id)
+async def clear_chat(*, rid: uuid.UUID = Depends(owned_resume), s: AsyncSession = Depends(get_session)):
+    row, _ = await _row(s, rid)
     await repo.clear_chat(s, row.id)
     return Response(status_code=204)
 
@@ -391,17 +364,17 @@ async def clear_chat(resume_id: str, s: AsyncSession = Depends(get_session)):
 
 
 @router.post("/resumes/{resume_id}/pdf")
-async def pdf(resume_id: str, infra: Infra = Depends(get_infra), s: AsyncSession = Depends(get_session)):
+async def pdf(*, rid: uuid.UUID = Depends(owned_resume), who: Principal = Depends(current), infra: Infra = Depends(get_infra), s: AsyncSession = Depends(get_session)):
     if not infra.pdf.available:
         raise HTTPException(501, "Chrome was not found. Set CHROME_PATH in .env.")
-    row, persona = await _row(s, resume_id)
+    row, persona = await _row(s, rid)
     # The key hashes the complete CV (including the persona's details), so any edit invalidates the cached PDF.
     key = f"pdf:{row.id}:{digest(repo.merged(row, persona).model_dump(mode='json'))}"
     headers = {"content-disposition": 'attachment; filename="cv.pdf"'}
     if (hit := await infra.cache.get(key)) is not None:
         return Response(hit, media_type="application/pdf", headers={**headers, "x-cache": "hit"})
     try:
-        data = await infra.pdf.render(f"{infra.settings.frontend_url}/preview/{row.id}")
+        data = await render_pdf(infra, s, who.user, row.id)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(502, f"PDF rendering failed: {e}") from e
     await infra.cache.set(key, data, infra.settings.pdf_cache_ttl)

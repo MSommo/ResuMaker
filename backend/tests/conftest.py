@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import uuid
 import zlib
 
 # Tests use their own database and Redis db, never the dev data. Hosts/ports come from the environment so the same
@@ -31,6 +32,7 @@ from app.infra import Infra
 from app.main import create_app
 
 HEADERS = {"x-resumaker": "1"}
+PASSWORD = "correct horse battery staple"
 
 
 class FakeLLM:
@@ -129,8 +131,9 @@ class FakePdf:
     def __init__(self):
         self.renders = 0
 
-    async def render(self, url: str) -> bytes:
+    async def render(self, url: str, cookie: dict | None = None) -> bytes:
         self.renders += 1
+        self.cookie = cookie
         return b"%PDF-1.7 fake " + url.encode()
 
     async def close(self):
@@ -164,8 +167,21 @@ async def infra():
     await i.stop()
 
 
+async def make_user(infra, *, role="user", first="Jane", last="Doe", login=None, password=PASSWORD):
+    """A claimed account, created straight in the database."""
+    from app.security import hash_password
+    from app.services import auth
+
+    async with infra.session() as s:
+        user = await auth.create_user(s, login=login or f"u{uuid.uuid4().hex[:10]}@example.com", first_name=first, last_name=last, role=role)
+        if password:
+            user.password_hash = hash_password(password)
+            await s.commit()
+        return user
+
+
 @pytest_asyncio.fixture
-async def client(infra):
+async def app(infra):
     app = create_app(infra)
     app.state.infra = infra  # ASGITransport doesn't run lifespan; infra is already started
     llm = infra.llm
@@ -174,6 +190,38 @@ async def client(infra):
     llm.memos.clear(), llm.imports.clear(), llm.import_inputs.clear()
     infra.pdf.renders = 0
     infra.settings.ai_rate_limit_per_min = 1000
+    infra.settings.login_rate_limit_per_ip = 1000
     await infra.redis.flushdb()
+    return app
+
+
+@pytest_asyncio.fixture
+async def anon(app):
+    """Not signed in."""
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test", headers=HEADERS) as c:
         yield c
+
+
+@pytest_asyncio.fixture
+async def make_client(app, infra):
+    """Factory: `await make_client()` is a client signed in as a brand-new user (`role="admin"` for an administrator)."""
+    made: list[httpx.AsyncClient] = []
+
+    async def factory(*, role="user", first="Jane", last="Doe", login=None):
+        user = await make_user(infra, role=role, first=first, last=last, login=login)
+        c = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test", headers=HEADERS)
+        made.append(c)
+        r = await c.post("/api/auth/login", json={"login": user.login, "password": PASSWORD})
+        assert r.status_code == 200, r.text
+        c.user = user
+        return c
+
+    yield factory
+    for c in made:
+        await c.aclose()
+
+
+@pytest_asyncio.fixture
+async def client(make_client):
+    """Signed in as a fresh, ordinary user."""
+    return await make_client()

@@ -5,8 +5,10 @@ from tests.conftest import HEADERS
 
 
 async def new_persona(client, first="Jane", last="Doe", **extra):
-    r = await client.post("/api/personas", json={"firstName": first, "lastName": last, **extra})
-    assert r.status_code == 201, r.text
+    """The signed-in user's profile, set to these details (accounts are created by an admin, not through this API)."""
+    me = (await client.get("/api/auth/me")).json()["persona"]
+    r = await client.put(f"/api/personas/{me['id']}", json={"firstName": first, "lastName": last, **extra})
+    assert r.status_code == 200, r.text
     return r.json()
 
 
@@ -27,20 +29,20 @@ async def test_status(client):
 
 
 async def test_unsafe_methods_require_the_app_header(client):
-    r = await client.post("/api/personas", json={"firstName": "X"}, headers={"x-resumaker": "0"})
+    me = (await client.get("/api/auth/me")).json()["persona"]
+    r = await client.put(f"/api/personas/{me['id']}", json={"firstName": "X"}, headers={"x-resumaker": "0"})
     assert r.status_code == 403
 
 
-async def test_persona_crud_and_validation(client):
+async def test_profile_update_and_validation(client):
     p = await new_persona(client, "Ada", "Lovelace", email="ada@example.com", address={"city": "London", "country": "GB"})
     assert p["resumeCount"] == 0 and p["address"]["city"] == "London"
-    assert any(x["id"] == p["id"] for x in (await client.get("/api/personas")).json())
     upd = await client.put(f"/api/personas/{p['id']}", json={"firstName": "Ada", "lastName": "King", "email": "a@k.org"})
     assert upd.json()["lastName"] == "King" and upd.json()["email"] == "a@k.org"
-    assert (await client.post("/api/personas", json={"firstName": ""})).status_code == 422  # a name is required
+    assert (await client.put(f"/api/personas/{p['id']}", json={"firstName": ""})).status_code == 422  # a name is required
     assert (await client.get("/api/personas/00000000-0000-0000-0000-000000000000")).status_code == 404
-    assert (await client.delete(f"/api/personas/{p['id']}")).status_code == 204
-    assert (await client.get(f"/api/personas/{p['id']}")).status_code == 404
+    # The e-mail on a CV is contact data: changing it never changes who you sign in as.
+    assert (await client.get("/api/auth/me")).json()["login"] != "a@k.org"
 
 
 async def test_a_persona_has_many_resumes(client):
@@ -83,14 +85,6 @@ async def test_cv_save_ignores_personal_details_but_keeps_the_headline(client):
     saved = (await client.put(f"/api/resumes/{doc['id']}", json={"resume": stale, "version": doc["version"]})).json()
     assert saved["resume"]["basics"]["firstName"] == "Lee"  # persona untouched
     assert saved["resume"]["basics"]["headline"] == "Staff Engineer" and saved["title"] == "Staff Engineer"
-
-
-async def test_deleting_a_persona_deletes_their_cvs_but_not_others(client):
-    gone, kept = await new_persona(client, "Gone", "X"), await new_persona(client, "Kept", "Y")
-    doomed, safe = await create(client, "blank", persona=gone), await create(client, "blank", persona=kept)
-    await client.delete(f"/api/personas/{gone['id']}")
-    assert (await client.get(f"/api/resumes/{doomed['id']}")).status_code == 404
-    assert (await client.get(f"/api/resumes/{safe['id']}")).status_code == 200
 
 
 async def test_crud_roundtrip(client):

@@ -16,7 +16,7 @@ from langgraph.types import Command
 
 from ..agent.graph import needs_repair
 from ..agent.llm import LLMError
-from ..db import PersonaRow
+from ..db import UserRow
 from ..domain.diff import diff_resumes
 from ..domain.models import Resume
 from ..infra import Infra
@@ -37,7 +37,7 @@ class ChatOutcome:
     applied: list[str]
     skipped: list[str]
     row: repo.ResumeRow
-    persona: PersonaRow
+    persona: UserRow
     message_id: str
     changes: list[str] = field(default_factory=list)
     undo_version_id: str | None = None
@@ -117,7 +117,7 @@ async def _drive(graph: Any, graph_input: Any, config: dict[str, Any] | None, fi
                 yield {"type": "status", "label": label}
 
 
-async def _commit(infra: Infra, s: Any, rid: uuid.UUID, row: repo.ResumeRow, persona: PersonaRow, before: Resume, final: dict[str, Any], message: str, proposed: int | None = None) -> ChatOutcome:
+async def _commit(infra: Infra, s: Any, rid: uuid.UUID, row: repo.ResumeRow, persona: UserRow, before: Resume, final: dict[str, Any], message: str, proposed: int | None = None) -> ChatOutcome:
     """Turn a finished run into saved changes: snapshot (for Undo), save with the optimistic lock, and record the conversation."""
     intent = final.get("intent", "edit")
     quiet = intent in ("answer", "remember")  # no CV changes

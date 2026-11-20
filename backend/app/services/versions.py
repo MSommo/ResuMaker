@@ -9,7 +9,7 @@ from datetime import timedelta
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..db import ChatMessageRow, PersonaRow, ResumeRow, ResumeVersionRow, utcnow
+from ..db import ChatMessageRow, UserRow, ResumeRow, ResumeVersionRow, utcnow
 
 # A manual editing session gets one checkpoint (taken before its first save), not one per autosave.
 CHECKPOINT_AFTER = timedelta(minutes=15)
@@ -55,7 +55,7 @@ async def get_version(s: AsyncSession, rid: uuid.UUID, vid: uuid.UUID) -> Resume
     return v
 
 
-async def restore(s: AsyncSession, rid: uuid.UUID, vid: uuid.UUID) -> tuple[ResumeRow, PersonaRow]:
+async def restore(s: AsyncSession, rid: uuid.UUID, vid: uuid.UUID) -> tuple[ResumeRow, UserRow]:
     """Make the CV match snapshot `vid`. The current state is snapshotted first, so a restore can itself be undone.
     Only the CV's own content is restored: the persona's personal details are shared by all their CVs and are left alone."""
     from .resumes import NotFound  # local import: resumes imports this module
@@ -73,5 +73,5 @@ async def restore(s: AsyncSession, rid: uuid.UUID, vid: uuid.UUID) -> tuple[Resu
     # The assistant message(s) whose changes this snapshot undoes are now undone.
     await s.execute(ChatMessageRow.__table__.update().where(ChatMessageRow.undo_version_id == vid).values(undone=True))
     await s.commit()
-    persona = await s.get(PersonaRow, row.persona_id)
+    persona = await s.get(UserRow, row.persona_id)
     return row, persona  # type: ignore[return-value]

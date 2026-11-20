@@ -61,7 +61,7 @@ async def test_legacy_database_is_migrated_and_backfilled(monkeypatch):
 
     conn = await asyncpg.connect(plain)
     try:
-        people = await conn.fetch("select * from personas order by first_name")
+        people = await conn.fetch("select * from users order by first_name")
         assert [p["first_name"].lower() for p in people] == ["mario", "zoe"]  # two CVs of one person → one persona
         mario = next(p for p in people if p["first_name"].lower() == "mario")
         assert (mario["email"], mario["city"], mario["country"], mario["nationality"], mario["birth_date"]) == ("m@x.org", "Belfast", "GB", "Italian", "1990-01-01")
@@ -74,11 +74,16 @@ async def test_legacy_database_is_migrated_and_backfilled(monkeypatch):
         # ...and old messages got the new columns' defaults: nothing to undo, not undone.
         assert await conn.fetchval("select count(*) from chat_messages where undone is false and undo_version_id is null") == 1
         # Persona deletion cascades at the database level.
-        await conn.execute("delete from personas where id = $1", mario["id"])
+        await conn.execute("delete from users where id = $1", mario["id"])
         assert await conn.fetchval("select count(*) from resumes") == 1
-        assert await conn.fetchval("select version_num from alembic_version") == "0004"  # head: personas (0002), versions (0003), memories (0004)
+        assert await conn.fetchval("select version_num from alembic_version") == "0005"  # head: personas (0002), versions (0003), memories (0004), users + auth (0005)
         assert await conn.fetchval("select count(*) from resume_versions") == 0  # 0003 added the (empty) history table
         assert await conn.fetchval("select count(*) from memories") == 0  # 0004 added the (empty) memory table
+        # 0005: personas became users, unclaimed (nobody can sign in), with the login pre-filled from the email.
+        assert mario["password_hash"] is None and mario["role"] == "user" and mario["is_active"] is True and mario["login"] == "m@x.org"
+        assert await conn.fetchval("select count(*) from users where password_hash is not null") == 0
+        assert await conn.fetchval("select to_regclass('personas')") is None
+        assert await conn.fetchval("select count(*) from sessions") == 0 and await conn.fetchval("select count(*) from user_tokens") == 0
         assert await conn.fetchval("select extname from pg_extension where extname = 'vector'") == "vector"
     finally:
         await conn.close()
