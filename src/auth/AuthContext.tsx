@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { getMe, signOut, UNAUTHORIZED, type Me } from '../api/client'
+import { AI_REVOKED, getMe, signOut, UNAUTHORIZED, type Me } from '../api/client'
 import { LAST_KEY } from '../state/ResumeContext'
 
 type State = { status: 'loading' } | { status: 'anon' } | { status: 'in'; me: Me }
@@ -43,6 +43,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.addEventListener(UNAUTHORIZED, onOut)
     return () => window.removeEventListener(UNAUTHORIZED, onOut)
   }, [refresh])
+
+  // What an administrator changes (AI on or off, for now) reaches an open tab without a reload: re-ask "who am I?" when
+  // the server refuses an AI request, and when the tab comes back into view (at most every 30 s). A failed re-check
+  // changes nothing: a real sign-out arrives as a 401, which signs the tab out above.
+  useEffect(() => {
+    let last = Date.now()
+    const recheck = async (force: boolean) => {
+      if (!force && Date.now() - last < 30_000) return
+      last = Date.now()
+      try {
+        const me = await getMe()
+        setState((cur) => (cur.status === 'in' && JSON.stringify(cur.me) === JSON.stringify(me) ? cur : { status: 'in', me }))
+      } catch { /* offline or signed out: handled elsewhere */ }
+    }
+    const onRevoked = () => void recheck(true)
+    const onVisible = () => document.visibilityState === 'visible' && void recheck(false)
+    window.addEventListener(AI_REVOKED, onRevoked)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.removeEventListener(AI_REVOKED, onRevoked)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [])
 
   const value = useMemo<Auth>(
     () => ({

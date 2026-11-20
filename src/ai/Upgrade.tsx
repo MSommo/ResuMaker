@@ -5,7 +5,19 @@ import { Close, Lock, Sparkle } from '../components/icons'
  * The one place that tells someone AI isn't included in their account. Every locked AI feature shows this, so when the
  * paywall arrives, its call to action (plans, checkout) goes here and nowhere else.
  */
-export function UpgradeNote({ feature, compact = false }: { feature?: string; compact?: boolean }) {
+export function UpgradeNote({ feature, compact = false, bar = false }: { feature?: string; compact?: boolean; bar?: boolean }) {
+  // `bar`: one short line where a control would be (the assistant's message box), not a paragraph.
+  if (bar)
+    return (
+      <div className="upgrade-bar" role="note">
+        <span className="upgrade-bar-icon" aria-hidden><Lock /></span>
+        <span className="upgrade-bar-text">
+          <strong>AI is off for your account</strong>
+          <small>Ask your administrator to turn it on.</small>
+        </span>
+        <span className="upgrade-badge"><Sparkle /> Upgrade</span>
+      </div>
+    )
   return (
     <div className={`upgrade-note ${compact ? 'compact' : ''}`} role="note">
       <span className="upgrade-badge"><Sparkle /> Upgrade</span>

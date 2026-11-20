@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { chatHistory, chatStream, clearChat, decideProposal, restoreVersion, type ChatResult, type Proposal } from '../api/client'
-import { Chat, Close, Send, Sparkle, Target, Trash, Undo } from '../components/icons'
+import { useCaps } from '../api/Caps'
+import { Chat, Close, Send, Sparkle, Stop, Target, Trash, Undo } from '../components/icons'
 import { Menu, MenuItem } from '../components/Popover'
 import { useResume } from '../state/ResumeContext'
 import { MemoryDialog } from './MemoryDialog'
 import { TailorDialog } from './TailorDialog'
+import { LockedAssistant, UpgradeNote } from './Upgrade'
 
 interface Msg {
   role: 'user' | 'assistant'
@@ -15,6 +17,8 @@ interface Msg {
   undoVersionId?: string | null
   undone?: boolean
   error?: boolean
+  /** A quiet line from the app rather than the assistant ("Stopped…"). */
+  note?: boolean
 }
 
 const AUTO_KEY = 'resumaker.approveAll'
@@ -36,6 +40,7 @@ const SUGGESTIONS = [
 /** Floating assistant. The LangGraph agent on the server edits the saved CV; every change is listed and can be undone. */
 export function ChatBubble() {
   const { id, personaId, adopt, flush } = useResume()
+  const caps = useCaps()
   const [open, setOpen] = useState(false)
   const [dial, setDial] = useState(false) // the launcher's two choices: Ask AI / Tailor to a job
   const dialRef = useRef<HTMLDivElement>(null)
@@ -52,6 +57,10 @@ export function ChatBubble() {
   const loaded = useRef(false)
   const endRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  /** The request in flight, so Stop can cancel it. Nothing is saved until a run finishes, so stopping changes nothing. */
+  const abort = useRef<AbortController | null>(null)
+  const [streaming, setStreaming] = useState(false)
+  useEffect(() => () => abort.current?.abort(), [])
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' })
@@ -96,20 +105,27 @@ export function ChatBubble() {
     setMsgs((m) => [...m, { role: 'user', text: content }])
     setText('')
     setBusy(true)
+    setStreaming(true)
+    const ctl = (abort.current = new AbortController())
     try {
       await flush() // the agent reads the saved CV, so make sure it has your latest edits
       setStatus('Thinking…')
-      const out = await chatStream(id, content, auto ? 'apply' : 'propose', (ev) => ev.type === 'status' && setStatus(ev.label))
+      const out = await chatStream(id, content, auto ? 'apply' : 'propose', (ev) => ev.type === 'status' && setStatus(ev.label), ctl.signal)
       if ('runId' in out) {
         setProposal(out)
         setPicked(new Set(out.items.map((i) => i.index)))
       } else showResult(out)
     } catch (e) {
-      setMsgs((m) => [...m, { role: 'assistant', text: e instanceof Error ? e.message : 'Something went wrong.', error: true }])
+      if (ctl.signal.aborted) setMsgs((m) => [...m, { role: 'assistant', text: 'Stopped. Nothing was changed.', note: true }])
+      else setMsgs((m) => [...m, { role: 'assistant', text: e instanceof Error ? e.message : 'Something went wrong.', error: true }])
     } finally {
+      abort.current = null
+      setStreaming(false)
       setBusy(false)
+      inputRef.current?.focus()
     }
   }
+  const stop = () => abort.current?.abort()
 
   const changeAuto = (on: boolean) => {
     setAuto(on)
@@ -192,6 +208,10 @@ export function ChatBubble() {
   // Only the newest applied change can be undone, otherwise we'd silently revert later ones too.
   const lastApplied = msgs.map((m, i) => (m.undoVersionId && !m.undone ? i : -1)).filter((i) => i >= 0).pop()
 
+  // AI turned off (by an administrator, or not included): the launcher becomes the locked one. An open conversation stays
+  // readable, with the upgrade note where the message box was.
+  if (!caps.ai && !open) return <LockedAssistant />
+
   return (
     <>
       {!open && (
@@ -224,7 +244,7 @@ export function ChatBubble() {
           </header>
 
           <div className="chat-log" aria-live="polite">
-            {msgs.length === 0 && (
+            {msgs.length === 0 && caps.ai && (
               <div className="chat-intro">
                 <p>Ask me to rewrite, translate, add or reorganise things. I edit the CV directly, and you can undo any change.</p>
                 <div className="ai-chips">
@@ -235,7 +255,7 @@ export function ChatBubble() {
               </div>
             )}
             {msgs.map((m, i) => (
-              <div key={i} className={`msg ${m.role} ${m.error ? 'err' : ''}`}>
+              <div key={i} className={`msg ${m.role} ${m.error ? 'err' : ''} ${m.note ? 'note' : ''}`}>
                 <p>{m.text}</p>
                 {m.applied && m.applied.length > 0 && (
                   <ul className="applied">
@@ -271,26 +291,36 @@ export function ChatBubble() {
             <div ref={endRef} />
           </div>
 
-          <form className="chat-form" onSubmit={(e) => (e.preventDefault(), void send(text))}>
-            <textarea
-              ref={inputRef}
-              rows={1}
-              value={text}
-              disabled={!!proposal}
-              placeholder={proposal ? 'Approve or reject the changes above first' : 'Ask for a change…'}
-              aria-label="Message"
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), void send(text))}
-            />
-            <button type="submit" className="btn primary icon" disabled={busy || !!proposal || !text.trim()} aria-label="Send"><Send /></button>
-          </form>
+          {caps.ai ? (
+            <form className="chat-form" onSubmit={(e) => (e.preventDefault(), void send(text))}>
+              <div className={`composer ${proposal ? 'disabled' : ''}`}>
+                <textarea
+                  ref={inputRef}
+                  rows={1}
+                  value={text}
+                  disabled={!!proposal}
+                  placeholder={proposal ? 'Approve or reject the changes above first' : 'Ask for a change…'}
+                  aria-label="Message"
+                  onChange={(e) => setText(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), void send(text))}
+                />
+                {streaming ? (
+                  <button type="button" className="composer-btn stop" onClick={stop} aria-label="Stop" title="Stop (nothing is changed)"><Stop /></button>
+                ) : (
+                  <button type="submit" className="composer-btn" disabled={busy || !!proposal || !text.trim()} aria-label="Send" title="Send (Enter)"><Send /></button>
+                )}
+              </div>
+            </form>
+          ) : (
+            <div className="chat-locked"><UpgradeNote bar /></div>
+          )}
           {auto && (
             <div className="ai-note approval-mode">
               <span>Approve all is on for this session: changes apply right away (you can still Undo).</span>
               <button type="button" className="link-btn" onClick={() => changeAuto(false)}>Turn off</button>
             </div>
           )}
-          <small className="ai-note">Your CV text is sent to an AI service to answer. AI can make mistakes. Check the changes.</small>
+          {caps.ai && <small className="ai-note">Your CV text is sent to an AI service to answer. AI can make mistakes. Check the changes.</small>}
         </section>
       )}
       {tailoring && <TailorDialog id={id} onClose={() => setTailoring(false)} />}

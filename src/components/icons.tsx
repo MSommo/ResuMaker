@@ -34,6 +34,7 @@ export const Rule = (p: P) => <I {...p}><path d="M4 12h16M8 7h8M8 17h8" strokeDa
 export const More = (p: P) => <I {...p}><circle cx="5" cy="12" r="1.2" /><circle cx="12" cy="12" r="1.2" /><circle cx="19" cy="12" r="1.2" /></I>
 export const Download = (p: P) => <I {...p}><path d="M12 4v11M7 11l5 5 5-5M5 20h14" /></I>
 export const Sparkle = (p: P) => <I {...p}><path d="M12 3l1.8 5.2L19 10l-5.200 1.800L12 17l-1.800-5.200L5 10l5.200-1.800zM19 16l.8 2.200L22 19l-2.200.8L19 22l-.8-2.200L16 19l2.200-.8z" /></I>
+export const Stop = (p: P) => <I {...p}><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" /></I>
 export const Send = (p: P) => <I {...p}><path d="M4 12l16-8-6 16-3-7z" /></I>
 export const Check = (p: P) => <I {...p}><path d="M5 12l5 5 9-10" /></I>
 export const Refresh = (p: P) => <I {...p}><path d="M20 11a8 8 0 0 0-14-4M4 4v4h4M4 13a8 8 0 0 0 14 4M20 20v-4h-4" /></I>
