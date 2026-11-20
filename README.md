@@ -35,7 +35,7 @@ You need Docker and a Gemini key. There are **two completely separate stacks**, 
 | Built from | A git tag (`stable-1`), never the working tree | The working tree |
 | Code in containers | Baked into the image: no bind mounts, no hot reload | Baked in too (`HOT=1` adds bind mounts and hot reload) |
 | Web (nginx) | **5174** | **5180** |
-| API / Postgres / Redis | 8100 / 5433 / 6380 | 8180 / 5434 / 6381 |
+| API / Postgres / Redis | 8100 / 5435 (`STABLE_PG_PORT`) / 6380 | 8180 / 5434 / 6381 |
 | Data | volume `resumaker_resumaker-pgdata` | volume `resumaker-scratch_scratch-pgdata` (empty, disposable) |
 
 ```bash
