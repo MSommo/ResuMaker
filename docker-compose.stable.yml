@@ -1,11 +1,11 @@
-# ResuMaker, FROZEN stack: the stable build, with your real data.
+# ResuMaker, STABLE stack: the app you use, with your real data.
 #
 # It only references pre-built, tagged images (`make stable-build`), so `docker compose up` can never rebuild it from the
 # working tree, and there are no bind mounts: editing files in this repo cannot change what is running here.
 # Same project name and volume as the earlier dev stack, so your database carries over unchanged.
 #
 #   make stable-build   # build images from a git tag (default: stable), not from the working tree
-#   make stable-up      # start / update the frozen stack
+#   make stable-up      # start / update the stable stack
 name: resumaker
 
 x-api: &api
@@ -13,11 +13,12 @@ x-api: &api
   env_file:
     - path: .env            # GEMINI_API_KEY; optional (AI is simply off without it)
       required: false
-  environment:
+  environment: &api-environment
     DATABASE_URL: postgresql+asyncpg://resumaker:resumaker@db:5432/resumaker
     REDIS_URL: redis://redis:6379/0
-    PUBLIC_URL: ${PUBLIC_URL:-http://localhost:${STABLE_WEB_PORT:-5174}}   # what people open in a browser: used in invite links
-    FRONTEND_URL: http://web  # headless Chrome loads the app from nginx to render PDFs
+    PUBLIC_URL: ${PUBLIC_URL:-http://${APP_HOST:-localhost}:${STABLE_WEB_PORT:-5174}}   # what people open in a browser: used in invite links
+    API_HOST: 0.0.0.0             # the image's CMD runs uvicorn on :8100 (PORT), trusting proxy headers only from private addresses (nginx)
+    FRONTEND_URL: http://web:8080  # headless Chrome loads the app from nginx to render PDFs
 
 services:
   db:
@@ -44,7 +45,7 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     ports:
-      - "127.0.0.1:6380:6379"
+      - "127.0.0.1:${STABLE_REDIS_PORT:-6380}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -55,16 +56,15 @@ services:
     <<: *api
     container_name: resumaker-api
     restart: unless-stopped
-    # No --reload. --proxy-headers makes the rate limiter see the real client IP behind nginx.
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8100", "--proxy-headers", "--forwarded-allow-ips=*"]
+    # The image's own command: no --reload; --proxy-headers so the sign-in limit sees the client address nginx passes on.
     ports:
-      - "127.0.0.1:8100:8100"
+      - "127.0.0.1:${STABLE_API_PORT:-8100}:8100"
     shm_size: 1gb
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8100/api/status')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/api/status')"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -76,11 +76,11 @@ services:
     ports:
       # Only the web port can be exposed to the LAN (STABLE_BIND=0.0.0.0, see `make stable-expose`). The API, Postgres and
       # Redis stay on localhost; the API is reachable through nginx at /api.
-      - "${STABLE_BIND:-127.0.0.1}:${STABLE_WEB_PORT:-5174}:80"
+      - "${STABLE_BIND:-127.0.0.1}:${STABLE_WEB_PORT:-5174}:8080"
     depends_on:
       api: { condition: service_healthy }
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -91,6 +91,7 @@ services:
     profiles: ["mcp"]
     command: ["python", "-m", "app.mcp_server"]
     environment:
+      <<: *api-environment                    # (a service's own `environment` replaces the merged one, so merge it back in)
       RESUMAKER_TOKEN: ${RESUMAKER_TOKEN:-}   # who the server acts as: `make mcp-token LOGIN=you@example.com`
     stdin_open: true
     depends_on:

@@ -1,8 +1,8 @@
-# ResuMaker, SCRATCH stack: a throwaway copy for testing work in progress. `make stack`  →  http://localhost:5180
+# ResuMaker, SCRATCH stack: a throwaway copy for testing work in progress. `make stack`  →  http://localhost:5180 (APP_HOST:WEB_PORT)
 #
-# Completely separate from the frozen stack (docker-compose.stable.yml), which holds your real data:
+# Completely separate from the stable stack (docker-compose.stable.yml), which holds your real data:
 #   • its own project name, containers, network and database volume (so migrations here can never touch real data)
-#   • its own host ports (web 5180, api 8180, postgres 5434, redis 6381)
+#   • its own host ports (web 5180, api 8180, postgres 5434, redis 6381; the Makefile can move them: WEB_PORT, API_PORT, SCRATCH_PG_PORT, SCRATCH_REDIS_PORT)
 #   • images are built from the working tree and run as-is: NO bind mounts and NO hot reload
 #     (opt in with `make stack HOT=1`, which layers docker-compose.hot.yml on top)
 # Throw it away completely with `make scratch-reset`.
@@ -12,11 +12,12 @@ x-api-env: &api-env
   env_file:
     - path: .env            # GEMINI_API_KEY lives here; optional so a fresh clone still starts (AI is simply off)
       required: false
-  environment:
+  environment: &api-environment
     DATABASE_URL: postgresql+asyncpg://resumaker:resumaker@db:5432/resumaker
     REDIS_URL: redis://redis:6379/0
-    PUBLIC_URL: ${PUBLIC_URL:-http://localhost:${WEB_PORT:-5180}}   # what people open in a browser: used in invite links
-    FRONTEND_URL: http://web      # headless Chrome in the api container loads the app from nginx to render PDFs
+    PUBLIC_URL: ${PUBLIC_URL:-http://${APP_HOST:-localhost}:${WEB_PORT:-5180}}   # what people open in a browser: used in invite links
+    API_HOST: 0.0.0.0             # the image's CMD runs uvicorn on :8100 (PORT), trusting proxy headers only from private addresses (nginx)
+    FRONTEND_URL: http://web:8080      # headless Chrome in the api container loads the app from nginx to render PDFs
 
 services:
   db:
@@ -26,7 +27,7 @@ services:
       POSTGRES_PASSWORD: resumaker   # local development only
       POSTGRES_DB: resumaker
     ports:
-      - "127.0.0.1:5434:5432"        # for host tools; containers use db:5432
+      - "127.0.0.1:${SCRATCH_PG_PORT:-5434}:5432"        # for host tools; containers use db:5432
     volumes:
       - scratch-pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -39,7 +40,7 @@ services:
     image: redis:7-alpine
     command: ["redis-server", "--save", "", "--appendonly", "no"]   # cache only: no persistence needed
     ports:
-      - "127.0.0.1:6381:6379"
+      - "127.0.0.1:${SCRATCH_REDIS_PORT:-6381}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -49,7 +50,6 @@ services:
   api:
     <<: *api-env
     build: ./backend
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8100", "--proxy-headers", "--forwarded-allow-ips=*"]
     ports:
       - "127.0.0.1:${API_PORT:-8180}:8100"
     shm_size: 1gb                      # Chrome needs more than Docker's default 64MB /dev/shm
@@ -57,7 +57,7 @@ services:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8100/api/status')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/api/status')"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -65,13 +65,13 @@ services:
   web:
     build:
       context: .
-      dockerfile: Dockerfile.web.static   # the built app served by nginx, same as the frozen stack
+      dockerfile: Dockerfile.web.static   # the built app served by nginx, same as the stable stack
     ports:
-      - "127.0.0.1:${WEB_PORT:-5180}:80"
+      - "127.0.0.1:${WEB_PORT:-5180}:8080"
     depends_on:
       api: { condition: service_healthy }
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -83,6 +83,7 @@ services:
     profiles: ["mcp"]
     command: ["python", "-m", "app.mcp_server"]
     environment:
+      <<: *api-environment                    # (a service's own `environment` replaces the merged one, so merge it back in)
       RESUMAKER_TOKEN: ${RESUMAKER_TOKEN:-}   # who the server acts as: `make mcp-token LOGIN=you@example.com`
     stdin_open: true
     depends_on:

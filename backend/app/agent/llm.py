@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Protocol, TypeVar
 
 from google import genai
@@ -13,6 +14,22 @@ T = TypeVar("T", bound=BaseModel)
 
 MAX_OUTPUT_TOKENS = 16_384  # per call: bounds the cost of a runaway or abused request
 AI_NOT_INCLUDED = "AI features aren't included in your account."
+
+
+log = logging.getLogger("resumaker.llm")
+
+
+def _api_error(e: "errors.APIError") -> "LLMError":
+    """Gemini's own message stays in the log (it can name the model, project or key state); the person sees a plain one."""
+    log.warning("Gemini API error %s: %s", e.code, e.message)
+    if e.code == 429:
+        return LLMError("The AI service is busy right now. Please wait a minute and try again.", 429)
+    return LLMError("The AI request failed. Please try again.", 502)
+
+
+def _unreachable(e: Exception) -> "LLMError":
+    log.warning("Gemini unreachable: %r", e)
+    return LLMError("Could not reach the AI service. Please try again.")
 
 
 class LLMError(Exception):
@@ -67,9 +84,9 @@ class GeminiLLM:
                     raise
                 return await go(False)
         except errors.APIError as e:
-            raise LLMError(e.message or "The AI request failed.", 429 if e.code == 429 else 502) from e
+            raise _api_error(e) from e
         except Exception as e:  # network, timeout…
-            raise LLMError(f"Could not reach the AI service: {e}") from e
+            raise _unreachable(e) from e
 
     @staticmethod
     def _check(resp: types.GenerateContentResponse) -> str:
@@ -99,9 +116,9 @@ class GeminiLLM:
         try:
             res = await self.client.aio.models.embed_content(model=self.embedding_model, contents=texts, config=cfg)
         except errors.APIError as e:
-            raise LLMError(e.message or "The AI request failed.", 429 if e.code == 429 else 502) from e
+            raise _api_error(e) from e
         except Exception as e:  # noqa: BLE001
-            raise LLMError(f"Could not reach the AI service: {e}") from e
+            raise _unreachable(e) from e
         vectors = [list(e.values or []) for e in (res.embeddings or [])]
         if len(vectors) != len(texts) or any(len(v) != self.dims for v in vectors):
             raise LLMError("The AI returned an unexpected answer.")

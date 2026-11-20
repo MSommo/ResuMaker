@@ -21,6 +21,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(messag
 
 def create_app(infra: Infra | None = None) -> FastAPI:
     settings = get_settings()
+    settings.check()  # production refuses to boot with unsafe settings (http PUBLIC_URL, default passwords, ...)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -32,9 +33,11 @@ def create_app(infra: Infra | None = None) -> FastAPI:
         finally:
             await app.state.infra.stop()
 
-    app = FastAPI(title="ResuMaker API", version="0.1.0", lifespan=lifespan, dependencies=[Depends(require_app_header)])
+    # The API description is a map for attackers too: development only.
+    docs = {} if not settings.production else {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    app = FastAPI(title="ResuMaker API", version="0.1.0", lifespan=lifespan, dependencies=[Depends(require_app_header)], **docs)
 
-    origins = [settings.frontend_url, *settings.cors_origins]
+    origins = [o for o in (settings.frontend_url, *settings.cors_origins) if o]
     app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["*"], allow_headers=["*"], allow_credentials=False)
 
     # The frontend reads {"error": "..."} for every failure.

@@ -29,13 +29,13 @@ flowchart LR
 
 You need Docker and a Gemini key. There are **two completely separate stacks**, so work in progress can never disturb the app you actually use:
 
-| | **Frozen** (`make stable-*`) | **Scratch** (`make stack`, …) |
+| | **Stable** (`make stable-*`) | **Scratch** (`make stack`, …) |
 |---|---|---|
 | Purpose | The app you use, with your real data | A throwaway copy for testing changes |
 | Built from | A git tag (`stable-1`), never the working tree | The working tree |
 | Code in containers | Baked into the image: no bind mounts, no hot reload | Baked in too (`HOT=1` adds bind mounts and hot reload) |
 | Web (nginx) | **5174** | **5180** |
-| API / Postgres / Redis | 8100 / 5435 (`STABLE_PG_PORT`) / 6380 | 8180 / 5434 / 6381 |
+| API / Postgres / Redis | 8100 / 5433 / 6380 (`STABLE_API_PORT`, `STABLE_PG_PORT`, `STABLE_REDIS_PORT`) | 8180 / 5434 / 6381 (`API_PORT`, `SCRATCH_PG_PORT`, `SCRATCH_REDIS_PORT`) |
 | Data | volume `resumaker_resumaker-pgdata` | volume `resumaker-scratch_scratch-pgdata` (empty, disposable) |
 
 ```bash
@@ -47,22 +47,22 @@ make stack HOT=1                     # same, with hot reload (Vite HMR + uvicorn
 make test                            # backend tests against the scratch database
 make scratch-reset                   # wipe the scratch stack completely (asks first)
 
-# Frozen: the stable app
+# Stable: the app you use
 make stable-build                    # build images from git tag stable-1 (STABLE_TAG=… for another tag)
 make stable-up                       # start / update → http://localhost:5174
 make stable-expose                   # reachable from your local network (see below); make stable-hide undoes it
 make stable-backup                   # dump the real database to backups/
 ```
 
-`make` lists every target (logs, MCP, graph, personas, PDFs, migrations…). If something already uses a port, `make` names the process and you can override it, e.g. `make stack WEB_PORT=5181`.
+`make` lists every target (logs, MCP, graph, personas, PDFs, migrations…). If something already uses a port, `make` names the process and you can override it, e.g. `make stack WEB_PORT=5181`. Every address the Makefile prints or uses is built from variables (`APP_HOST`, `WEB_PORT`, `API_PORT`, `SCRATCH_PG_PORT`, `SCRATCH_REDIS_PORT`, `DEV_WEB_PORT`, `MCP_HOST`, `MCP_HTTP_PORT`), and the API itself has no built-in database or Redis address: they come from the environment (`.env.example` lists the local values).
 
-**To freeze a new build:** commit, `git tag -a stable-2 -m "…"`, `make stable-build STABLE_TAG=stable-2`, then `make stable-up STABLE_TAG=stable-2`. The database is migrated on startup, so take a `make stable-backup` first.
+**To release a new stable build:** commit, `git tag -a stable-2 -m "…"`, `make stable-build STABLE_TAG=stable-2`, then `make stable-up STABLE_TAG=stable-2`. The database is migrated on startup, so take a `make stable-backup` first.
 
 **Local network.** `make stable-expose` publishes only the web port on all interfaces (`http://<your-ip>:5174`, or `http://<hostname>.local:5174`); the API, Postgres and Redis stay on localhost. Traffic is plain HTTP, so passwords and sessions cross that network unencrypted: only do this on a network you trust (not guest Wi-Fi), or put a TLS proxy in front and set `PUBLIC_URL=https://…` in `.env` (cookies then become `Secure`).
 
 Frontend dependency changes need a rebuild (`make build-web`) unless you use `HOT=1`, where the `web` container runs `npm install` on every start.
 
-**Without Docker for the app:** `make infra` starts just the scratch Postgres and Redis, then `make local-api` and `make local-web` run the API and frontend on the host (needs Node 22+, [uv](https://docs.astral.sh/uv/) and Chrome). Host-side commands default to the **scratch** database, never the frozen one.
+**Without Docker for the app:** `make infra` starts just the scratch Postgres and Redis, then `make local-api` and `make local-web` run the API and frontend on the host (needs Node 22+, [uv](https://docs.astral.sh/uv/) and Chrome). Host-side commands default to the **scratch** database, never the stable one.
 
 ## Text formatting
 
@@ -83,8 +83,10 @@ The old `personas` table is now `users`: each person is an account with a sign-i
 - **Authentication.** `POST /api/auth/login` sets an opaque 256-bit session token in an `HttpOnly`, `SameSite=Strict` cookie scoped to `/api` (`Secure` over HTTPS). Only its SHA-256 is stored (`sessions` table), so a database leak yields no usable sessions. Sessions expire after 7 days idle / 30 days absolute, are replaced at every sign-in, and all other sessions end when the password changes. Wrong passwords lock the account for 15 minutes after 5 tries, sign-in is rate-limited per IP, and every failure returns the same message (no account enumeration, equal timing).
 - **Authorisation.** Every route requires a session unless it is explicitly public (`/status`, sign-in, accept-invite): routers are protected by default. Each `{resume_id}` / `{persona_id}` route depends on an ownership check; someone else's CV is a plain 404. `tests/test_auth.py` enumerates the OpenAPI schema and fails if a route is reachable without a session or a CV route skips the ownership check. Roles: `user` and `admin`. **Admins manage accounts only: they cannot read other people's CVs.** The last admin can't be removed, demoted or locked out; deleting an account re-asks for the password.
 - **No registration.** There is no sign-up. An admin prepares a **persona draft** on the Users page (just a name and the sign-in email; no password, nobody can sign in), then generates a one-time invite link when it's ready. The person opens it, chooses a password and the account is complete; they fill in the rest of their details themselves. Drafts are *Draft* (no link yet), *Invited* (link out, valid 72 h; expired links revert to Draft) or *Active*.
-- **Getting accounts.** The first admin comes from the CLI: `make user-create LOGIN=you@example.com FIRST=You ADMIN=1` (or `make stable-user-create …` for the frozen stack) prints a one-time link (`/accept#token`, valid 72 h, usable once, stored hashed, in the URL fragment so no server logs it). Your **existing personas became users with no password**, their sign-in email pre-filled from the persona's email: run `make stable-user-admin LOGIN=<your email>` to make yourself admin, then `make stable-user-invite LOGIN=<email>` (or Users page → *Reset password*) to claim each one. Lost password: `make user-invite` / `make user-passwd`.
-- **CSRF.** Unsafe requests need the `x-resumaker` header and, when the browser sends one, a same-site `Origin`; cookies are `SameSite=Strict`. nginx also sends a CSP, `X-Frame-Options: DENY`, `nosniff`, and API responses are `no-store`.
+- **Getting accounts.** The first admin comes from the CLI: `make user-create LOGIN=you@example.com FIRST=You ADMIN=1` (or `make stable-user-create …` for the stable stack) prints a one-time link (`/accept#token`, valid 72 h, usable once, stored hashed, in the URL fragment so no server logs it). Your **existing personas became users with no password**, their sign-in email pre-filled from the persona's email: run `make stable-user-admin LOGIN=<your email>` to make yourself admin, then `make stable-user-invite LOGIN=<email>` (or Users page → *Reset password*) to claim each one. Lost password: `make user-invite` / `make user-passwd`.
+- **CSRF.** Unsafe requests need the `x-resumaker` header and, when the browser sends one, a same-site `Origin`; cookies are `SameSite=Strict`. nginx also sends a CSP, HSTS, `X-Frame-Options: DENY`, `nosniff`, and API responses are `no-store`.
+
+Everything in place, and what production refuses to start without, is listed in [SECURITY.md](SECURITY.md).
 - **PDFs.** Headless Chrome gets a 2-minute, read-only session for that one render, revoked immediately; it never sees the user's own cookie.
 - **MCP.** The MCP server acts as **one user**, identified by `RESUMAKER_TOKEN` (`make mcp-token LOGIN=you@example.com`; hashed in the database, expires in a year) and refuses to start without it. Every tool is scoped to that user's CVs. Add it to the client config `env`.
 
@@ -118,7 +120,7 @@ graph TD;
 
 **Memory.** The assistant remembers things about each person, so you don't repeat yourself: style *preferences* ("bullets under 12 words") and *facts* they confirmed ("Staff Engineer at Acme from 2021"). Nothing is saved silently: say "remember that…" in the chat (no approval card, since asking is the consent), or add items in the chat's Memory panel, where every item is listed and can be deleted. Stored per person in Postgres with pgvector (`memories` table, Gemini `gemini-embedding-001` at 768 dimensions; saying the same thing twice keeps one). On each request the writers get all of the person's preferences plus the few facts closest in meaning to the request (cosine distance cutoff 0.38, measured by `make eval-memory`). Memory is context, never truth: the prompt tells the model to trust the CV when they conflict and never to add a remembered fact unasked. If the lookup fails the assistant just runs without it. API: `GET/POST /api/personas/{id}/memories`, `DELETE /api/memories/{id}`; MCP: `list_memories`, `remember`, `forget_memory`. Not built yet: remembering "best bullets from past CVs".
 
-**Database image.** Both stacks run `pgvector/pgvector:pg16` (Debian). The frozen stack moved to it in the first pgvector build by dumping the old alpine database (`make stable-backup`) and restoring into a NEW volume, `resumaker_resumaker-pgdata-v2`; the old alpine volume `resumaker_resumaker-pgdata` is still there, untouched, as a rollback (delete it with `docker volume rm resumaker_resumaker-pgdata` once you are happy). To roll back: set `STABLE_TAG=stable-1`, restore the old image and volume lines in `docker-compose.stable.yml` from git history, and `make stable-up`.
+**Database image.** Both stacks run `pgvector/pgvector:pg16` (Debian). The stable stack moved to it in the first pgvector build by dumping the old alpine database (`make stable-backup`) and restoring into a NEW volume, `resumaker_resumaker-pgdata-v2`; the old alpine volume `resumaker_resumaker-pgdata` is still there, untouched, as a rollback (delete it with `docker volume rm resumaker_resumaker-pgdata` once you are happy). To roll back: set `STABLE_TAG=stable-1`, restore the old image and volume lines in `docker-compose.stable.yml` from git history, and `make stable-up`.
 
 **Tailor to a job.** In the chat, "Tailor to a job" takes a pasted posting (the server never fetches URLs). It analyses the posting against your CV into what the role needs, what your CV already shows, and what it lacks (those gaps are never invented), then creates a **new variant CV** and proposes the changes on it in review mode, so the original is never touched. Postings are untrusted web text: only the extracted summary and keywords reach the editing agent, never the raw posting, so instructions hidden in a posting can't steer it. Discarding deletes the variant. API: `POST /api/resumes/{id}/tailor/stream`, then `.../resumes/{variantId}/chat/{runId}/decide`. MCP: `tailor_to_posting`, `list_memories` + `remember` + `forget_memory`, then `decide_proposal` on the variant.
 
@@ -137,7 +139,7 @@ graph TD;
 Lets Claude Desktop / Claude Code list, read, edit, improve and export your CVs. It uses the same database and engine, so edits appear in the editor. (Deleting CVs is deliberately not exposed. `export_pdf` needs the frontend running; from the Docker server, files land in `backend/.data/pdfs/`.)
 
 ```bash
-# Claude Code, against your REAL data (the frozen stack must be running: make stable-up)
+# Claude Code, against your REAL data (the stable stack must be running: make stable-up)
 claude mcp add resumaker -- docker compose -f "$(pwd)/docker-compose.stable.yml" run --rm -T mcp
 
 # Against the scratch stack instead (empty database, for experiments): make mcp  /  make mcp-local
@@ -152,14 +154,69 @@ Claude Desktop (`claude_desktop_config.json`):
 
 Tools: `list_personas`, `create_persona`, `list_resumes`, `get_resume`, `create_resume`, `apply_operations` (with `dry_run`), `list_versions`, `diff_version`, `restore_version`, `improve_text`, `ask_assistant`, `propose_changes` + `decide_proposal` (review before applying), `tailor_to_posting`, `export_pdf`. Resource: `resume://{id}`. Prompt: `review_cv`.
 
+## Deployment (Railway)
+
+Four services in one Railway project. The repo holds the config for the two we build (`railway.json` for the web service, `backend/railway.json` for the API): a Dockerfile build, a healthcheck and `ON_FAILURE` restarts.
+
+| Service | Source | Config file (Settings → Config-as-code) | Public domain |
+|---|---|---|---|
+| **web** | this repo, root `/` | `/railway.json` (`Dockerfile.web.static`: the built app behind nginx) | **yes**: the only public entry point |
+| **api** | this repo, root `/backend` | `/backend/railway.json` (`backend/Dockerfile`: FastAPI + Chromium) | **no**: reached by nginx over the private network |
+| **Postgres** | the **pgvector** template, or a database service with image `pgvector/pgvector:pg16` | | no |
+| **Redis** | Railway's Redis | | no |
+
+Postgres **must have pgvector** (memories): the plain Railway Postgres image doesn't ship it. The first migration runs `CREATE EXTENSION IF NOT EXISTS vector`, which the default `postgres` user is allowed to do. To run the app as a less privileged role, see [SECURITY.md](SECURITY.md#database).
+
+**Variables.** The `${{…}}` references are Railway's: they keep working when a service is renamed or redeployed.
+
+*api*
+
+| Variable | Value |
+|---|---|
+| `APP_ENV` | `production`: refuses to start with unsafe settings (below), no `/docs` |
+| `PORT` | `8100` (fixed, so the web service's `BACKEND_URL` is stable) |
+| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (`postgres://…` is accepted and turned into `postgresql+asyncpg://`) |
+| `REDIS_URL` | `${{Redis.REDIS_URL}}` (it must carry a password) |
+| `PUBLIC_URL` | `https://${{web.RAILWAY_PUBLIC_DOMAIN}}` (or your custom domain): invite links, and cookies are `Secure` |
+| `FRONTEND_URL` | `http://${{web.RAILWAY_PRIVATE_DOMAIN}}:${{web.PORT}}`: headless Chrome loads the app from here to render PDFs |
+| `GEMINI_API_KEY` | your key (without it the app runs, with AI off) |
+
+*web*
+
+| Variable | Value |
+|---|---|
+| `BACKEND_URL` | `http://${{api.RAILWAY_PRIVATE_DOMAIN}}:${{api.PORT}}` |
+| `PORT` | `8080` (Railway's default for the domain; any value works, nginx listens on `$PORT`) |
+| `TRUSTED_PROXIES` | `0.0.0.0/0 ::/0`: only Railway's edge reaches this service, so its client-address header is believed |
+| `REAL_IP_HEADER` | `X-Real-IP`: the header Railway's edge overwrites with the real client address |
+
+At start, nginx fills `nginx/default.conf.template` with `BACKEND_URL`, `PORT` and the container's own DNS resolver (read from `/etc/resolv.conf`), re-resolving the API every 10 s because private IPs change on redeploy. It listens on IPv6 too, which Railway's private network uses; uvicorn does the same (`API_HOST` defaults to `::` in the image).
+
+**Production refuses to start** (`APP_ENV=production`) when `PUBLIC_URL` is missing or not `https://`, `COOKIE_SECURE=false`, `FRONTEND_URL` is missing, the database has no password or the local one, Redis has no password, or a `CORS_ORIGINS` entry is plain http. The log lists every problem at once.
+
+**Migrations** run when the API starts, under a Postgres advisory lock (Alembic's and LangGraph's tables alike), so several replicas or a redeploy overlapping the old one are safe.
+
+**PDFs** need Chromium, which is in the API image. It runs without its sandbox (containers have no user namespaces) and with `--disable-dev-shm-usage`, so Railway's small `/dev/shm` doesn't matter. It only ever loads our own frontend. Give the API service at least **1 GB of memory**: a render peaks around a few hundred MB on top of the app.
+
+**MCP server:** not deployed. It acts as a single user without asking who calls, so it is only safe on your own machine (stdio, or HTTP on loopback). Exposing it would need per-request authentication first.
+
+**First run.**
+
+1. Create the four services and set the variables above; deploy. The API's healthcheck is `/api/status` (always 200 once it's up, with `db`/`cache`/`ai`/`pdf` flags), the web service's is `/`.
+2. Create the first administrator **inside** the API service, where the private database address resolves (`railway run` executes on your machine, which can't reach `*.railway.internal`):
+   ```bash
+   railway ssh --service api -- python -m app.cli create-user --login you@example.com --first You --admin
+   ```
+   It prints a one-time `https://…/accept#…` link (valid 72 h). Open it, choose a password; invite everyone else from the Users page.
+3. Check `https://<your domain>/api/status` shows `"db":true,"cache":true,"pdf":true`.
+
 ## Roadmap
 
 See [docs/ROADMAP.md](docs/ROADMAP.md). Done: phases 1 to 5 and 7. Deferred: [phase 6, bring a job posting in from a link](docs/phase-6-job-import.md).
 
 ## Notes and limits
 
-- **No login, on purpose.** Anyone who can reach the app can open any persona's CVs. That is fine for a household on a trusted network; add authentication before exposing it more widely.
 - **The catalog exists twice** (TypeScript for the UI, Python for the agent/MCP). `backend/tests/test_catalog_parity.py` fails if they drift.
-- **PDFs** are rendered by headless Chrome loading `FRONTEND_URL/preview/<id>`, so the frontend must be reachable by the API (in Docker: `http://web`, i.e. nginx, or `http://web:5173` with `HOT=1`). Chrome runs with `--no-sandbox` inside the container; it only ever loads our own page.
-- **This is a development setup** (dev servers, bind mounts, default DB password). A production setup would build the frontend to static files behind nginx and drop the bind mounts.
+- **PDFs** are rendered by headless Chrome loading `FRONTEND_URL/preview/<id>`, so the frontend must be reachable by the API (in Docker: `http://web:8080`, i.e. nginx, or `http://web:5173` with `HOT=1`; on Railway the web service's private address). Chrome runs with `--no-sandbox` inside the container; it only ever loads our own page.
+- **The local stacks are not production**: default database password, no Redis password, plain http. For the internet, see [Deployment (Railway)](#deployment-railway).
 - **Concurrent edits:** saves carry the version they were based on; a stale save is rejected (409) and the editor reloads the newer version.

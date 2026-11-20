@@ -2,9 +2,9 @@
 # Layers bind mounts on top of docker-compose.yml: uvicorn --reload for the API, the Vite dev server (HMR) for the web app.
 services:
   api:
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8100", "--reload", "--reload-dir", "app"]
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8100", "--proxy-headers", "--reload", "--reload-dir", "app"]
     environment:
-      FRONTEND_URL: http://web:5173    # the Vite dev server, instead of nginx on :80
+      FRONTEND_URL: http://web:5173    # the Vite dev server, instead of nginx on :8080
     volumes:
       - ./backend:/app
       - /app/.venv                     # hide the host's (macOS) virtualenv

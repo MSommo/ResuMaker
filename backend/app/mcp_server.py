@@ -1,7 +1,7 @@
 """MCP server for ResuMaker: lets Claude Desktop / Claude Code / any MCP client read and edit your CVs.
 
     uv run python -m app.mcp_server            # stdio (what desktop clients launch)
-    uv run python -m app.mcp_server --http     # streamable HTTP on http://127.0.0.1:8101/mcp
+    uv run python -m app.mcp_server --http     # streamable HTTP on http://127.0.0.1:8101/mcp (--host / --port, or MCP_HOST / MCP_HTTP_PORT)
 
 It talks to the same Postgres, Redis and operations engine as the web app, so edits show up in the editor.
 Deleting CVs is intentionally not exposed.
@@ -378,10 +378,14 @@ def review_cv(resume_id: str) -> str:
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--http", action="store_true", help="serve streamable HTTP instead of stdio")
-    p.add_argument("--port", type=int, default=8101)
+    # Loopback by default: over HTTP, whoever reaches the port acts as the token's user, with no further sign-in.
+    p.add_argument("--host", default=os.environ.get("MCP_HOST", "127.0.0.1"))
+    p.add_argument("--port", type=int, default=int(os.environ.get("MCP_HTTP_PORT", "8101")))
     args = p.parse_args()
     if args.http:
-        mcp.run(transport="streamable-http", host="127.0.0.1", port=args.port)
+        if args.host not in ("127.0.0.1", "::1", "localhost"):
+            print(f"Warning: serving MCP on {args.host}: anyone who can reach it acts as this token's user.", file=sys.stderr)
+        mcp.run(transport="streamable-http", host=args.host, port=args.port)
     else:
         mcp.run()
 

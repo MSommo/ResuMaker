@@ -7,7 +7,7 @@
     python -m app.cli make-admin   --login a@b.org            (or --revoke)
     python -m app.cli token        --login a@b.org --name "Claude Desktop"                    # MCP access token, shown once
 
-Run it where the app runs (`make user-*` wraps it for the scratch and the frozen stack).
+Run it where the app runs (`make user-*` wraps it for the scratch and the stable stack).
 """
 
 from __future__ import annotations
