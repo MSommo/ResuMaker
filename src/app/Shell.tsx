@@ -1,34 +1,51 @@
-import { useEffect, useState } from 'react'
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { Avatar } from '../components/Avatar'
-import { Close, Menu } from '../components/icons'
+import { Caret, SignOut, User, Users } from '../components/icons'
+import { Popover, MenuItem, MenuSep } from '../components/Popover'
 import { useAuth, useMe } from '../auth/AuthContext'
 
+/**
+ * Brand and the two places you work (your CVs, the editor) on the left; everything about the account behind one avatar
+ * button on the right. Small enough for a phone without a hamburger menu.
+ */
 function Navbar() {
-  const [open, setOpen] = useState(false)
-  const { pathname } = useLocation()
   const me = useMe()
   const { logout } = useAuth()
-  const persona = me.persona
-  useEffect(() => {
-    setOpen(false)
-  }, [pathname])
+  const go = useNavigate()
+  const p = me.persona
+  const name = `${p.firstName} ${p.lastName}`.trim() || me.login
   return (
     <header className="nav no-print">
       <div className="nav-inner">
         <Link to="/" className="brand" aria-label="ResuMaker home">
-          <span className="brand-mark" aria-hidden>R</span> ResuMaker
+          <span className="brand-mark" aria-hidden>R</span> <span className="brand-name">ResuMaker</span>
         </Link>
-        <button type="button" className="nav-toggle icon-btn" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls="nav-links" aria-label="Menu">
-          {open ? <Close /> : <Menu />}
-        </button>
-        <nav id="nav-links" className={`nav-links ${open ? 'open' : ''}`} aria-label="Main">
-          <NavLink to="/" end className="nav-persona"><Avatar id={persona.id} first={persona.firstName} last={persona.lastName} size={22} /> My CVs</NavLink>
+        <nav className="nav-links" aria-label="Main">
+          <NavLink to="/" end>My CVs</NavLink>
           <NavLink to="/editor">Editor</NavLink>
-          {me.role === 'admin' && <NavLink to="/users">Users</NavLink>}
-          <NavLink to="/account">Account</NavLink>
-          <button type="button" className="nav-signout" onClick={() => void logout()}>Sign out</button>
         </nav>
+        <Popover
+          label="Account menu"
+          role="menu"
+          align="right"
+          className="menu-pop nav-menu"
+          triggerClassName="nav-me"
+          trigger={<><Avatar id={p.id} first={p.firstName} last={p.lastName} size={28} /><span className="nav-me-name">{p.firstName || 'Account'}</span><Caret className="nav-me-caret" /></>}
+        >
+          {() => (
+            <>
+              <div className="nav-menu-who">
+                <Avatar id={p.id} first={p.firstName} last={p.lastName} size={36} />
+                <span><strong>{name}</strong><small>{me.login}</small></span>
+              </div>
+              <MenuSep />
+              <MenuItem icon={<User />} onSelect={() => go('/account')}>Account</MenuItem>
+              {me.role === 'admin' && <MenuItem icon={<Users />} onSelect={() => go('/users')}>Users <span className="badge">Admin</span></MenuItem>}
+              <MenuSep />
+              <MenuItem icon={<SignOut />} onSelect={() => void logout()}>Sign out</MenuItem>
+            </>
+          )}
+        </Popover>
       </div>
     </header>
   )

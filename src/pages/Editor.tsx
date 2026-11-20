@@ -89,8 +89,8 @@ function LayoutPicker({ resume, onPick }: { resume: Resume; onPick: (id: string)
   const [open, setOpen] = useState(false)
   return (
     <>
-      <button type="button" className="btn small" onClick={() => setOpen(true)} aria-haspopup="dialog" title="Change layout">
-        <Layout /> {getLayout(resume.layoutId).name}
+      <button type="button" className="btn small tb-layout" onClick={() => setOpen(true)} aria-haspopup="dialog" title="Change layout">
+        <Layout /> <span className="tb-ellipsis">{getLayout(resume.layoutId).name}</span>
       </button>
       {open && <LayoutGallery resume={resume} onPick={onPick} onClose={() => setOpen(false)} />}
     </>
@@ -299,12 +299,12 @@ export default function EditorPage() {
 
         <section className="ed-stage">
           <div className="ed-toolbar no-print">
-            <Link className="btn small soft" to={`/p/${personaId}`} title="Back to all of your CVs"><Back /> Your account</Link>
+            <Link className="btn small soft" to={`/p/${personaId}`} title="Back to all of your CVs"><Back /> <span className="tb-label">All CVs</span></Link>
             <LayoutPicker resume={resume} onPick={setLayout} />
             <span className="tb-grow" />
             {notice && <span className="tb-notice" role="status">{notice}</span>}
             <span className={`save-state ${saveState}`} role="status">{SAVE_LABEL[saveState]}</span>
-            <Link className="btn small" to={`/preview/${id}`}><Expand /> Full preview</Link>
+            <Link className="btn small" to={`/preview/${id}`} title="Full preview"><Expand /> <span className="tb-label">Full preview</span></Link>
             <PdfButton />
             <Menu>
               <MenuItem icon={<Print />} onSelect={() => window.print()}>Print…</MenuItem>

@@ -20,6 +20,8 @@
 }
 * { box-sizing: border-box; }
 html, body, #root { min-height: 100%; }
+/* Always keep room for the page scrollbar, so the navbar and pages don't change width between pages that scroll and pages that don't. */
+html { scrollbar-gutter: stable; }
 body { margin: 0; background: var(--bg); font-size: 14px; line-height: 1.45; -webkit-text-size-adjust: 100%; }
 h1, h2, h3, h4, p { margin: 0; }
 a { color: inherit; }
