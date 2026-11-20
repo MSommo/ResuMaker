@@ -219,11 +219,11 @@ async def test_agent_graph_endpoint_formats(client):
     assert "graph TD" in mermaid and "apply -.-> repair" in mermaid
 
     j = (await client.get("/api/agent/graph?format=json")).json()
-    assert {n["id"] for n in j["nodes"]} == {"__start__", "route", "answer", "decompose", "next", "plan", "apply", "repair", "review", "finalize", "__end__"}
+    assert {n["id"] for n in j["nodes"]} == {"__start__", "route", "answer", "decompose", "plan", "write", "merge", "critic", "revise", "apply", "repair", "review", "finalize", "__end__"}
     edges = {(e["source"], e["target"], e["conditional"]) for e in j["edges"]}
     assert ("repair", "apply", False) in edges and ("apply", "repair", True) in edges
-    assert {("route", "answer", True), ("route", "decompose", True), ("apply", "next", True), ("apply", "review", True), ("review", "finalize", False)} <= edges
-    assert all(next(n for n in j["nodes"] if n["id"] == i)["description"] for i in ("route", "answer", "decompose", "next", "plan", "apply", "repair", "review", "finalize"))
+    assert {("route", "answer", True), ("route", "decompose", True), ("decompose", "write", True), ("merge", "critic", True), ("critic", "revise", True), ("write", "merge", False), ("apply", "review", True), ("review", "finalize", False)} <= edges
+    assert all(next(n for n in j["nodes"] if n["id"] == i)["description"] for i in ("route", "answer", "decompose", "write", "merge", "critic", "revise", "plan", "apply", "repair", "review", "finalize"))
 
     h = await client.get("/api/agent/graph?format=html")
     assert h.headers["content-type"].startswith("text/html") and 'class="mermaid"' in h.text

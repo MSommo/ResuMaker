@@ -78,14 +78,16 @@ Schema changes go through Alembic (`backend/migrations/`); the API applies them 
 
 ## The agent
 
-`route` (a cheap model, `gemini-flash-lite-latest`) decides whether a message is a question or an edit request; if it fails, the message is treated as an edit. Questions go to `answer`, which replies in text and changes nothing. Edits go to `decompose` (the cheap model splits a big request, such as a whole-CV rewrite, tailoring or translation, into focused tasks: one per section, or per job; small requests stay one task, and any problem falls back to one task), then to `plan`, where Gemini returns a structured list of operations. `apply` runs them through the operations engine (deterministic, validated). If some fail, `repair` shows the model what failed and why and asks for corrected operations, up to twice. The model only *proposes*; validated code decides what changes.
+`route` (a cheap model, `gemini-flash-lite-latest`) decides whether a message is a question or an edit request; if it fails, the message is treated as an edit. Questions go to `answer`, which replies in text and changes nothing. Edits go to `decompose` (the cheap model splits a big request, such as a whole-CV rewrite, tailoring or translation, into focused tasks: one per section, or per job; small requests stay one task, and any problem falls back to one task), then either to `plan` (one task) or, for several tasks, to one `write` per task, all at once (LangGraph `Send`, at most 4 concurrent model calls). Each writer plans and validates its part on its own copy of the CV, with its own repair rounds, and also sees the rest of the CV read-only so it can ground its work in real experience. `merge` then replays every writer's operations in task order on the original CV through the same validated engine, so the result is deterministic and saved once (one Undo). A `critic` reads the before/after of every changed section against the request and reports missing parts, invented or lost facts and inconsistencies; if it finds any, `revise` fixes exactly those, once (the critic never loops). A failed task is reported without sinking the others. A single task runs where Gemini returns a structured list of operations. `apply` runs them through the operations engine (deterministic, validated). If some fail, `repair` shows the model what failed and why and asks for corrected operations, up to twice. The model only *proposes*; validated code decides what changes.
 
 ```mermaid
 graph TD;
   START --> route;
   route -->|question| answer --> END;
-  route -->|edit| decompose --> plan --> apply;
-  apply -->|more tasks| next --> plan;
+  route -->|edit| decompose;
+  decompose -->|one task| plan --> apply;
+  decompose -->|several tasks, in parallel| write --> merge --> critic;
+  critic -->|problems| revise;
   apply -->|all applied| END;
   apply -->|some failed, retries left| repair --> apply;
   apply -->|review mode| review --> finalize --> END;
@@ -95,7 +97,7 @@ graph TD;
 
 `make eval-router` runs a golden set of 20 messages (questions vs. edits) against the real fast model (a few cents; excluded from `make test`). It currently scores 20/20.
 
-`make eval-agent` runs 20 end-to-end editing tasks (single edits, multi-part requests, whole-CV rewrites, and the same on a 10-job CV) through the real graph and checks the resulting CV deterministically (no LLM judge). It reports pass rate, repairs and latency and writes `backend/.data/eval-report.json`; `EVAL_DECOMPOSE=0` runs the one-shot baseline. One run each: one-shot 19/20 (long CV: 2/3, it left every job of a tailoring request untouched), with decomposition 20/20 (long CV: 3/3). The price is latency, since tasks run one after another: about 11 s per task on average against 5.5 s. Phase 3 runs them in parallel. Single runs are noisy, so treat the gap as a trend, not a measurement.
+`make eval-agent` runs 20 end-to-end editing tasks (single edits, multi-part requests, whole-CV rewrites, and the same on a 10-job CV) through the real graph and checks the resulting CV deterministically (no LLM judge). It reports pass rate, repairs and latency and writes `backend/.data/eval-report.json`; `EVAL_DECOMPOSE=0` runs the one-shot baseline. `EVAL_DECOMPOSE=0` runs the one-shot baseline and `EVAL_CRITIC=0` skips the critic. Results so far (single runs are noisy, treat gaps as trends): one-shot 19/20 (long CV 2/3: it left every job of a tailoring request untouched), about 5.5 s per task; sequential tasks 20/20 at about 11.5 s; parallel writers with the critic 39/40 over two runs (long CV 5/6) at about 8 s, against 35/40 without the critic. The critic costs about 1.5 s on multi-part requests.
 
 **History and undo.** Every AI, MCP and restore change snapshots the CV first (last 100 kept), and autosaves checkpoint every 15 minutes. Undo restores the snapshot, so it works after a reload. `dryRun` on `/ops` previews changes without saving.
 

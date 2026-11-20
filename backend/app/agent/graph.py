@@ -23,28 +23,35 @@ the paused run is stored in Postgres and resumes (even after an API restart) whe
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
-from typing import Any, Literal, TypedDict
+import operator
+from typing import Annotated, Any, Literal, TypedDict
 
 from langgraph.graph import END, START, StateGraph
-from langgraph.types import interrupt
+from langgraph.types import Send, interrupt
 from pydantic import BaseModel, Field
 
 from ..domain.catalog import LAYOUTS, TEMPLATES
+from ..domain.diff import diff_resumes
 from ..domain.models import Resume
 from ..domain.ops import OP_NAMES, Op, apply_ops
 from .llm import LLM
-from .prompts import ANSWER_SYSTEM, CHAT_SYSTEM, DECOMPOSE_SYSTEM, REPAIR_NOTE, ROUTER_SYSTEM
+from .prompts import ANSWER_SYSTEM, CHAT_SYSTEM, CRITIC_SYSTEM, DECOMPOSE_SYSTEM, REPAIR_NOTE, REVISE_NOTE, ROUTER_SYSTEM
 
 log = logging.getLogger("resumaker.agent")
 
 MAX_REPAIRS = 2
+MAX_PARALLEL = 4  # concurrent writer calls: enough to be fast, few enough to stay under the API's rate limit
 
 # Human-readable description of each node, served with the graph drawing (GET /api/agent/graph?format=json).
 NODE_DOCS = {
     "decompose": "Cheap-model LLM call: splits a big request (whole-CV rewrite, tailoring, translation) into focused tasks, one per section or item. Small requests stay a single task.",
-    "next": "Deterministic: moves to the next task, carrying over anything that failed.",
+    "write": "Runs once per task, in parallel: an LLM call that plans and validates edits for its part of the CV only (with its own repair rounds).",
+    "merge": "Deterministic: replays every writer's operations, in task order, on the original CV through the validated engine.",
+    "critic": "LLM call: reads the request and the before/after of every changed section; reports missing parts, invented or lost facts, inconsistencies.",
+    "revise": "LLM call: fixes exactly the problems the critic found (one round), applying new operations on top of the merged result.",
     "route": "Cheap-model LLM call: is this message a question (answer) or a request to change the CV (edit)? Defaults to edit.",
     "answer": "LLM call: answers a question about the CV in plain text. Never changes anything.",
     "plan": "LLM call: reads the CV and the conversation, returns a reply plus structured edit operations.",
@@ -124,6 +131,11 @@ class Task(BaseModel):
     itemIds: list[str] = Field(default_factory=list)  # noqa: N815  (empty = every item of those sections)
 
 
+class Critique(BaseModel):
+    ok: bool = True
+    problems: list[str] = Field(default_factory=list)
+
+
 class Decomposition(BaseModel):
     summary: str = ""
     tasks: list[Task] = Field(default_factory=list)
@@ -154,25 +166,17 @@ class AgentState(TypedDict, total=False):
     skipped: list[str]               # failures from the most recent apply round
     failed: list[dict[str, str]]     # the ops behind `skipped`, with reasons
     attempts: int
-    tasks: list[dict[str, Any]]      # decompose: the focused tasks (empty/one = just run `plan` on the whole request)
-    task_idx: int
+    tasks: list[dict[str, Any]]      # decompose: the focused tasks (empty = one task: just run `plan` on the whole request)
+    results: Annotated[list[dict[str, Any]], operator.add]  # fan-in: one entry per `write`, collected as they finish
+    critic_rounds: int
+    critique: dict[str, Any]         # critic: {ok, problems}
     summary: str                     # decompose: one-line description of the whole request, used as the reply for multi-task runs
-    carried: list[str]               # failures from earlier tasks
     decision: dict[str, Any]         # the user's answer at `review`: {"accept": "all" | "none" | [indices]}
 
 
 def needs_repair(state: AgentState) -> bool:
     """After `apply`: did something fail that the model could still fix?"""
     return bool(state["plan"].get("ops")) and bool(state.get("failed")) and state["attempts"] < MAX_REPAIRS
-
-
-def more_tasks(state: AgentState) -> bool:
-    return len(state.get("tasks", [])) > 1 and state.get("task_idx", 0) + 1 < len(state["tasks"])
-
-
-def current_task(state: AgentState) -> dict[str, Any] | None:
-    tasks = state.get("tasks", [])
-    return tasks[state.get("task_idx", 0)] if len(tasks) > 1 else None
 
 
 def catalog() -> dict[str, Any]:
@@ -198,6 +202,19 @@ def snapshot(r: Resume, section_ids: list[str] | None = None, item_ids: list[str
     return {"layoutId": r.layoutId, "basics": {**b, **addr}, "sections": secs}
 
 
+def _others(r: Resume, section_ids: list[str], item_ids: list[str]) -> dict[str, Any]:
+    """What a focused task is NOT editing: whole sections it doesn't own, and the other items of a section it only partly owns."""
+    view = snapshot(r)
+    secs = []
+    for s in view["sections"]:
+        if section_ids and s["id"] in section_ids:
+            if not item_ids or "items" not in s:
+                continue
+            s = {**s, "items": [i for i in s["items"] if i["id"] not in item_ids]}
+        secs.append(s)
+    return {"basics": view["basics"], "sections": secs}
+
+
 def outline(r: Resume) -> dict[str, Any]:
     """Ids and titles only: what the decomposer needs to split a request, without the (long) text."""
     out = []
@@ -209,19 +226,20 @@ def outline(r: Resume) -> dict[str, Any]:
     return {"layoutId": r.layoutId, "sections": out}
 
 
-def _contents(state: AgentState, extra: str | None = None) -> list[dict[str, Any]]:
+def _contents(state: dict[str, Any], extra: str | None = None, task: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     turns = state["messages"][-14:]
     out: list[dict[str, Any]] = []
     for i, m in enumerate(turns):
         role = "model" if m["role"] == "assistant" else "user"
         if i == len(turns) - 1 and role == "user":
-            task = current_task(state)
             if task:  # one focused part of a bigger request: show only what it needs
                 view = snapshot(Resume.model_validate(state["resume"]), task["sectionIds"], task["itemIds"])
+                rest = _others(Resume.model_validate(state["resume"]), task["sectionIds"], task["itemIds"])
+                ctx_note = f"\n\nREAD-ONLY CONTEXT, the rest of the CV, so you can ground your work in the person's real experience (never edit it, other writers handle it):\n{json.dumps(rest, ensure_ascii=False)}"
                 ask = f"{task['instruction']}\n\n(This is one part of a larger request: \"{m['text'][:600]}\". Do ONLY this part; other parts are handled separately.)"
             else:
-                view, ask = snapshot(Resume.model_validate(state["resume"])), m["text"]
-            ctx = f"CATALOG (layouts, zones, templates):\n{json.dumps(catalog())}\n\nCURRENT CV STATE:\n{json.dumps(view, ensure_ascii=False)}"
+                view, ask, ctx_note = snapshot(Resume.model_validate(state["resume"])), m["text"], ""
+            ctx = f"CATALOG (layouts, zones, templates):\n{json.dumps(catalog())}\n\nCURRENT CV STATE:\n{json.dumps(view, ensure_ascii=False)}{ctx_note}"
             out.append({"role": "user", "parts": [ctx, ask, *([extra] if extra else [])]})
         else:
             out.append({"role": role, "parts": [m["text"]]})
@@ -237,8 +255,10 @@ def _route_contents(state: AgentState) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------- graph
 
 
-def build_graph(llm: LLM | None, checkpointer: Any = None, use_decompose: bool = True):
-    """`checkpointer` makes runs durable: required for `review` to pause and resume (propose mode)."""
+def build_graph(llm: LLM | None, checkpointer: Any = None, use_decompose: bool = True, use_critic: bool = True):
+    """`checkpointer` makes runs durable: required for `review` to pause and resume (propose mode).
+    `use_decompose=False` / `use_critic=False` switch those steps off (used by the evals to compare)."""
+    gate = asyncio.Semaphore(MAX_PARALLEL)
 
     async def route(state: AgentState) -> AgentState:
         try:
@@ -258,7 +278,7 @@ def build_graph(llm: LLM | None, checkpointer: Any = None, use_decompose: bool =
     async def decompose(state: AgentState) -> AgentState:
         """Best effort: on any problem the request simply runs as one task, exactly as before."""
         if not use_decompose:
-            return {"tasks": [], "task_idx": 0, "summary": ""}
+            return {"tasks": [], "summary": ""}
         try:
             cv = Resume.model_validate(state["resume"])
             ask = f"REQUEST:\n{state['messages'][-1]['text']}\n\nCV OUTLINE:\n{json.dumps(outline(cv))}"
@@ -271,20 +291,92 @@ def build_graph(llm: LLM | None, checkpointer: Any = None, use_decompose: bool =
                 tasks.append(t.model_dump())
             if len(tasks) > MAX_TASKS:
                 raise ValueError("too many tasks")
-            return {"tasks": tasks if len(tasks) > 1 else [], "task_idx": 0, "summary": d.summary if len(tasks) > 1 else ""}
+            return {"tasks": tasks if len(tasks) > 1 else [], "summary": d.summary if len(tasks) > 1 else ""}
         except Exception as e:  # noqa: BLE001
             log.warning("decompose failed, running as one task: %s", e)
-            return {"tasks": [], "task_idx": 0, "summary": ""}
+            return {"tasks": [], "summary": ""}
 
     async def plan(state: AgentState) -> AgentState:
         p = await llm.json(system=CHAT_SYSTEM, contents=_contents(state), schema=AgentPlan, temperature=0.3)
-        out: AgentState = {"plan": p.model_dump(), "attempts": 0, "failed": []}
-        if state.get("task_idx", 0) == 0:  # the first (or only) task starts the run's totals
-            out.update({"first_reply": p.reply, "applied": [], "applied_ops": [], "skipped": [], "carried": []})
-        return out
+        return {"plan": p.model_dump(), "first_reply": p.reply, "attempts": 0, "applied": [], "applied_ops": [], "skipped": [], "failed": []}
 
-    async def next_task(state: AgentState) -> AgentState:
-        return {"task_idx": state.get("task_idx", 0) + 1, "carried": state.get("skipped", []), "failed": [], "attempts": 0}
+    async def write(payload: dict[str, Any]) -> dict[str, Any]:
+        """One task, start to finish, on its own copy of the CV: plan, validate, and repair. Several run at once, so this node
+        never touches shared state; it returns the operations that worked and `merge` replays them in order."""
+        idx, task = payload["idx"], payload["task"]
+        cv = Resume.model_validate(payload["resume"])
+        view = {"messages": payload["messages"]}
+        applied_ops: list[dict[str, Any]] = []
+        skipped: list[str] = []
+        reply = ""
+        try:
+            async with gate:
+                extra = None
+                for attempt in range(MAX_REPAIRS + 1):
+                    p = await llm.json(system=CHAT_SYSTEM, contents=_contents({**view, "resume": cv.model_dump(mode="json")}, extra, task), schema=AgentPlan, temperature=0.3 if attempt == 0 else 0.2)
+                    reply = reply or p.reply
+                    ops = to_ops(p)
+                    if not ops:
+                        break
+                    res = apply_ops(cv, ops)
+                    cv = res.resume
+                    applied_ops += [o.model_dump(exclude_none=True) for o in res.applied_ops]
+                    skipped = res.skipped  # only the latest round's failures matter: earlier ones were retried
+                    if not res.failed:
+                        break
+                    failures = "\n".join(f"- {o.model_dump_json(exclude_none=True, exclude_defaults=True)}  →  {why}" for o, why in res.failed)
+                    extra = REPAIR_NOTE.format(failures=failures)
+        except Exception as e:  # noqa: BLE001  one failed part must not sink the others
+            log.warning("task %s failed: %s", idx, e)
+            skipped = [*skipped, f"“{task['instruction'][:60]}”: the assistant could not complete this part"]
+        return {"results": [{"idx": idx, "applied_ops": applied_ops, "skipped": skipped, "reply": reply}]}
+
+    async def merge(state: AgentState) -> AgentState:
+        """Replay every writer's operations on the CV as it was, in task order, through the same validated engine."""
+        results = sorted(state["results"], key=lambda r: r["idx"])
+        ops = [Op(**o) for r in results for o in r["applied_ops"]]
+        res = apply_ops(Resume.model_validate(state["resume"]), ops)
+        skipped = [*(x for r in results for x in r["skipped"]), *res.skipped]
+        summary = state.get("summary", "")
+        return {
+            "resume": res.resume.model_dump(mode="json"),
+            "applied": res.applied,
+            "applied_ops": [o.model_dump(exclude_none=True) for o in res.applied_ops],
+            "skipped": skipped,
+            "failed": [],
+            "plan": {"reply": summary, "ops": []},
+            "first_reply": summary,
+            "critic_rounds": 0,
+        }
+
+    async def critic(state: AgentState) -> AgentState:
+        """Reads the whole result once, which no single writer could. Best effort: if it fails the result stands."""
+        try:
+            before, after = Resume.model_validate(state["original"]), Resume.model_validate(state["resume"])
+            old = {s.id: s.model_dump() for s in before.sections}
+            changed = [{"before": old.get(s.id), "after": s.model_dump()} for s in after.sections if old.get(s.id) != s.model_dump()]
+            basics = {"before": before.basics.headline, "after": after.basics.headline} if before.basics.headline != after.basics.headline else None
+            ask = f"REQUEST:\n{state['messages'][-1]['text']}\n\nCHANGED SECTIONS:\n{json.dumps(changed, ensure_ascii=False)}" + (f"\n\nHEADLINE: {json.dumps(basics, ensure_ascii=False)}" if basics else "")
+            c = await llm.json(system=CRITIC_SYSTEM, contents=[{"role": "user", "parts": [ask]}], schema=Critique, temperature=0.0)
+            return {"critique": c.model_dump(), "critic_rounds": state.get("critic_rounds", 0) + 1}
+        except Exception as e:  # noqa: BLE001
+            log.warning("critic failed, keeping the result: %s", e)
+            return {"critique": {"ok": True, "problems": []}, "critic_rounds": state.get("critic_rounds", 0) + 1}
+
+    async def revise(state: AgentState) -> AgentState:
+        problems = "\n".join(f"- {x}" for x in state["critique"]["problems"])
+        try:
+            p = await llm.json(system=CHAT_SYSTEM, contents=_contents(state, REVISE_NOTE.format(problems=problems)), schema=AgentPlan, temperature=0.2)
+            res = apply_ops(Resume.model_validate(state["resume"]), to_ops(p))
+        except Exception as e:  # noqa: BLE001
+            log.warning("revise failed, keeping the merged result: %s", e)
+            return {}
+        return {
+            "resume": res.resume.model_dump(mode="json"),
+            "applied": [*state.get("applied", []), *res.applied],
+            "applied_ops": [*state.get("applied_ops", []), *(o.model_dump(exclude_none=True) for o in res.applied_ops)],
+            "skipped": [*state.get("skipped", []), *res.skipped],
+        }
 
     async def apply(state: AgentState) -> AgentState:
         ops = to_ops(AgentPlan.model_validate(state["plan"]))
@@ -295,7 +387,7 @@ def build_graph(llm: LLM | None, checkpointer: Any = None, use_decompose: bool =
             "resume": res.resume.model_dump(mode="json"),
             "applied": [*state.get("applied", []), *res.applied],
             "applied_ops": [*state.get("applied_ops", []), *(o.model_dump(exclude_none=True) for o in res.applied_ops)],
-            "skipped": [*state.get("carried", []), *res.skipped],
+            "skipped": res.skipped,
             "failed": [{"op": o.model_dump_json(exclude_none=True, exclude_defaults=True), "reason": why} for o, why in res.failed],
         }
 
@@ -333,25 +425,37 @@ def build_graph(llm: LLM | None, checkpointer: Any = None, use_decompose: bool =
     def after_route(state: AgentState) -> Literal["answer", "decompose"]:
         return "answer" if state.get("intent") == "answer" else "decompose"
 
-    def after_apply(state: AgentState) -> Literal["repair", "next", "review", "__end__"]:
-        if needs_repair(state):
-            return "repair"
-        if more_tasks(state):
-            return "next"
-        if state.get("mode") == "propose" and state.get("applied"):
-            return "review"
-        return END
+    def fan_out(state: AgentState) -> Any:
+        """Several tasks: one `write` each, all at once. One task: the plain plan -> apply path."""
+        if len(state.get("tasks", [])) < 2:
+            return "plan"
+        return [Send("write", {"idx": i, "task": t, "resume": state["resume"], "messages": state["messages"]}) for i, t in enumerate(state["tasks"])]
+
+    def finish(state: AgentState) -> Literal["review", "__end__"]:
+        return "review" if state.get("mode") == "propose" and state.get("applied") else END
+
+    def after_apply(state: AgentState) -> Literal["repair", "review", "__end__"]:
+        return "repair" if needs_repair(state) else finish(state)
+
+    def after_merge(state: AgentState) -> Literal["critic", "review", "__end__"]:
+        return "critic" if use_critic and state.get("applied") else finish(state)
+
+    def after_critic(state: AgentState) -> Literal["revise", "review", "__end__"]:
+        return "revise" if not state["critique"]["ok"] and state["critique"]["problems"] else finish(state)
 
     g = StateGraph(AgentState)
-    for name, fn in (("route", route), ("answer", answer), ("decompose", decompose), ("plan", plan), ("next", next_task), ("apply", apply), ("repair", repair), ("review", review), ("finalize", finalize)):
+    for name, fn in (("route", route), ("answer", answer), ("decompose", decompose), ("plan", plan), ("write", write), ("merge", merge), ("critic", critic), ("revise", revise), ("apply", apply), ("repair", repair), ("review", review), ("finalize", finalize)):
         g.add_node(name, fn)
     g.add_edge(START, "route")
     g.add_conditional_edges("route", after_route, {"answer": "answer", "decompose": "decompose"})
     g.add_edge("answer", END)
-    g.add_edge("decompose", "plan")
+    g.add_conditional_edges("decompose", fan_out, ["plan", "write"])
     g.add_edge("plan", "apply")
-    g.add_edge("next", "plan")
-    g.add_conditional_edges("apply", after_apply, {"repair": "repair", "next": "next", "review": "review", END: END})
+    g.add_edge("write", "merge")
+    g.add_conditional_edges("merge", after_merge, {"critic": "critic", "review": "review", END: END})
+    g.add_conditional_edges("critic", after_critic, {"revise": "revise", "review": "review", END: END})
+    g.add_conditional_edges("revise", finish, {"review": "review", END: END})
+    g.add_conditional_edges("apply", after_apply, {"repair": "repair", "review": "review", END: END})
     g.add_edge("repair", "apply")
     g.add_edge("review", "finalize")
     g.add_edge("finalize", END)

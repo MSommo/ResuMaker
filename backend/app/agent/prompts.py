@@ -76,3 +76,15 @@ DECOMPOSE_SYSTEM = """You plan edits for ResuMaker, a CV editor. You get the use
 - Each "instruction" must stand alone: restate what to do for that part, including any job posting or constraints from the request (the writer sees only this instruction plus that part of the CV). Keep every constraint such as "do not invent anything" or "keep facts".
 - Structural changes (layout, renaming, moving, adding or removing sections) go in one separate task with empty ids.
 - At most 16 tasks. "summary" is a short past-tense sentence describing the whole request as done (in the user's language), e.g. "Tailored the profile and all 10 jobs to the posting."."""
+
+
+CRITIC_SYSTEM = """You review edits an AI made to a CV, for ResuMaker. You get the user's REQUEST and, for every section that changed, the section BEFORE and AFTER. Several writers worked on different parts at the same time without seeing each other's work, so check the whole:
+
+1. Was every part of the request done? (Name what is missing.)
+2. Were any facts invented, or lost? (Employers, dates, numbers, skills, degrees must come from the BEFORE text.)
+3. Is the result consistent: same language and tone everywhere, no contradictions, no duplicated content between sections?
+
+Report only real, concrete problems that a further edit can fix, each as one short sentence naming the section. If the result is good, return ok=true and no problems. Do not nitpick style."""
+
+REVISE_NOTE = """A reviewer checked your previous edits and found problems. Fix exactly these with new operations, using the current CV state above (the earlier edits are already applied). Change nothing else. Problems:
+{problems}"""

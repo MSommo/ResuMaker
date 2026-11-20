@@ -14,7 +14,7 @@ from typing import Any, AsyncIterator
 
 from langgraph.types import Command
 
-from ..agent.graph import more_tasks, needs_repair
+from ..agent.graph import needs_repair
 from ..agent.llm import LLMError
 from ..db import PersonaRow
 from ..domain.diff import diff_resumes
@@ -58,6 +58,11 @@ def _detail(node: str, state: dict[str, Any]) -> str:
     if node == "decompose":
         n = len(state.get("tasks", []))
         return f"{n} tasks" if n > 1 else "1 task"
+    if node == "write":
+        return f"{len(state.get('results', []))} of {len(state.get('tasks', []))}"
+    if node == "critic":
+        n = len(state.get("critique", {}).get("problems", []))
+        return f"{n} issues" if n else "ok"
     if node == "plan":
         return f"{_plural(len(state.get('plan', {}).get('ops', [])), 'change')} proposed"
     if node == "apply":
@@ -74,9 +79,16 @@ def _status_after(node: str, state: dict[str, Any]) -> str | None:
         return "Writing an answer…" if state.get("intent") == "answer" else "Planning the work…"
     if node == "decompose":
         n = len(state.get("tasks", []))
-        return f"Planning the changes… (task 1 of {n})" if n > 1 else "Planning the changes…"
-    if node == "next":
-        return f"Planning the changes… (task {state.get('task_idx', 0) + 1} of {len(state.get('tasks', []))})"
+        return f"Writing {n} parts in parallel…" if n > 1 else "Planning the changes…"
+    if node == "write":
+        return f"Writing the parts… ({len(state.get('results', []))} of {len(state.get('tasks', []))} done)"
+    if node == "merge":
+        return "Checking the result…" if state.get("applied") else "Saving…"
+    if node == "critic":
+        n = len(state.get("critique", {}).get("problems", []))
+        return f"Fixing {_plural(n, 'issue')} the review found…" if n else ("Preparing your review…" if state.get("mode") == "propose" else "Saving…")
+    if node == "revise":
+        return "Preparing your review…" if state.get("mode") == "propose" else "Saving…"
     if node == "plan":
         return "Checking the changes…"
     if node == "repair":
@@ -84,8 +96,6 @@ def _status_after(node: str, state: dict[str, Any]) -> str | None:
     if node == "apply":
         if needs_repair(state):  # type: ignore[arg-type]
             return f"Fixing {_plural(len(state.get('failed', [])), 'failed change')}…"
-        if more_tasks(state):  # type: ignore[arg-type]
-            return None
         return "Preparing your review…" if state.get("mode") == "propose" and state.get("applied") else "Saving…"
     return None
 
@@ -97,7 +107,10 @@ async def _drive(graph: Any, graph_input: Any, config: dict[str, Any] | None, fi
             if node == "__interrupt__":
                 yield {"type": "interrupt", "value": delta[0].value}
                 continue
-            final.update(delta or {})
+            delta = dict(delta or {})
+            if node == "write":  # parallel writers each report one result: accumulate them
+                delta["results"] = [*final.get("results", []), *delta.get("results", [])]
+            final.update(delta)
             yield {"type": "step", "node": node, "detail": _detail(node, final)}
             if (label := _status_after(node, final)) and node not in ("review", "finalize"):
                 yield {"type": "status", "label": label}

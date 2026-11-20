@@ -22,7 +22,7 @@ async def test_agent_eval():
     if not key:
         pytest.skip("needs a real GEMINI_API_KEY")
     llm = GeminiLLM(key, os.environ.get("GEMINI_MODEL", "gemini-flash-latest"), "gemini-flash-lite-latest")
-    graph = build_graph(llm, use_decompose=os.environ.get("EVAL_DECOMPOSE", "1") != "0")  # EVAL_DECOMPOSE=0 for the one-shot baseline
+    graph = build_graph(llm, use_decompose=os.environ.get("EVAL_DECOMPOSE", "1") != "0", use_critic=os.environ.get("EVAL_CRITIC", "1") != "0")  # EVAL_DECOMPOSE=0: one-shot baseline; EVAL_CRITIC=0: no critic
     rows = []
     for c in CASES:
         before = big_resume() if c.big else sample_resume()
