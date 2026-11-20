@@ -11,6 +11,7 @@ from pydantic import BaseModel
 T = TypeVar("T", bound=BaseModel)
 
 
+MAX_OUTPUT_TOKENS = 16_384  # per call: bounds the cost of a runaway or abused request
 AI_NOT_INCLUDED = "AI features aren't included in your account."
 
 
@@ -54,7 +55,7 @@ class GeminiLLM:
 
         async def go(thinking: bool) -> types.GenerateContentResponse:
             extra = {"thinking_config": types.ThinkingConfig(thinking_level=types.ThinkingLevel.LOW)} if thinking else {}
-            cfg = types.GenerateContentConfig(system_instruction=system, **config, **extra)
+            cfg = types.GenerateContentConfig(system_instruction=system, **{"max_output_tokens": MAX_OUTPUT_TOKENS, **config}, **extra)
             return await self.client.aio.models.generate_content(model=model, contents=contents, config=cfg)
 
         try:

@@ -30,6 +30,7 @@ class Settings(BaseSettings):
 
     # Per client IP, per minute, for the endpoints that call Gemini.
     ai_rate_limit_per_min: int = 30
+    ai_daily_limit: int = 300  # AI requests per user per day (0 = unlimited): a backstop against runaway cost
 
     # ---- authentication
     # Sent only over HTTPS when true. None = decide from FRONTEND_URL / PUBLIC_URL (https => secure). Plain http is for localhost only.

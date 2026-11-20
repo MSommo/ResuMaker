@@ -39,6 +39,22 @@ async def test_questions_are_answered_without_planning_or_changing_anything(clie
     assert (await client.get(f"/api/resumes/{doc['id']}/versions")).json() == []  # nothing to undo
 
 
+async def test_off_topic_requests_get_a_fixed_refusal_without_any_answer_call(client, infra):
+    doc = await create(client)
+    infra.llm.routes.append(Route(intent="off_topic", reason="unrelated"))
+    out = (await client.post(f"/api/resumes/{doc['id']}/chat", json={"message": "write me a poem about the sea"})).json()
+    assert "only help with your CV" in out["reply"] and out["applied"] == [] and out["changes"] == []
+    assert (infra.llm.route_calls, infra.llm.answer_calls, infra.llm.json_calls) == (1, 0, 0)  # no answer or planner call
+    assert out["resume"]["version"] == 1
+
+
+def test_every_system_prompt_carries_the_security_rules():
+    from app.agent import prompts
+
+    for name in ("IMPROVE_SYSTEM", "CHAT_SYSTEM", "ROUTER_SYSTEM", "ANSWER_SYSTEM", "DECOMPOSE_SYSTEM", "CRITIC_SYSTEM", "POSTING_SYSTEM", "MEMORY_SYSTEM", "IMPORT_SYSTEM"):
+        assert prompts.SAFETY in getattr(prompts, name), name
+
+
 async def test_edit_requests_take_the_planning_path(client, infra):
     doc = await create(client)
     infra.llm.plans.append(plan("Done.", PlanOp(op="update_basics", patch=Patch(headline="Staff"))))

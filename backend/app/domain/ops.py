@@ -163,13 +163,36 @@ def _item_label(sec: Section, it: Any) -> str:
     return "item"
 
 
+# ---------------------------------------------------------------- contact guard
+
+_URL = re.compile(r"(?:https?://|www\.)[^\s<>\"')\]]+", re.I)
+_EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+_PHONE = re.compile(r"(?<![\d-])(?!\d{4}-\d{2}-\d{2}(?!\d))(?!(?:19|20)\d{2}\s*[-–]\s*(?:19|20)\d{2}(?!\d))\+?\d[\d\s().-]{6,}\d")
+
+
+def contacts_in(text: str) -> set[str]:
+    """Links, emails and phone numbers found in `text`, normalised so the same one written differently compares equal."""
+    out = {re.sub(r"^(?:https?://)?(?:www\.)?", "", u.lower()).rstrip("/.,;") for u in _URL.findall(text)}
+    out |= {e.lower() for e in _EMAIL.findall(text)}
+    out |= {d for p in _PHONE.findall(text) if len(d := re.sub(r"\D", "", p)) >= 7}
+    return out
+
+
+def _resume_text(r: Resume) -> str:
+    return r.model_dump_json()
+
+
 # ---------------------------------------------------------------- the engine
 
 
-def apply_ops(resume: Resume, ops: list[Op]) -> ApplyResult:
-    """Apply `ops` to a copy of `resume`. Bad ops are skipped with a reason; good ones still apply."""
+def apply_ops(resume: Resume, ops: list[Op], allowed_text: str | None = None) -> ApplyResult:
+    """Apply `ops` to a copy of `resume`. Bad ops are skipped with a reason; good ones still apply.
+
+    `allowed_text` switches on the contact guard, used for ops the AI proposed: an op may not introduce a link, email or phone
+    number that is neither already in the CV nor in `allowed_text` (what the person wrote or told us). Ops from people don't use it."""
     r = resume.model_copy(deep=True)
     res = ApplyResult(resume=r)
+    known = contacts_in(_resume_text(r) + "\n" + allowed_text) if allowed_text is not None else None
     id_map: dict[str, str] = {}  # ids the caller invented for new things → the real ids
 
     def real(i: str | None) -> str:
@@ -340,6 +363,8 @@ def apply_ops(resume: Resume, ops: list[Op]) -> ApplyResult:
             handler = handlers.get(op.op)
             if handler is None:
                 raise OpError(f"unsupported operation “{op.op}”")
+            if known is not None and (new := contacts_in(op.model_dump_json(exclude_none=True)) - known):
+                raise OpError(f"it adds {', '.join(sorted(new))}, which is not in the CV or in what the user wrote; only use links, emails and phone numbers the user provided")
             res.applied.append(handler(op))
             res.applied_ops.append(op)
         except Exception as e:  # OpError, or anything unexpected: never let one bad op abort the rest
