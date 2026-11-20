@@ -112,7 +112,7 @@ export function ChatBubble() {
   // Hotkeys for the review card: A approve, R reject, S approve all for this session, Ctrl/Cmd+Enter approve from anywhere.
   // The message box is disabled while a proposal waits, so plain letters are never typed into it.
   useEffect(() => {
-    if (!proposal || busy) return
+    if (!open || !proposal || busy) return // a closed panel must never act on keys
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault()
@@ -120,7 +120,7 @@ export function ChatBubble() {
         return
       }
       const el = e.target as HTMLElement
-      if (e.metaKey || e.ctrlKey || e.altKey || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement || (el instanceof HTMLInputElement && el.type !== 'checkbox')) return
+      if (e.metaKey || e.ctrlKey || e.altKey || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement || el.isContentEditable || (el instanceof HTMLInputElement && el.type !== 'checkbox')) return
       const k = e.key.toLowerCase()
       if (k === 'a' && picked.size) approve()
       else if (k === 'r') void decide('none')
