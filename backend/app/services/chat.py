@@ -15,7 +15,7 @@ from typing import Any, AsyncIterator
 from langgraph.types import Command
 
 from ..agent.graph import needs_repair
-from ..agent.llm import LLMError
+from ..agent.llm import AI_NOT_INCLUDED, LLMError
 from ..db import UserRow
 from ..domain.diff import diff_resumes
 from ..domain.models import Resume
@@ -187,6 +187,11 @@ async def stream_chat(infra: Infra, rid: uuid.UUID, message: str, mode: str = "a
                 paused = ev["value"]
             else:
                 yield ev
+
+        # A run takes a while. If an administrator turned this person's AI off meanwhile, don't save or propose its result.
+        await s.refresh(persona)
+        if not persona.has_ai:
+            raise LLMError(AI_NOT_INCLUDED, 403)
 
         if paused is not None:
             proposed_cv = Resume.model_validate(final["resume"])

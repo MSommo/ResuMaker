@@ -8,6 +8,7 @@ from fastapi import Depends, HTTPException, Request, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..agent.llm import AI_NOT_INCLUDED
 from ..cache import window_key
 from ..config import Settings
 from ..db import ResumeRow, SessionRow, UserRow
@@ -126,7 +127,6 @@ def own_persona(persona_id: str, me: Principal = Depends(current)) -> uuid.UUID:
 
 
 AI_NOT_CONFIGURED = "AI is not configured. Ask the administrator to set it up."
-AI_NOT_INCLUDED = "AI features aren't included in your account."
 
 
 def require_ai(infra: Infra = Depends(get_infra), me: Principal = Depends(current)) -> None:

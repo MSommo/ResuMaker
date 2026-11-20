@@ -115,3 +115,28 @@ async def test_mcp_ai_tools_follow_the_entitlement(client, make_client, infra, m
         with pytest.raises(ValueError, match="aren't included"):
             await call
     assert (await mcp_server.get_resume(cv["id"]))["layoutId"]  # non-AI tools still work
+
+
+async def test_turning_ai_off_during_a_run_saves_nothing(client, make_client, infra, monkeypatch):
+    """The gate runs when a request starts; a run takes a while. If AI is turned off meanwhile, its result isn't saved."""
+    from app.agent.graph import Patch, PlanOp
+    from app.services import chat
+    from tests.test_agent_flows import stream
+    from tests.test_api import plan
+
+    doc = await create(client)
+    boss = await make_client(role="admin")
+    infra.llm.plans.append(plan("Done.", PlanOp(op="update_basics", patch=Patch(headline="Staff"))))
+    real = chat._drive
+
+    async def run_then_turn_ai_off(*args, **kwargs):
+        async for ev in real(*args, **kwargs):
+            yield ev
+        assert (await boss.patch(f"/api/admin/users/{client.user.id}", json={"aiEnabled": False})).status_code == 200
+
+    monkeypatch.setattr(chat, "_drive", run_then_turn_ai_off)
+    events = await stream(client, doc["id"], "headline: Staff")
+    assert events[-1] == {"type": "error", "status": 403, "message": "AI features aren't included in your account."}
+    got = (await client.get(f"/api/resumes/{doc['id']}")).json()
+    assert got["version"] == doc["version"] and got["resume"]["basics"]["headline"] != "Staff"
+    assert (await client.get(f"/api/resumes/{doc['id']}/chat")).json() == []  # nothing recorded either

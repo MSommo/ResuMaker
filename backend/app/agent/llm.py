@@ -11,6 +11,9 @@ from pydantic import BaseModel
 T = TypeVar("T", bound=BaseModel)
 
 
+AI_NOT_INCLUDED = "AI features aren't included in your account."
+
+
 class LLMError(Exception):
     def __init__(self, message: str, status: int = 502):
         super().__init__(message)
