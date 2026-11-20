@@ -4,12 +4,12 @@
 # working tree, and there are no bind mounts: editing files in this repo cannot change what is running here.
 # Same project name and volume as the earlier dev stack, so your database carries over unchanged.
 #
-#   make stable-build   # build images from a git tag (default: stable-1), not from the working tree
+#   make stable-build   # build images from a git tag (default: stable-2), not from the working tree
 #   make stable-up      # start / update the frozen stack
 name: resumaker
 
 x-api: &api
-  image: resumaker-api:${STABLE_TAG:-stable-1}
+  image: resumaker-api:${STABLE_TAG:-stable-2}
   env_file:
     - path: .env            # GEMINI_API_KEY; optional (AI is simply off without it)
       required: false
@@ -20,7 +20,7 @@ x-api: &api
 
 services:
   db:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16   # Postgres 16 + pgvector (memory). Debian-based: it uses its own volume, see below.
     container_name: resumaker-postgres
     restart: unless-stopped
     environment:
@@ -30,7 +30,7 @@ services:
     ports:
       - "127.0.0.1:${STABLE_PG_PORT:-5433}:5432"
     volumes:
-      - resumaker-pgdata:/var/lib/postgresql/data
+      - resumaker-pgdata-v2:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U resumaker -d resumaker"]
       interval: 5s
@@ -69,7 +69,7 @@ services:
       retries: 12
 
   web:
-    image: resumaker-web:${STABLE_TAG:-stable-1}
+    image: resumaker-web:${STABLE_TAG:-stable-2}
     container_name: resumaker-web
     restart: unless-stopped
     ports:
@@ -95,4 +95,5 @@ services:
       redis: { condition: service_healthy }
 
 volumes:
-  resumaker-pgdata:       # => resumaker_resumaker-pgdata, the volume that already holds your data
+  resumaker-pgdata-v2:    # => resumaker_resumaker-pgdata-v2: the live data (restored from the stable-1 dump on the pgvector image)
+  resumaker-pgdata:       # => resumaker_resumaker-pgdata: the OLD alpine volume, untouched, kept as a rollback. Delete it once you are happy.

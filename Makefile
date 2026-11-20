@@ -22,7 +22,7 @@ SCRATCH_REDIS := redis://localhost:6381/0
 
 # The frozen stack (docker-compose.stable.yml): pre-built images from a git tag, no bind mounts, your real data.
 -include stable.env               # local, git-ignored: written by `make stable-expose` / `stable-hide`
-STABLE_TAG      ?= stable-1
+STABLE_TAG      ?= stable-2
 STABLE_WEB_PORT ?= 5174
 STABLE_BIND     ?= 127.0.0.1      # 0.0.0.0 = reachable from the local network
 STABLE          := docker compose -f docker-compose.stable.yml
