@@ -1,41 +1,52 @@
-.home { padding-top: 56px; padding-bottom: 72px; }
+.home { padding-top: 32px; padding-bottom: 72px; }
 .hero { max-width: 720px; margin-bottom: 64px; }
 .hero h1 { font-size: clamp(30px, 5vw, 48px); line-height: 1.08; letter-spacing: -0.03em; font-weight: 750; text-wrap: balance; }
 .hero p { margin-top: 16px; font-size: 17px; color: var(--muted); max-width: 56ch; text-wrap: pretty; }
 .hero-actions { margin-top: 28px; display: flex; gap: 12px; flex-wrap: wrap; }
 .section-head { margin-bottom: 24px; }
 .section-head h2 { font-size: 22px; letter-spacing: -0.02em; }
-.section-head p { margin-top: 4px; color: var(--muted); }
+.section-head p { margin-top: 4px; color: var(--muted); max-width: 65ch; }
+.sub-head { margin: 36px 0 16px; font-size: 16px; }
 
-.lgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 28px; }
-.lcard { display: flex; flex-direction: column; gap: 14px; }
-.lcard-thumb { position: relative; display: block; padding: 0; text-align: left; font: inherit; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: #fff; box-shadow: var(--shadow); transition: transform 0.15s, box-shadow 0.15s; }
-.lcard-thumb:hover { transform: translateY(-3px); box-shadow: 0 2px 4px rgba(20, 20, 10, 0.08), 0 14px 32px rgba(20, 20, 10, 0.14); }
+/* Cards keep a readable size whatever the window: they line up from the left instead of stretching to fill the row. */
+.lgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(196px, 228px)); gap: 32px 24px; }
+@media (max-width: 560px) { .lgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 14px; } }
+.lcard { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.lcard-thumb { position: relative; display: block; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: #fff; box-shadow: var(--shadow); transition: transform 0.15s, box-shadow 0.15s; }
+/* The whole preview is clickable through a cover on top of it (a link or button can't wrap the preview: it holds links) */
+.thumb-hit { position: absolute; inset: 0; display: block; padding: 0; border: 0; border-radius: inherit; background: none; cursor: pointer; }
+.thumb-hit:disabled { cursor: progress; }
+.lcard-thumb:has(.thumb-hit:disabled) { opacity: 0.6; }
+.lcard-thumb:has(.thumb-hit:not(:disabled)):hover { transform: translateY(-3px); box-shadow: 0 2px 4px rgba(20, 20, 10, 0.08), 0 14px 32px rgba(20, 20, 10, 0.14); }
 .lcard.current .lcard-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
-.lcard-body h3 { font-size: 16px; display: flex; align-items: center; gap: 8px; }
-.lcard-body p { margin: 4px 0 12px; color: var(--muted); }
-.lcard-title { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-right: -6px; }
+.lcard-body h3 { font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.lcard-body p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+.lcard-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.lcard-title { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
 .lcard-title h3 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lcard-title .rename { flex: 1; min-width: 0; min-height: 34px; padding: 4px 8px; font-size: 16px; font-weight: 600; }
-.lcard-title .icon-btn { flex: none; width: 32px; height: 32px; font-size: 18px; color: var(--muted); }
+.lcard-title .icon-btn { flex: none; width: 32px; height: 32px; margin: -6px -6px -6px 0; font-size: 18px; color: var(--muted); }  /* the box overhangs; the glyph lines up with the card edge */
+@media (pointer: coarse) { .lcard-title .icon-btn { width: 44px; height: 44px; margin: -12px -12px -12px 0; } }
 .lcard-title .icon-btn[aria-expanded='true'] { background: var(--bg); color: var(--ink); }
 .lcard-title .pop-panel { z-index: 20; }
-.lcard-body p .badge { margin-right: 4px; }
 /* "Open" appears over the preview when you point at it (the whole preview is the link) */
 .thumb-open {
   position: absolute; inset: 0; display: grid; place-items: center; opacity: 0; transition: opacity 0.15s;
   background: rgba(20, 20, 10, 0.32); pointer-events: none;
 }
 .thumb-open span { padding: 10px 26px; border-radius: 99px; background: var(--ink); color: #fff; font-weight: 650; font-size: 15px; box-shadow: var(--shadow); }
-.lcard-thumb:hover .thumb-open, .lcard-thumb:focus-visible .thumb-open { opacity: 1; }
+.lcard-thumb:hover .thumb-open, .thumb-hit:focus-visible .thumb-open { opacity: 1; }
+.thumb-hit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (hover: none) { .lcard-thumb:hover .thumb-open { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .thumb-open { transition: none; } }
-.badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); }
+.badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); }
 @media (prefers-reduced-motion: reduce) { .lcard-thumb { transition: none; } }
 
 .block { margin-bottom: 56px; }
-.lcard-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.lcard-thumb:disabled { opacity: 0.6; cursor: progress; }
+.lcard-body { flex: 1; display: flex; flex-direction: column; }
+.lcard-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: auto; padding-top: 14px; }  /* pinned to the bottom, so the buttons line up across cards */
+.lcard-actions .btn { width: 100%; justify-content: center; }
+.lcard-actions .link { padding: 4px 0; font-size: 13px; }
 .notice { margin: 0 0 32px; padding: 10px 14px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
 .state-box { display: grid; gap: 8px; justify-items: center; text-align: center; padding: 64px 20px; color: var(--muted); }
 .state-box.inline { margin-bottom: 40px; padding: 20px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
@@ -58,14 +69,15 @@
 .pcard.new:hover { color: var(--ink); border-color: var(--ink); box-shadow: none; }
 .avatar { display: inline-grid; place-items: center; flex: none; border-radius: 50%; color: #fff; font-weight: 650; letter-spacing: 0.02em; }
 .avatar.plus { width: 64px; height: 64px; background: var(--bg); color: var(--muted); font-size: 26px; border: 1.5px dashed var(--line-strong); }
-.persona-head { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin: 12px 0 36px; }
-.persona-id { flex: 1; min-width: 200px; }
-.persona-id h1 { font-size: 32px; letter-spacing: -0.02em; }
-.persona-id p { color: var(--muted); }
-.persona-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.persona-head { display: flex; align-items: center; gap: 16px; margin: 0 0 40px; }
+.persona-id { flex: 1; min-width: 0; }
+.persona-id h1 { font-size: clamp(22px, 3vw, 28px); line-height: 1.2; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.persona-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 14px; margin-top: 2px; color: var(--muted); }
+.persona-meta span { overflow-wrap: anywhere; }
+.persona-meta .link { padding: 6px 0; margin: -6px 0; font-weight: 600; }
 .panelbox { margin-bottom: 40px; padding: 20px 22px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
 .panelbox h2 { font-size: 18px; }
-.empty { padding: 28px; border: 1px dashed var(--line-strong); border-radius: var(--radius); color: var(--muted); text-align: center; }
+.empty { padding: 20px 28px; border: 1px dashed var(--line-strong); border-radius: var(--radius); color: var(--muted); text-align: center; }
 .form-actions { display: flex; gap: 8px; margin-top: 8px; }
 .form-error { color: var(--danger); margin: 8px 0; }
 .persona-form fieldset { margin-bottom: 14px; }

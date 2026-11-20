@@ -73,10 +73,13 @@ function CvCard({ cv, onDelete, onChanged }: { cv: ResumeSummary; onDelete: () =
 
   return (
     <article className="lcard" aria-busy={busy}>
-      <Link to={`/editor/${cv.id}`} className="lcard-thumb" aria-label={`Open ${cv.title}`}>
+      {/* The link covers the preview instead of wrapping it: the preview has links of its own (LinkedIn…), and a link can't hold links. */}
+      <div className="lcard-thumb">
         {doc ? <PageThumb resume={doc.resume} /> : <div className="thumb" />}
-        <span className="thumb-open" aria-hidden><span>Open</span></span>
-      </Link>
+        <Link to={`/editor/${cv.id}`} className="thumb-hit" aria-label={`Open ${cv.title}`}>
+          <span className="thumb-open" aria-hidden><span>Open</span></span>
+        </Link>
+      </div>
       <div className="lcard-body">
         <div className="lcard-title">
           {renaming ? (
@@ -104,8 +107,9 @@ function CvCard({ cv, onDelete, onChanged }: { cv: ResumeSummary; onDelete: () =
             <MenuItem icon={<Trash />} danger onSelect={onDelete}>Delete…</MenuItem>
           </Menu>
         </div>
-        <p>
-          <span className="badge">{layouts.find((l) => l.id === cv.layoutId)?.name ?? cv.layoutId}</span> edited {ago(cv.updatedAt)}
+        <p className="lcard-meta">
+          <span className="badge">{layouts.find((l) => l.id === cv.layoutId)?.name ?? cv.layoutId}</span>
+          <span>Edited {ago(cv.updatedAt)}</span>
         </p>
         {error && <p className="form-error" role="alert">{error}</p>}
       </div>
@@ -195,13 +199,13 @@ export default function PersonaPage() {
   return (
     <div className="container home">
       <header className="persona-head">
-        <Avatar id={persona.id} first={persona.firstName} last={persona.lastName} size={72} />
+        <Avatar id={persona.id} first={persona.firstName} last={persona.lastName} size={56} />
         <div className="persona-id">
           <h1>{fullName(persona)}</h1>
-          <p>{contact || 'No contact details yet'}</p>
-        </div>
-        <div className="persona-actions">
-          {!editing && <button type="button" className="btn" onClick={() => setEditing(true)}>Edit details</button>}
+          <p className="persona-meta">
+            <span>{contact || 'No contact details yet'}</span>
+            {!editing && <button type="button" className="link" onClick={() => setEditing(true)}>Edit details</button>}
+          </p>
         </div>
       </header>
 
@@ -239,18 +243,21 @@ export default function PersonaPage() {
           <p>Already have one? Drop it below. Otherwise choose a layout. You can switch later without losing anything.</p>
         </div>
         <ImportPanel persona={persona} incoming={incoming} />
+        <h3 className="sub-head">Start from a layout</h3>
         <div className="lgrid">
           {samples.map(({ l, r }) => (
             <article key={l.id} className="lcard">
-              <button type="button" className="lcard-thumb" disabled={busy} onClick={() => void create(l.id, 'blank')} aria-label={`Start a new CV with the ${l.name} layout`}>
+              <div className="lcard-thumb">
                 <PageThumb resume={r} />
-              </button>
+                {/* A bigger target for the pointer; keyboard and screen readers use "Use this layout" below. */}
+                <button type="button" className="thumb-hit" tabIndex={-1} aria-hidden disabled={busy} onClick={() => void create(l.id, 'blank')} />
+              </div>
               <div className="lcard-body">
                 <h3>{l.name}</h3>
                 <p>{l.description}</p>
                 <div className="lcard-actions">
                   <button type="button" className="btn primary" disabled={busy} onClick={() => void create(l.id, 'blank')}>Use this layout</button>
-                  <button type="button" className="btn" disabled={busy} onClick={() => void create(l.id, 'sample')}>With sample text</button>
+                  <button type="button" className="link" disabled={busy} onClick={() => void create(l.id, 'sample')}>or start with sample text</button>
                 </div>
               </div>
             </article>

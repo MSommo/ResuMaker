@@ -131,7 +131,7 @@
 @keyframes dz-bob { to { transform: translateY(-5px); } }
 .dz-types { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; }
 .dz-types b { padding: 2px 9px; border-radius: 99px; border: 1px solid var(--line-strong); color: var(--ink); font-weight: 600; font-size: 11px; letter-spacing: 0.03em; }
-.dz-types em { font-style: normal; margin-left: 4px; }
+.dz-types em { font-style: normal; margin-left: 4px; white-space: nowrap; }
 .dz-steps { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 7px; text-align: left; font-size: 13px; }
 .dz-steps li { display: flex; align-items: center; gap: 9px; opacity: 0.45; }
 .dz-steps li.now, .dz-steps li.done { opacity: 1; }
@@ -165,7 +165,15 @@
 .page-drop > div { display: grid; justify-items: center; gap: 6px; padding: 44px 56px; border: 2px dashed var(--accent); border-radius: 22px; background: var(--surface); box-shadow: var(--shadow); text-align: center; }
 .page-drop strong { font-size: 20px; }
 .page-drop span { color: var(--muted); }
-.imp-panel { margin-bottom: 28px; scroll-margin-top: 80px; }
+.imp-panel { max-width: 720px; scroll-margin-top: 80px; }
+/* On My CVs the import box is one compact row: icon, what to do, accepted files (stacked again on narrow screens). */
+.imp-panel .ai-note { max-width: 70ch; font-size: 12px; }
+.imp-panel .dz-idle { grid-template-columns: auto auto; grid-template-areas: 'icon title' 'icon or' 'icon types'; justify-items: start; align-items: center; column-gap: 16px; row-gap: 2px; text-align: left; }
+.imp-panel .dz-idle > .dz-icon { grid-area: icon; width: 48px; height: 48px; margin: 0; }
+.imp-panel .dz-idle > .dz-icon svg { width: 22px; height: 22px; }
+.imp-panel .dz-idle > strong { grid-area: title; font-size: 15px; }
+.imp-panel .dz-idle > span:not(.dz-icon):not(.dz-types) { grid-area: or; }
+.imp-panel .dz-idle > .dz-types { grid-area: types; margin-top: 4px; }
 .imp-panel .imp-pick, .imp-panel .imp-review { margin-top: 0; }
 .imp-panel .imp-review { padding: 18px 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
-.imp-panel .dropzone { min-height: 190px; }
+.imp-panel .dropzone { min-height: 112px; padding: 16px 20px; border-radius: 14px; }
