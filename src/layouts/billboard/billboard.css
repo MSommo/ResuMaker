@@ -15,9 +15,12 @@
 }
 .lx-billboard-headline { margin-top: 4mm; }
 .lx-billboard-headline span {
-  display: inline-block; padding: 1mm 3mm; background: var(--yellow); color: #0b0b0b; font-weight: 600; font-size: 11pt;
+  position: relative; isolation: isolate; display: inline-block; padding: 1.6mm 3mm; color: #0b0b0b; font-weight: 600; font-size: 11pt;
   line-height: 1.3; text-transform: uppercase;
 }
+.lx-billboard-headline span i { position: absolute; left: 0; right: 0; z-index: -1; height: 52%; background: var(--yellow); }
+.lx-billboard-headline span .fx-t { top: 0; }
+.lx-billboard-headline span .fx-b { bottom: 0; }
 .lx-billboard-contact { list-style: none; margin: 4.5mm 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 1mm 6mm; font-size: 8.6pt; color: #fff; }
 .lx-billboard-contact li { display: flex; align-items: center; gap: 2mm; }
 .lx-billboard-contact li::before { content: ''; flex: none; width: 1.5mm; height: 1.5mm; background: var(--yellow); }

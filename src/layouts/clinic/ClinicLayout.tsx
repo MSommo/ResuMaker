@@ -25,7 +25,7 @@ const Level = ({ level, name }: { level: number; name: string }) => (
 )
 
 function heading(sec: Section, zone: Zone): ReactNode {
-  if (zone === 'side') return <h2 className={`${P}-pill`}>{sec.title}</h2>
+  if (zone === 'side') return <h2 className={`${P}-pill`}><i aria-hidden className="fx-t" /><i aria-hidden className="fx-b" /><span>{sec.title}</span></h2>
   return (
     <h2 className={`${P}-h`}>
       <span className={`${P}-bar`} aria-hidden />
@@ -99,7 +99,7 @@ export function ClinicLayout({ resume: r }: { resume: Resume }) {
           {name && <h1>{name}</h1>}
           {b.headline && <div className={`${P}-headline`}>{b.headline}</div>}
         </div>
-        {name && <div className={`${P}-badge`} aria-hidden>{initials(b)}</div>}
+        {name && <div className={`${P}-badge`} aria-hidden><i aria-hidden className="fx-t" /><i aria-hidden className="fx-b" /><span>{initials(b)}</span></div>}
       </div>
       {pills.length > 0 && <ul className={`${P}-pills`}>{pills.map((p) => <li key={p}>{p}</li>)}</ul>}
       <HeaderExtras resume={r} />

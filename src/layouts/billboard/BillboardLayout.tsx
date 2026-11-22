@@ -73,7 +73,7 @@ export function BillboardLayout({ resume: r }: { resume: Resume }) {
   const header = (
     <header className={`${P}-header`}>
       {fullName(b) && <h1 className={`${P}-name`}>{b.firstName} {b.lastName}</h1>}
-      {b.headline && <div className={`${P}-headline`}><span>{b.headline}</span></div>}
+      {b.headline && <div className={`${P}-headline`}><span><i aria-hidden className="fx-t" /><i aria-hidden className="fx-b" />{b.headline}</span></div>}
       {contact.length > 0 && <ul className={`${P}-contact`}>{contact.map((c) => <li key={c}>{c}</li>)}</ul>}
       <HeaderExtras resume={r} />
     </header>
