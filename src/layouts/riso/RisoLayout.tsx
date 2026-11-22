@@ -17,8 +17,15 @@ function Heading({ sec }: { sec: Section }) {
   return (
     <h2 className={`${P}-h`}>
       <span className={`${P}-pill`}>
-        {sec.icon !== 'none' && <span className={`${P}-ico`} aria-hidden>{SECTION_ICONS[sec.icon]}</span>}
-        {sec.title}
+        <span className={`${P}-pill-bg`} aria-hidden />
+        <span className={`${P}-pill-txt`}>
+          {sec.icon !== 'none' && <span className={`${P}-ico`} aria-hidden>{SECTION_ICONS[sec.icon]}</span>}
+          {sec.title}
+        </span>
+        <span className={`${P}-pill-txt ${P}-pill-tail`} aria-hidden>
+          {sec.icon !== 'none' && <span className={`${P}-ico`}>{SECTION_ICONS[sec.icon]}</span>}
+          {sec.title}
+        </span>
       </span>
     </h2>
   )

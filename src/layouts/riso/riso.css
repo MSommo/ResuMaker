@@ -54,11 +54,14 @@
 
 /* ---------- headings: pills ---------- */
 .lx-riso-h { margin: 0 0 3mm; font-size: inherit; line-height: 1; }
-.lx-riso-pill {
-  display: inline-flex; align-items: center; gap: 1.6mm; background: var(--ink); color: var(--paper);
-  font-weight: 800; font-size: 9.6pt; line-height: 1.2; padding: 1.1mm 4mm; border-radius: 99px;
-  transform: rotate(-1.5deg); transform-origin: left center; max-width: 100%; overflow-wrap: anywhere;
+.lx-riso-pill { position: relative; display: inline-grid; grid-template-columns: auto auto; vertical-align: top; transform: rotate(-1.5deg); transform-origin: left center; }
+/* the ink ribbon is an empty box twice as long as the title (an invisible copy of the title fills the tail), so its centre is never under text and it prints exactly as it shows */
+.lx-riso-pill-bg { position: absolute; inset: 0; background: var(--ink); border-radius: 99px; }
+.lx-riso-pill-txt {
+  position: relative; display: flex; align-items: center; gap: 1.6mm; color: var(--paper); width: max-content; max-width: 70mm;
+  font-weight: 800; font-size: 9.6pt; line-height: 1.2; padding: 1.1mm 4mm; overflow-wrap: anywhere;
 }
+.lx-riso-pill-tail { visibility: hidden; }
 .lx-riso-ico { display: inline-flex; width: 3.6mm; height: 3.6mm; color: var(--pink); flex: none; }
 .lx-riso-ico svg { width: 100%; height: 100%; }
 
@@ -71,14 +74,14 @@
 .lx-riso-panel.is-last .lx-riso-shadow-b { display: block; }
 .lx-riso-panel:not(.is-first) .lx-riso-panel-in::before { content: ''; position: absolute; top: -0.4mm; left: 0; right: 0; height: 0.4mm; background: var(--tint); }
 .lx-riso-panel-in {
-  position: relative; background: var(--tint); border: 0.6mm solid var(--ink); border-top-width: 0; border-bottom-width: 0;
+  position: relative; overflow: hidden; background: var(--tint); border: 0.6mm solid var(--ink); border-top-width: 0; border-bottom-width: 0;
   padding: 2mm 3.2mm;
 }
 .lx-riso-panel.is-first .lx-riso-panel-in { border-top-width: 0.6mm; padding-top: 4mm; }
 .lx-riso-panel.is-last .lx-riso-panel-in { border-bottom-width: 0.6mm; padding-bottom: 4mm; }
 .lx-riso-panel.is-first:not(.is-last) .lx-riso-panel-in { padding-bottom: 1.5mm; }
 .lx-riso-panel .lx-riso-h { margin-left: -1mm; margin-bottom: 3mm; }
-.lx-riso-panel .lx-riso-pill { font-size: 8.8pt; padding: 1mm 3.2mm; }
+.lx-riso-panel .lx-riso-pill-txt { max-width: 40mm; font-size: 8.8pt; padding: 1mm 3.2mm; }
 
 /* ---------- entries ---------- */
 .lx-riso-dates { font-family: 'Space Mono', ui-monospace, monospace; font-weight: 700; font-size: 7.8pt; line-height: 1.3; color: var(--pink-text); margin-bottom: 0.6mm; }
