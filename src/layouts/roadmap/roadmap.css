@@ -1,2 +1,93 @@
 /* Roadmap layout. All rules scoped under .lx-roadmap. */
-.pg.lx-roadmap { font-family: system-ui, sans-serif; font-size: 9.5pt; line-height: 1.35; }
+.pg.lx-roadmap {
+  --ink: #0f172a; --muted: #475569; --indigo: #4f46e5; --tint: #eef2ff; --teal: #0f766e; --track: #dfe3f7; --chip: #3730a3;
+  --pad-t: 14mm; --pad-x: 14mm; --pad-b: 12mm;
+  --side-w: 56mm; --side-pr: 6mm; --main-pl: 10mm; --main-rule: none; --col-pad: 7mm; --col-pad-rest: 0mm;
+  --nx: -7mm;
+  font-family: 'DM Sans', system-ui, sans-serif; font-size: 9.2pt; line-height: 1.4; color: var(--ink);
+}
+.lx-roadmap .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.lx-roadmap .pg-page { background: #fff; }
+
+/* header */
+.lx-roadmap-header { padding-bottom: 1mm; }
+.lx-roadmap-name { margin: 0; font-weight: 700; font-size: 25pt; line-height: 1.12; letter-spacing: -0.01em; color: var(--ink); overflow-wrap: anywhere; }
+.lx-roadmap-headline { margin-top: 1mm; font-weight: 500; font-size: 11.5pt; color: var(--indigo); line-height: 1.3; }
+.lx-roadmap-chips { list-style: none; margin: 3.5mm 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 1.8mm; }
+.lx-roadmap-chips li { background: var(--tint); color: var(--chip); font-size: 8pt; font-weight: 500; line-height: 1.3; padding: 1mm 3mm; border-radius: 4mm; overflow-wrap: anywhere; }
+.lx-roadmap .hx { margin-top: 4mm; }
+.lx-roadmap .hx-text { max-width: 150mm; }
+.lx-roadmap .hx-p { font-size: 9.2pt; color: var(--muted); line-height: 1.45; }
+.lx-roadmap .hx-facts { font-size: 8.4pt; color: var(--muted); }
+.lx-roadmap .hx-facts b { color: var(--ink); font-weight: 700; }
+
+/* rich text */
+.lx-roadmap a { color: var(--indigo); text-decoration: underline; }
+.lx-roadmap strong { font-weight: 700; }
+.lx-roadmap code { font-size: 0.92em; background: var(--tint); padding: 0 0.8mm; border-radius: 0.8mm; }
+.lx-roadmap .md table { border-collapse: collapse; font-size: 8.6pt; }
+.lx-roadmap .md th, .lx-roadmap .md td { border: 0.25mm solid var(--track); padding: 0.6mm 1.6mm; text-align: left; }
+
+/* shared pieces */
+.lx-roadmap-text { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+.lx-roadmap-text.md p { margin: 0; }
+.lx-roadmap-text:not(:first-child) { margin-top: 1.2mm; }
+.lx-roadmap-title { margin: 0; font-size: 10.2pt; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.lx-roadmap-org { color: var(--muted); font-weight: 400; }
+.lx-roadmap-org-line { font-weight: 500; line-height: 1.3; overflow-wrap: anywhere; }
+.lx-roadmap-meta { color: var(--muted); font-size: 8.4pt; margin-top: 0.4mm; display: flex; flex-wrap: wrap; align-items: center; }
+.lx-roadmap-meta-now, .lx-roadmap-meta-now .lx-roadmap-dates { color: var(--teal); font-weight: 700; }
+.lx-roadmap-now { background: var(--teal); color: #fff; font-size: 6.8pt; font-weight: 700; letter-spacing: 0.08em; padding: 0.3mm 1.6mm; border-radius: 2mm; margin-right: 1.8mm; line-height: 1.4; }
+.lx-roadmap-note { margin-top: 1mm; font-weight: 700; font-size: 8.8pt; line-height: 1.35; }
+.lx-roadmap-title + .lx-roadmap-text, .lx-roadmap-meta ~ .lx-roadmap-text { margin-top: 1.2mm; }
+.lx-roadmap-sub { margin: 1.8mm 0 0.5mm; font-weight: 700; font-size: 8.4pt; color: var(--chip); }
+.lx-roadmap-bullets { list-style: none; margin: 0; padding: 0; }
+.lx-roadmap-bullets li { position: relative; padding-left: 3.4mm; margin-top: 0.7mm; overflow-wrap: anywhere; }
+.lx-roadmap-bullets li::before { content: '›'; position: absolute; left: 0.4mm; top: -0.3mm; color: var(--indigo); font-weight: 700; font-size: 11pt; line-height: 1.4; }
+.lx-roadmap-entry-end { padding-bottom: 4.6mm; }
+
+/* levels, links, details */
+.lx-roadmap-level { padding-bottom: 2.2mm; }
+.lx-roadmap-level-top { display: flex; justify-content: space-between; gap: 2mm; line-height: 1.25; margin-bottom: 0.9mm; }
+.lx-roadmap-level-name { overflow-wrap: anywhere; font-weight: 500; }
+.lx-roadmap-level-n { color: var(--muted); font-size: 7.8pt; font-weight: 500; white-space: nowrap; position: relative; }
+.lx-roadmap-pills { display: flex; gap: 1mm; }
+.lx-roadmap-pills span { flex: 1; height: 1.8mm; border-radius: 1mm; background: #dfe3f7; }
+.lx-roadmap-pills span.on { background: var(--indigo); }
+.lx-roadmap-card .lx-roadmap-pills span { background: #cdd3f5; }
+.lx-roadmap-card .lx-roadmap-pills span.on { background: var(--indigo); }
+.lx-roadmap-link { display: block; font-weight: 500; overflow-wrap: anywhere; margin-bottom: 1mm; }
+.lx-roadmap-details { margin: 0; }
+.lx-roadmap-details > div { margin-bottom: 1.8mm; }
+.lx-roadmap-details dt { font-size: 7.2pt; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.lx-roadmap-details dd { margin: 0; overflow-wrap: anywhere; }
+
+/* side: lane cards */
+.lx-roadmap .end-section { padding-bottom: 4mm; }
+.lx-roadmap-card { display: flow-root; background: var(--tint); padding: 0 4mm; overflow-wrap: anywhere; }
+.lx-roadmap-card.first { padding-top: 4mm; border-radius: 2.5mm 2.5mm 0 0; }
+.lx-roadmap-card.last { padding-bottom: 3mm; border-radius: 0 0 2.5mm 2.5mm; }
+.lx-roadmap-card.first.last { border-radius: 2.5mm; }
+/* a card that continues over a page break still gets proper padding and rounding at the cut */
+.lx-roadmap .pg-side .pg-unit:first-child .lx-roadmap-card:not(.first) { padding-top: 3.5mm; border-radius: 2.5mm 2.5mm 0 0; }
+.lx-roadmap .pg-side .pg-unit:last-child .lx-roadmap-card:not(.last) { padding-bottom: 3mm; border-radius: 0 0 2.5mm 2.5mm; }
+.lx-roadmap .pg-side .pg-unit:first-child:last-child .lx-roadmap-card:not(.first):not(.last) { border-radius: 2.5mm; }
+.lx-roadmap-card .lx-roadmap-entry-end { padding-bottom: 2.4mm; }
+.lx-roadmap-side-h { margin: 0 0 2.4mm; display: flex; align-items: center; gap: 2mm; font-size: 8.4pt; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--indigo); line-height: 1.25; }
+.lx-roadmap-ico { flex: none; width: 5mm; height: 5mm; border-radius: 50%; background: var(--indigo); color: #fff; display: inline-flex; align-items: center; justify-content: center; }
+.lx-roadmap-ico svg { width: 2.9mm; height: 2.9mm; display: block; }
+
+/* main: track */
+.lx-roadmap-seg { position: relative; display: flow-root; }
+.lx-roadmap-seg::before { content: ''; position: absolute; left: calc(var(--nx) - 0.3mm); width: 0.6mm; top: 0; bottom: 0; background: var(--indigo); }
+.lx-roadmap-seg.first::before { top: 2.5mm; }
+.lx-roadmap-seg.last::before { bottom: 4.6mm; }
+.lx-roadmap-seg-body { position: relative; }
+.lx-roadmap-h { position: relative; margin: 0 0 3mm; display: flex; align-items: center; gap: 3mm; min-height: 5mm; font-size: 8.4pt; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--indigo); line-height: 1.25; }
+.lx-roadmap-h-ico { position: absolute; left: calc(var(--nx) - 2.5mm); top: 0; width: 5mm; height: 5mm; border-radius: 50%; background: var(--indigo); color: #fff; display: flex; align-items: center; justify-content: center; }
+.lx-roadmap-h-ico svg { width: 2.9mm; height: 2.9mm; display: block; }
+.lx-roadmap-h-ico.bare { left: calc(var(--nx) - 1.2mm); top: 1.3mm; width: 2.4mm; height: 2.4mm; }
+.lx-roadmap-h-t { overflow-wrap: anywhere; }
+.lx-roadmap-h-rule { flex: 1; height: 0.25mm; background: #c7cdf0; min-width: 6mm; }
+.lx-roadmap-node { position: absolute; left: calc(var(--nx) - 3mm); top: -0.4mm; width: 6mm; height: 6mm; border-radius: 50%; background: var(--indigo); color: #fff; font-size: 7.2pt; font-weight: 700; display: flex; align-items: center; justify-content: center; line-height: 1; border: 1mm solid #fff; box-sizing: content-box; margin: -1mm 0 0 -1mm; }
+.lx-roadmap-node-now { background: var(--teal); }
