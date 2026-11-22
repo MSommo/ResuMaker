@@ -1,2 +1,94 @@
 /* Clinic layout. All rules scoped under .lx-clinic. */
-.pg.lx-clinic { font-family: system-ui, sans-serif; font-size: 9.5pt; line-height: 1.35; }
+.pg.lx-clinic {
+  --ink: #17323a; --muted: #4a6169; --teal: #0f766e; --teal-d: #134e4a; --tint: #e7f5f3; --soft: #f0f9f8; --line: #cfe9e5; --pill-t: #0b5d56;
+  --pad-t: 14mm; --pad-x: 14mm; --pad-b: 12mm; --side-w: 56mm; --side-pr: 7mm; --main-pl: 2mm; --main-rule: 0; --col-pad: 6mm; --col-pad-rest: 0mm;
+  font-family: 'Nunito Sans', system-ui, sans-serif; font-size: 9.3pt; line-height: 1.46; color: var(--ink);
+}
+.lx-clinic .pg-main { padding-left: var(--main-pl); border-left: 0; }
+.lx-clinic .pg-cont .pg-side, .lx-clinic .pg-cont .pg-main { padding-top: 0; }
+.lx-clinic .pg-page { background: #fff; }
+.lx-clinic .pg-page::before { content: ''; flex: none; height: 0; }
+.lx-clinic .pg-cont { padding-top: 14mm; }
+.lx-clinic .pg-unit.end-section { padding-bottom: 6mm; }
+.lx-clinic .pg-side .pg-unit.end-section { padding-bottom: 4mm; }
+.lx-clinic .pg-side .pg-unit:not(.end-section) { padding-bottom: 0; }
+
+/* Header */
+.lx-clinic .lx-clinic-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 6mm; }
+.lx-clinic .lx-clinic-id { min-width: 0; }
+.lx-clinic h1 { margin: 0; font-family: 'Nunito', 'Nunito Sans', system-ui, sans-serif; font-weight: 800; font-size: 27pt; line-height: 1.1; color: var(--teal-d); overflow-wrap: anywhere; }
+.lx-clinic .lx-clinic-headline { margin-top: 1.4mm; font-weight: 600; font-size: 11.5pt; color: var(--teal); line-height: 1.3; }
+.lx-clinic .lx-clinic-badge {
+  flex: none; width: 17mm; height: 17mm; border-radius: 50%; background: var(--teal); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-family: 'Nunito', system-ui, sans-serif; font-weight: 800; font-size: 15pt;
+}
+.lx-clinic .lx-clinic-pills { list-style: none; margin: 4mm 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 1.6mm 2mm; }
+.lx-clinic .lx-clinic-pills li { background: var(--tint); color: var(--pill-t); font-weight: 600; font-size: 8pt; line-height: 1.2; padding: 1.2mm 3mm; border-radius: 4mm; overflow-wrap: anywhere; }
+.lx-clinic .lx-clinic-rule { height: 0.6mm; background: var(--line); margin-top: 5mm; border-radius: 1mm; }
+.lx-clinic .hx { margin-top: 4mm; }
+.lx-clinic .hx-p { font-size: 9.3pt; line-height: 1.46; color: var(--ink); }
+.lx-clinic .hx-text { background: var(--soft); border-radius: 3mm; padding: 3mm 4mm; }
+.lx-clinic .hx-facts { font-size: 8.6pt; color: var(--muted); }
+.lx-clinic .hx-facts b { color: var(--teal-d); }
+
+/* Main headings */
+.lx-clinic .lx-clinic-h {
+  display: flex; align-items: center; gap: 2.4mm; margin: 0 0 3.4mm; font-family: 'Nunito', system-ui, sans-serif; font-weight: 800; font-size: 12pt;
+  line-height: 1.2; color: var(--teal-d); break-after: avoid;
+}
+.lx-clinic .lx-clinic-bar { flex: none; width: 1mm; height: 5mm; border-radius: 1mm; background: var(--teal); }
+.lx-clinic .lx-clinic-icon { flex: none; width: 5.5mm; height: 5.5mm; border-radius: 50%; background: var(--tint); color: var(--teal); display: flex; align-items: center; justify-content: center; }
+.lx-clinic .lx-clinic-icon svg { width: 3.2mm; height: 3.2mm; }
+
+/* Side cards */
+.lx-clinic .lx-clinic-card { background: var(--soft); padding: 0 4mm; }
+.lx-clinic .lx-clinic-card.first { padding-top: 4mm; border-radius: 3mm 3mm 0 0; }
+.lx-clinic .lx-clinic-card.last { padding-bottom: 4mm; border-radius: 0 0 3mm 3mm; }
+.lx-clinic .lx-clinic-card.first.last { border-radius: 3mm; }
+.lx-clinic .lx-clinic-pill {
+  display: inline-block; margin: 0 0 3mm; background: var(--tint); color: var(--pill-t); font-family: 'Nunito Sans', system-ui, sans-serif; font-weight: 800; font-size: 7.6pt;
+  text-transform: uppercase; letter-spacing: 0.1em; line-height: 1.2; padding: 1.2mm 3mm; border-radius: 4mm; break-after: avoid;
+}
+.lx-clinic .lx-clinic-card .lx-clinic-text { font-size: 9pt; }
+.lx-clinic .lx-clinic-detail { padding-bottom: 2.4mm; }
+.lx-clinic .lx-clinic-card.last .lx-clinic-detail { padding-bottom: 0; }
+.lx-clinic .lx-clinic-label { font-family: 'Nunito', system-ui, sans-serif; font-weight: 700; font-size: 7.4pt; text-transform: uppercase; letter-spacing: 0.06em; color: var(--teal); }
+.lx-clinic .lx-clinic-value { font-size: 8.8pt; overflow-wrap: anywhere; }
+
+/* Entries and text */
+.lx-clinic .lx-clinic-text { margin: 0; padding-bottom: 2.4mm; }
+.lx-clinic .lx-clinic-title { margin: 0; font-weight: 700; font-size: 10pt; line-height: 1.3; color: var(--ink); overflow-wrap: anywhere; }
+.lx-clinic .lx-clinic-org { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 2.4mm; margin-top: 0.3mm; }
+.lx-clinic .lx-clinic-orgname { color: var(--teal); font-weight: 600; }
+.lx-clinic .lx-clinic-loc { color: var(--muted); font-size: 8.8pt; }
+.lx-clinic .lx-clinic-dates { display: inline-block; margin: 1.6mm 0 2mm; background: var(--tint); color: var(--pill-t); font-weight: 600; font-size: 7.8pt; line-height: 1.2; padding: 0.9mm 2.6mm; border-radius: 3mm; }
+.lx-clinic .lx-clinic-note { margin: 0 0 2mm; background: var(--soft); border-radius: 2.4mm; padding: 1.8mm 3mm; font-weight: 700; font-size: 8.8pt; color: var(--teal-d); }
+.lx-clinic .lx-clinic-card .lx-clinic-note { background: #fff; }
+.lx-clinic .lx-clinic-entry-end { padding-bottom: 7mm; }
+.lx-clinic .lx-clinic-card .lx-clinic-entry-end { padding-bottom: 3mm; }
+.lx-clinic .lx-clinic-card .lx-clinic-text { padding-bottom: 2mm; }
+.lx-clinic .lx-clinic-card.last .lx-clinic-text { padding-bottom: 0; }
+.lx-clinic .lx-clinic-sub { font-weight: 700; color: var(--teal-d); padding: 1.2mm 0 0.8mm; }
+.lx-clinic .lx-clinic-bullets { list-style: none; margin: 0; padding: 0; }
+.lx-clinic .lx-clinic-bullets li { position: relative; padding: 0 0 0.6mm 4.6mm; }
+.lx-clinic .lx-clinic-bullets li::before { content: ''; position: absolute; left: 0.4mm; top: 1.9mm; width: 1.6mm; height: 1.6mm; border-radius: 50%; background: var(--teal); }
+
+/* Levels */
+.lx-clinic .lx-clinic-level { padding-bottom: 2.6mm; }
+.lx-clinic .lx-clinic-level-name { font-weight: 600; font-size: 8.8pt; overflow-wrap: anywhere; }
+.lx-clinic .lx-clinic-track { display: flex; gap: 0.7mm; margin-top: 1mm; }
+.lx-clinic .lx-clinic-track span { flex: 1; height: 2mm; border-radius: 1mm; background: var(--line); }
+.lx-clinic .lx-clinic-track span.on { background: var(--teal); }
+.lx-clinic .lx-clinic-card.last .lx-clinic-level:last-child { padding-bottom: 0; }
+
+/* Links */
+.lx-clinic .lx-clinic-link { display: block; padding-bottom: 1.6mm; color: var(--teal); font-weight: 600; text-decoration: underline; overflow-wrap: anywhere; }
+.lx-clinic .lx-clinic-card.last .lx-clinic-link:last-child { padding-bottom: 0; }
+
+/* Markdown */
+.lx-clinic strong { font-weight: 700; color: var(--ink); }
+.lx-clinic a { color: var(--teal); text-decoration: underline; }
+.lx-clinic code { font-size: 0.92em; background: var(--tint); border-radius: 1mm; padding: 0 1mm; }
+.lx-clinic .md table { border-collapse: collapse; font-size: 8.6pt; }
+.lx-clinic .md th, .lx-clinic .md td { border: 0.2mm solid var(--line); padding: 0.8mm 2mm; }
+.lx-clinic .md th { background: var(--tint); color: var(--teal-d); }
