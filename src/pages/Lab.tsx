@@ -24,5 +24,5 @@ export default function Lab() {
   const data = q.get('data')
   const resume = data === 'empty' ? blankResume(layout.id) : data === 'long' ? longResume(layout.id) : sampleResume(layout.id)
   const Layout = layout.Component
-  return <div style={{ background: '#e8e8e8', padding: 24 }}><Layout resume={resume} /></div>
+  return <Layout resume={resume} />
 }
