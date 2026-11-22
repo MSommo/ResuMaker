@@ -1,2 +1,82 @@
 /* Terminal layout. All rules scoped under .lx-terminal. */
-.pg.lx-terminal { font-family: system-ui, sans-serif; font-size: 9.5pt; line-height: 1.35; }
+.pg.lx-terminal {
+  --pad-t: 13mm; --pad-x: 13mm; --pad-b: 13mm; --col-pad: 5mm; --col-pad-rest: 0mm; --main-pl: 0mm; --main-rule: 0;
+  --bg: #0d1117; --txt: #c9d1d9; --bright: #f0f6fc; --green: #3fb950; --amber: #e3b341; --cyan: #79c0ff; --muted: #8b949e; --sep: #21262d;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 8.6pt; line-height: 1.5; color: var(--txt);
+}
+.lx-terminal .pg-page { background: var(--bg); box-shadow: 0 2px 16px rgba(0, 0, 0, .35); }
+.lx-terminal .pg-body { grid-template-columns: 1fr; }
+.lx-terminal .pg-side { display: none; }
+.lx-terminal .pg-main { padding-right: 0; }
+.lx-terminal .pg-unit { overflow-wrap: anywhere; }
+
+/* Title bar */
+.lx-terminal-bar { position: relative; display: flex; align-items: center; height: 8mm; margin-bottom: 4mm; padding: 0 3.5mm; background: #161b22; border-radius: 2mm 2mm 0 0; }
+.lx-terminal-dots { display: flex; gap: 1.8mm; }
+.lx-terminal-dots i { width: 2.6mm; height: 2.6mm; border-radius: 50%; background: #ff5f56; }
+.lx-terminal-dots i:nth-child(2) { background: #ffbd2e; }
+.lx-terminal-dots i:nth-child(3) { background: #27c93f; }
+.lx-terminal-bar-title { position: absolute; left: 0; right: 0; text-align: center; font-size: 7.6pt; color: var(--muted); }
+
+/* Prompts */
+.lx-terminal-ps { color: var(--green); font-weight: 600; }
+.lx-terminal-cmd { color: var(--bright); font-weight: 500; }
+.lx-terminal-arg { color: var(--cyan); }
+.lx-terminal-prompt { margin: 0; }
+.lx-terminal-name { margin: 0.5mm 0 2.5mm; color: var(--bright); font-size: 24pt; line-height: 1.15; font-weight: 600; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.lx-terminal-block { display: inline-block; width: 0.6em; height: 1.05em; margin-left: 0.18em; vertical-align: -0.17em; background: var(--green); }
+.lx-terminal-closing .lx-terminal-block { width: 2.4mm; height: 4mm; vertical-align: -0.9mm; margin-left: 0; }
+.lx-terminal-none { color: var(--muted); }
+.lx-terminal-headline { color: var(--green); font-size: 10.4pt; font-weight: 500; margin: 0 0 1mm; }
+.lx-terminal-header { padding-bottom: 1mm; }
+
+/* Header extras */
+.lx-terminal .hx { margin-top: 3mm; gap: 2mm; padding-left: 3mm; background: linear-gradient(var(--sep), var(--sep)) left / 0.5mm 100% no-repeat; }
+.lx-terminal .hx-p { font-size: 8.6pt; color: var(--txt); }
+.lx-terminal .hx-facts { font-size: 8.2pt; color: var(--txt); }
+.lx-terminal .hx-facts b { color: var(--muted); font-weight: 500; }
+.lx-terminal .hx-facts b::after { content: ':'; }
+
+/* Sections */
+.lx-terminal .end-rule { padding-bottom: 3.5mm; margin-bottom: 3.5mm; background: linear-gradient(var(--sep), var(--sep)) bottom / 100% 0.3mm no-repeat; }
+.lx-terminal .end-section { padding-bottom: 3.5mm; }
+.lx-terminal-heading { margin: 0 0 2mm; font-size: 8.8pt; font-weight: 400; line-height: 1.5; break-after: avoid; }
+.lx-terminal-text { margin: 0; padding: 0 0 1.8mm 3mm; }
+.lx-terminal-entry-end { padding-bottom: 3.2mm; }
+.lx-terminal-entry { padding-left: 3mm; }
+.lx-terminal-entry-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 2.4mm; }
+.lx-terminal-title { margin: 0; color: var(--bright); font-size: 9.2pt; font-weight: 600; line-height: 1.5; }
+.lx-terminal-org { color: var(--cyan); font-weight: 500; }
+.lx-terminal-dates { color: var(--amber); }
+.lx-terminal-loc { color: var(--muted); }
+.lx-terminal-note { margin-top: 0.4mm; color: var(--amber); font-weight: 600; }
+.lx-terminal-bullets { list-style: none; margin: 0; padding: 0 0 0.6mm 3mm; }
+.lx-terminal-bullets li { position: relative; padding-left: 4mm; }
+.lx-terminal-bullets li::before { content: '>'; position: absolute; left: 0; color: var(--green); font-weight: 600; }
+.lx-terminal-sub { padding: 1mm 0 0.5mm 3mm; color: var(--muted); font-weight: 500; }
+.lx-terminal-sub::before { content: '## '; }
+.lx-terminal strong { color: var(--bright); font-weight: 600; }
+.lx-terminal em { color: var(--bright); }
+.lx-terminal code { font-family: inherit; color: var(--amber); }
+.lx-terminal a { color: var(--cyan); text-decoration: underline; text-underline-offset: 0.5mm; }
+.lx-terminal table { border-collapse: collapse; }
+.lx-terminal th, .lx-terminal td { border: 1px solid #30363d; padding: 0.6mm 2mm; text-align: left; }
+
+/* details as .env */
+.lx-terminal-env { padding-left: 3mm; }
+.lx-terminal-key { color: var(--muted); }
+.lx-terminal-eq { color: var(--green); }
+.lx-terminal-val { color: var(--bright); }
+
+/* levels */
+.lx-terminal-level { display: flex; align-items: center; gap: 3mm; padding-left: 3mm; line-height: 1.7; }
+.lx-terminal-level-name { flex: 0 1 46mm; min-width: 0; color: var(--bright); }
+.lx-terminal-cells { display: inline-flex; gap: 0.8mm; flex: none; }
+.lx-terminal-cells i { width: 2.4mm; height: 3.2mm; background: #30363d; }
+.lx-terminal-cells i.on { background: var(--green); }
+.lx-terminal-count { color: var(--muted); flex: none; }
+
+/* links */
+.lx-terminal-linkrow { padding-left: 3mm; }
+.lx-terminal-arrow { color: var(--green); }
+.lx-terminal-link { color: var(--cyan); }
