@@ -4,6 +4,7 @@ import { addressLines, birthLines } from '../../model/format'
 import { zoneSections } from '../../model/sections'
 import type { Basics, Entry, Leveled, Resume, Section } from '../../model/types'
 import { Paginated, type Unit } from '../Paginated'
+import { detailRows } from '../kit'
 import { HeaderExtras, Rich, paragraphs, parseBullets } from '../shared'
 import './sidebar.css'
 
@@ -116,7 +117,7 @@ function details(b: Basics): ReactNode {
 function sectionUnits(sec: Section, b: Basics, end: Unit['end']): Unit[] {
   const nodes: ReactNode[] = (() => {
     switch (sec.kind) {
-      case 'details': return [details(b)]
+      case 'details': return detailRows(b).length ? [details(b)] : []
       case 'text': return paragraphs(sec.text, 'sb-text')
       case 'entries': return sec.items.flatMap(entryPieces)
       case 'levels': return sec.items.map(levelRow)

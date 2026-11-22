@@ -1,0 +1,2 @@
+/* Risograph layout. All rules scoped under .lx-riso. */
+.pg.lx-riso { font-family: system-ui, sans-serif; font-size: 9.5pt; line-height: 1.35; }

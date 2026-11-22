@@ -1,0 +1,2 @@
+/* Terminal layout. All rules scoped under .lx-terminal. */
+.pg.lx-terminal { font-family: system-ui, sans-serif; font-size: 9.5pt; line-height: 1.35; }
