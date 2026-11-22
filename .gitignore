@@ -14,3 +14,4 @@ __pycache__/
 
 # Impeccable design-review artifacts (critique snapshots, live-mode sessions)
 .impeccable/
+backend/layout-parity/

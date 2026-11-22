@@ -234,6 +234,9 @@ eval-tailor: ## Live eval of tailoring: honest gaps, nothing invented, prompt in
 eval-memory: ## Live eval of memory: embedding thresholds, extraction, preferences applied, wrong memory ignored (real Gemini)
 	cd backend && set -a && . ../.env && set +a && $(SCRATCH_ENV) uv run pytest -m live -s -q tests/evals/test_memory_eval.py
 
+check-layouts: ## Every layout must print like it shows (screen vs Print vs PDF, side by side in backend/layout-parity/; needs `make stack`; EVAL_LOGIN/EVAL_PASSWORD if sign-in is on)
+	cd backend && $(SCRATCH_ENV) EVAL_API=$(API_URL)/api uv run pytest -m stack -s -q tests/test_layout_parity.py
+
 eval-import: ## Live round-trip eval of CV import: DOCX, HTML and PDF of a known CV, re-imported and compared (real Gemini; needs `make stack`)
 	cd backend && set -a && . ../.env && set +a && $(SCRATCH_ENV) EVAL_API=$(API_URL)/api uv run pytest -m live -s -q tests/evals/test_import_eval.py
 

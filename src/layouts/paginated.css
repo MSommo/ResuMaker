@@ -1,6 +1,8 @@
 .pg {
   --page-w: 210mm; --page-h: 297mm; --pad-t: 11mm; --pad-x: 15.8mm; --pad-b: 10mm; --side-w: 58.7mm; --col-pad: 9mm; --col-pad-rest: 5.5mm;
   position: relative;
+  /* Bars, rules and fills are backgrounds: without this, Print (backgrounds off by default) drops them. Every layout inherits it. */
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
 }
 .pg-pages {
   display: flex; flex-direction: column; align-items: safe center; gap: 8mm; width: max-content; margin: 0 auto;
