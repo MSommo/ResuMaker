@@ -91,8 +91,13 @@ async def render_pdf(infra, s, user, resume_id) -> bytes:
     from ..services import auth
 
     token, sess = await auth.create_session(s, infra.settings, user, kind="render")
-    front = infra.settings.frontend_url
-    cookie = {"name": COOKIE, "value": token, "domain": urlsplit(front).hostname, "path": "/api", "httpOnly": True, "sameSite": "Strict", "secure": urlsplit(front).scheme == "https"}
+    front = infra.settings.frontend_url.strip().rstrip("/")
+    if front and "://" not in front:  # "web.railway.internal:8080" without a scheme has no parseable hostname
+        front = f"http://{front}"
+    parts = urlsplit(front)
+    if front and not parts.hostname:
+        raise RuntimeError(f"FRONTEND_URL has no host: {infra.settings.frontend_url!r}")
+    cookie = {"name": COOKIE, "value": token, "domain": parts.hostname, "path": "/api", "httpOnly": True, "sameSite": "Strict", "secure": parts.scheme == "https"}
     try:
         return await infra.pdf.render(f"{front}/preview/{resume_id}", cookie)
     finally:
