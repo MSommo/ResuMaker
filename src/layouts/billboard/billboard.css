@@ -1,2 +1,81 @@
 /* Billboard layout. All rules scoped under .lx-billboard. */
-.pg.lx-billboard { font-family: system-ui, sans-serif; font-size: 9.5pt; line-height: 1.35; }
+.pg.lx-billboard {
+  --ink: #111827; --muted: #4b5563; --blue: #1a3cff; --yellow: #ffd400; --tint: #eef1ff; --track: #cfd6ff;
+  --pad-t: 14mm; --pad-x: 12mm; --pad-b: 12mm; --side-w: 56mm; --side-pr: 5mm; --main-pl: 7mm; --main-rule: 0;
+  --col-pad: 8mm; --col-pad-rest: 0mm;
+  font-family: 'Archivo', system-ui, sans-serif; font-size: 9.2pt; line-height: 1.42; color: var(--ink);
+}
+.lx-billboard .pg-page { background: linear-gradient(90deg, var(--tint) calc(var(--pad-x) + var(--side-w)), #fff 0); }
+.lx-billboard .pg-header { margin: calc(-1 * var(--pad-t)) calc(-1 * var(--pad-x)) 0; background: var(--blue); }
+
+.lx-billboard-header { padding: 12mm 14mm 9mm; color: #fff; }
+.lx-billboard-name {
+  margin: 0; font-family: 'Archivo Black', 'Arial Black', sans-serif; font-weight: 400; font-size: 40pt; line-height: 1;
+  letter-spacing: -0.01em; text-transform: uppercase; color: #fff; overflow-wrap: anywhere;
+}
+.lx-billboard-headline { margin-top: 4mm; }
+.lx-billboard-headline span {
+  display: inline-block; padding: 1mm 3mm; background: var(--yellow); color: #0b0b0b; font-weight: 600; font-size: 11pt;
+  line-height: 1.3; text-transform: uppercase;
+}
+.lx-billboard-contact { list-style: none; margin: 4.5mm 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 1mm 6mm; font-size: 8.6pt; color: #fff; }
+.lx-billboard-contact li { display: flex; align-items: center; gap: 2mm; }
+.lx-billboard-contact li::before { content: ''; flex: none; width: 1.5mm; height: 1.5mm; background: var(--yellow); }
+.lx-billboard .hx { margin-top: 5mm; color: #fff; }
+.lx-billboard .hx-p, .lx-billboard .hx-facts { color: #fff; }
+.lx-billboard .hx-facts b { color: var(--yellow); }
+.lx-billboard .hx a, .lx-billboard .hx strong { color: #fff; }
+
+.lx-billboard .pg-main { border-left: 0; }
+.lx-billboard .pg-cont .pg-body { padding-top: 0; }
+.lx-billboard .pg-cont .pg-side, .lx-billboard .pg-cont .pg-main { padding-top: 0; }
+.lx-billboard .end-section { padding-bottom: 6.5mm; }
+
+/* Headings */
+.lx-billboard-h { display: flex; align-items: center; gap: 2.5mm; margin: 0 0 3.2mm; break-after: avoid; position: relative; padding-bottom: 3mm; }
+.lx-billboard-h::after { content: ''; position: absolute; left: 0; bottom: 0; width: 14mm; height: 1.6mm; background: var(--yellow); }
+.lx-billboard-h h2 {
+  margin: 0; font-family: 'Archivo Black', 'Arial Black', sans-serif; font-weight: 400; font-size: 14pt; line-height: 1.1;
+  text-transform: uppercase; color: var(--ink); overflow-wrap: anywhere;
+}
+.lx-billboard .pg-side .lx-billboard-h h2 { font-size: 12pt; }
+.lx-billboard-icon { flex: none; width: 6mm; height: 6mm; background: var(--blue); color: #fff; display: grid; place-items: center; }
+.lx-billboard-icon svg { width: 3.8mm; height: 3.8mm; }
+
+/* Entries */
+.lx-billboard-eh { display: flex; justify-content: space-between; align-items: baseline; gap: 4mm; }
+.lx-billboard-title { margin: 0; font-weight: 600; font-size: 10.2pt; line-height: 1.3; color: var(--ink); overflow-wrap: anywhere; }
+.lx-billboard-org { font-weight: 400; color: var(--muted); }
+.lx-billboard-loc { font-size: 8.4pt; color: var(--muted); text-align: right; flex: none; max-width: 40%; overflow-wrap: anywhere; }
+.lx-billboard-dates { margin: 1.2mm 0 1.8mm; }
+.lx-billboard-dates span {
+  display: inline-block; padding: 0.4mm 1.8mm; background: var(--blue); color: #fff; font-size: 7.8pt; font-weight: 600;
+  border-radius: 1mm; line-height: 1.4;
+}
+.lx-billboard-note { margin: 0 0 1.6mm; font-weight: 600; }
+.lx-billboard-note span { background-image: linear-gradient(var(--yellow), var(--yellow)); background-repeat: no-repeat; background-size: 100% 40%; background-position: 0 92%; }
+.lx-billboard-text { margin: 0; padding-bottom: 2mm; overflow-wrap: anywhere; }
+.lx-billboard-entry-end { padding-bottom: 5.2mm; }
+.lx-billboard-bullets { margin: 0; padding: 0; list-style: none; }
+.lx-billboard-bullets li { position: relative; padding-left: 4mm; margin-bottom: 0.8mm; overflow-wrap: anywhere; }
+.lx-billboard-bullets li::before { content: '\25B8'; position: absolute; left: 0; color: var(--blue); font-weight: 700; }
+.lx-billboard-sub { font-weight: 600; padding: 1.2mm 0 0.8mm; }
+.lx-billboard strong { font-weight: 600; }
+.lx-billboard a { color: var(--blue); text-decoration: underline; font-weight: 600; }
+.lx-billboard .lx-billboard-header a { color: #fff; }
+.lx-billboard code { font-family: ui-monospace, monospace; font-size: 0.92em; background: var(--tint); padding: 0 0.8mm; }
+.lx-billboard .md table { border-collapse: collapse; }
+.lx-billboard .md th, .lx-billboard .md td { border: 1px solid var(--track); padding: 0.6mm 1.6mm; }
+
+/* Side blocks */
+.lx-billboard-details { margin: 0; }
+.lx-billboard-details > div { padding-bottom: 2.6mm; }
+.lx-billboard-details dt { font-weight: 600; font-size: 7.4pt; text-transform: uppercase; letter-spacing: 0.06em; color: var(--blue); }
+.lx-billboard-details dd { margin: 0; font-size: 8.8pt; overflow-wrap: anywhere; }
+.lx-billboard-level { padding-bottom: 2.8mm; }
+.lx-billboard-level-name { font-weight: 600; font-size: 9pt; overflow-wrap: anywhere; }
+.lx-billboard-segs { display: flex; gap: 0.8mm; margin-top: 1mm; }
+.lx-billboard-segs i { flex: 1; height: 3mm; background: var(--track); }
+.lx-billboard-segs i.on { background: var(--blue); }
+.lx-billboard-link { display: block; padding-bottom: 1.8mm; overflow-wrap: anywhere; font-size: 8.8pt; }
+.lx-billboard .pg-side .lx-billboard-text { padding-bottom: 1.5mm; font-size: 8.8pt; }
