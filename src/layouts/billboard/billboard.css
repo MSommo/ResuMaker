@@ -47,11 +47,9 @@
 .lx-billboard-title { margin: 0; font-weight: 600; font-size: 10.2pt; line-height: 1.3; color: var(--ink); overflow-wrap: anywhere; }
 .lx-billboard-org { font-weight: 400; color: var(--muted); }
 .lx-billboard-loc { font-size: 8.4pt; color: var(--muted); text-align: right; flex: none; max-width: 40%; overflow-wrap: anywhere; }
-.lx-billboard-dates { margin: 1.2mm 0 1.8mm; }
-.lx-billboard-dates span {
-  display: inline-block; padding: 0.4mm 1.8mm; background: var(--blue); color: #fff; font-size: 7.8pt; font-weight: 600;
-  border-radius: 1mm; line-height: 1.4;
-}
+.lx-billboard-dates { margin: 1.2mm 0 1.8mm; display: flex; align-items: center; gap: 2mm; }
+.lx-billboard-dates i { flex: none; width: 6mm; height: 2mm; background: var(--blue); }
+.lx-billboard-dates span { color: var(--blue); font-size: 8pt; font-weight: 700; letter-spacing: 0.03em; line-height: 1.4; }
 .lx-billboard-note { margin: 0 0 1.6mm; font-weight: 600; }
 .lx-billboard-note span { background-image: linear-gradient(var(--yellow), var(--yellow)); background-repeat: no-repeat; background-size: 100% 40%; background-position: 0 92%; }
 .lx-billboard-text { margin: 0; padding-bottom: 2mm; overflow-wrap: anywhere; }

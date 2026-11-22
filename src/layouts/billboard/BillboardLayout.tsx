@@ -31,7 +31,7 @@ function entryHead(en: Entry, job: boolean): ReactNode {
         <h3 className={`${P}-title`}>{title}{org && <span className={`${P}-org`}>{title ? ', ' : ''}{org}</span>}</h3>
         {en.location && <span className={`${P}-loc`}>{en.location}</span>}
       </div>
-      {dates && <div className={`${P}-dates`}><span>{dates}</span></div>}
+      {dates && <div className={`${P}-dates`}><i aria-hidden="true" /><span>{dates}</span></div>}
       {en.note && <div className={`${P}-note`}><span><Rich text={en.note} /></span></div>}
     </>
   )
