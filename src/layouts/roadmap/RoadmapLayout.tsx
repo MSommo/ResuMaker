@@ -15,7 +15,7 @@ const hasIcon = (s: Section) => !!s.icon && s.icon !== 'none'
 
 /** A numbered milestone node on the track. */
 const Node = ({ n, now }: { n: number; now?: boolean }) => (
-  <span className={`${P}-node${now ? ` ${P}-node-now` : ''}`} aria-hidden>{pad2(n)}</span>
+  <span className={`${P}-node${now ? ` ${P}-node-now` : ''}`} aria-hidden><span className={`${P}-node-dot`} /><span className={`${P}-node-num`}>{pad2(n)}</span></span>
 )
 
 const titleLine = (en: Entry, job: boolean) => (

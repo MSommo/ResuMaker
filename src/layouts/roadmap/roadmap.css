@@ -89,5 +89,7 @@
 .lx-roadmap-h-ico.bare { left: calc(var(--nx) - 1.2mm); top: 1.3mm; width: 2.4mm; height: 2.4mm; }
 .lx-roadmap-h-t { overflow-wrap: anywhere; }
 .lx-roadmap-h-rule { flex: 1; height: 0.25mm; background: #c7cdf0; min-width: 6mm; }
-.lx-roadmap-node { position: absolute; left: calc(var(--nx) - 3mm); top: -0.4mm; width: 6mm; height: 6mm; border-radius: 50%; background: var(--indigo); color: #fff; font-size: 7.2pt; font-weight: 700; display: flex; align-items: center; justify-content: center; line-height: 1; border: 1mm solid #fff; box-sizing: content-box; margin: -1mm 0 0 -1mm; }
-.lx-roadmap-node-now { background: var(--teal); }
+.lx-roadmap-node { position: absolute; left: calc(var(--nx) - 3mm); top: -0.4mm; width: 8mm; height: 8mm; margin: -1mm 0 0 -1mm; color: #fff; font-size: 7.2pt; font-weight: 700; display: flex; align-items: center; justify-content: center; line-height: 1; }
+.lx-roadmap-node-dot { position: absolute; inset: 0; border-radius: 50%; background: var(--indigo); border: 1mm solid #fff; box-sizing: border-box; }
+.lx-roadmap-node-now .lx-roadmap-node-dot { background: var(--teal); }
+.lx-roadmap-node-num { position: relative; }
