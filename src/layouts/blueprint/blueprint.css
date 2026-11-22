@@ -9,10 +9,8 @@
 .lx-blueprint .pg-page {
   position: relative; background-color: var(--bg); color: var(--ink);
   background-image:
-    repeating-linear-gradient(0deg, rgba(255,255,255,.12) 0 0.15mm, transparent 0.15mm 5mm),
-    repeating-linear-gradient(90deg, rgba(255,255,255,.12) 0 0.15mm, transparent 0.15mm 5mm),
-    repeating-linear-gradient(0deg, rgba(255,255,255,.06) 0 0.1mm, transparent 0.1mm 1mm),
-    repeating-linear-gradient(90deg, rgba(255,255,255,.06) 0 0.1mm, transparent 0.1mm 1mm);
+    repeating-linear-gradient(0deg, rgba(255,255,255,.1) 0 0.2mm, transparent 0.2mm 5mm),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.1) 0 0.2mm, transparent 0.2mm 5mm);
 }
 /* corner registration marks: eight 6 mm ticks painted as backgrounds */
 .lx-blueprint .pg-page::before {
@@ -64,11 +62,11 @@
 
 /* side boxes with a label tab */
 .lx-blueprint .lx-blueprint-tab {
-  position: relative; z-index: 1; display: table; margin: 0 0 -2.4mm 3mm; padding: 0.4mm 2mm; background: var(--bg);
-  border: 0.35mm solid var(--line); font-size: 10pt; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: #fff; line-height: 1.15;
+  position: relative; z-index: 1; display: table; margin: 0 0 0 3mm; padding: 0.4mm 2mm;
+  border: 0.35mm solid var(--line); border-bottom: 0; font-size: 10pt; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: #fff; line-height: 1.15;
 }
 .lx-blueprint .lx-blueprint-box { border-left: 0.35mm solid var(--line); border-right: 0.35mm solid var(--line); padding: 0 3mm; }
-.lx-blueprint .lx-blueprint-box.is-first { border-top: 0.35mm solid var(--line); padding-top: 4.2mm; }
+.lx-blueprint .lx-blueprint-box.is-first { border-top: 0.35mm solid var(--line); padding-top: 2.4mm; }
 .lx-blueprint .lx-blueprint-box > * { margin-bottom: 0 !important; }
 .lx-blueprint .lx-blueprint-box { padding-bottom: 1.8mm; }
 .lx-blueprint .lx-blueprint-box.is-last { border-bottom: 0.35mm solid var(--line); padding-bottom: 3mm; }
