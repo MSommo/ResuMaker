@@ -11,7 +11,7 @@
 .lx-plain-header h1 { margin: 0; font-size: 20pt; font-weight: 700; line-height: 1.15; }
 .lx-plain-headline { margin-top: 0.5mm; font-size: 11pt; }
 .lx-plain-contact { margin-top: 1mm; color: var(--muted); overflow-wrap: anywhere; }
-.lx-plain-rule { height: 0.25mm; background: var(--ink); }
+.lx-plain-rule { height: 1px; background-color: var(--ink); }
 .lx-plain-rule-top { margin-top: 3mm; }
 .lx-plain .hx { margin-top: 3mm; }
 .lx-plain .hx-p { font-size: 10pt; line-height: 1.38; }
