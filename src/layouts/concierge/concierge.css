@@ -1,2 +1,108 @@
 /* Concierge layout. All rules scoped under .lx-concierge. */
-.pg.lx-concierge { font-family: system-ui, sans-serif; font-size: 9.5pt; line-height: 1.35; }
+.pg.lx-concierge {
+  --ivory: #fbf8f1; --ink: #2a2622; --muted: #5c554b; --gold: #8a6d2f; --gold-line: #b8975a; --gold-soft: #d9c9a4;
+  --pad-t: 15mm; --pad-x: 16mm; --pad-b: 13mm; --side-w: 50mm; --side-pr: 6mm; --main-pl: 8mm; --col-pad: 7mm; --col-pad-rest: 3mm;
+  font-family: 'Jost', system-ui, sans-serif; font-size: 9.1pt; line-height: 1.5; color: var(--ink);
+}
+.lx-concierge .pg-page { background: var(--ivory); }
+.lx-concierge .pg-side { text-align: center; }
+.lx-concierge .pg-main { border-left: 0; position: relative; text-align: left; }
+/* the vertical gold hairline is a background element so it paints on every page and in print */
+.lx-concierge .pg-main::before {
+  content: ''; position: absolute; left: 0; top: var(--col-pad); bottom: 0; width: 0.3mm; background: var(--gold-line);
+}
+.lx-concierge .pg-cont .pg-main::before { top: var(--col-pad-rest); }
+
+/* Header */
+.lx-concierge .lx-concierge-header { text-align: center; padding-bottom: 1mm; }
+.lx-concierge .lx-concierge-header h1 {
+  margin: 0; font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 600; font-size: 34pt; line-height: 1.05;
+  text-transform: uppercase; letter-spacing: 0.16em; padding-left: 0.16em; overflow-wrap: anywhere;
+}
+.lx-concierge .lx-concierge-headline {
+  margin-top: 1.5mm; font-family: 'Cormorant Garamond', Georgia, serif; font-style: italic; font-weight: 500; font-size: 14pt; color: var(--gold);
+}
+.lx-concierge .lx-concierge-orn { display: flex; align-items: center; justify-content: center; gap: 3mm; margin: 4mm 0 3.6mm; }
+.lx-concierge .lx-concierge-orn span { display: block; width: 30mm; height: 0.3mm; background: var(--gold-line); }
+.lx-concierge .lx-concierge-orn i { display: block; width: 2.2mm; height: 2.2mm; background: var(--gold-line); transform: rotate(45deg); }
+.lx-concierge .lx-concierge-contact {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5mm 6mm;
+  font-weight: 500; font-size: 7.8pt; text-transform: uppercase; letter-spacing: 0.18em; color: var(--ink);
+}
+.lx-concierge .lx-concierge-contact span { overflow-wrap: anywhere; }
+.lx-concierge .hx { text-align: center; margin-top: 5mm; }
+.lx-concierge .hx-text { max-width: 135mm; margin: 0 auto; }
+.lx-concierge .hx-p { font-family: 'Cormorant Garamond', Georgia, serif; font-style: italic; font-weight: 500; font-size: 11.6pt; line-height: 1.4; color: var(--ink); }
+.lx-concierge .hx-facts { justify-content: center; font-size: 8pt; color: var(--muted); letter-spacing: 0.04em; }
+.lx-concierge .hx-facts b { font-weight: 500; color: var(--gold); text-transform: uppercase; font-size: 7.2pt; letter-spacing: 0.14em; }
+
+/* Section headings */
+.lx-concierge .lx-concierge-heading { margin-bottom: 3.4mm; }
+.lx-concierge .lx-concierge-icon { display: block; width: 3.6mm; height: 3.6mm; margin: 0 auto 1mm; color: var(--gold); }
+.lx-concierge .lx-concierge-icon svg { width: 100%; height: 100%; display: block; }
+.lx-concierge .lx-concierge-heading-row { display: flex; align-items: center; gap: 2.4mm; }
+.lx-concierge .lx-concierge-hr { flex: 1; height: 0.3mm; background: var(--gold-line); min-width: 2mm; }
+.lx-concierge .lx-concierge-heading h2 {
+  margin: 0 -0.26em 0 0; flex: none; max-width: 75%; font-weight: 500; font-size: 8.4pt; line-height: 1.3; color: var(--gold);
+  text-transform: uppercase; letter-spacing: 0.26em; text-align: center; overflow-wrap: anywhere;
+}
+.lx-concierge .pg-side .lx-concierge-heading h2 { font-size: 7.8pt; letter-spacing: 0.2em; margin-right: -0.2em; }
+.lx-concierge .pg-unit.end-section { padding-bottom: 6.5mm; }
+
+/* Body text */
+.lx-concierge .lx-concierge-text { margin: 0 0 1.8mm; overflow-wrap: anywhere; }
+.lx-concierge .lx-concierge-text p { margin: 0; }
+.lx-concierge .pg-side .lx-concierge-text { font-size: 8.8pt; }
+.lx-concierge strong { font-weight: 500; }
+.lx-concierge .md a, .lx-concierge .lx-concierge-link {
+  color: var(--ink); text-decoration: underline; text-decoration-color: var(--gold-line); text-decoration-thickness: 0.3mm; text-underline-offset: 0.7mm;
+}
+.lx-concierge .md code { font-family: 'Jost', system-ui, sans-serif; background: #f1ead9; padding: 0 1mm; border-radius: 0.6mm; }
+.lx-concierge .md table { border-collapse: collapse; font-size: 8.4pt; }
+.lx-concierge .md th, .lx-concierge .md td { border: 0; border-bottom: 0.25mm solid var(--gold-soft); padding: 0.6mm 2mm; text-align: left; }
+.lx-concierge .md ul, .lx-concierge .md ol { margin: 0; padding-left: 4mm; }
+.lx-concierge .lx-concierge-linkrow { margin: 0 0 1.2mm; overflow-wrap: anywhere; }
+.lx-concierge .lx-concierge-link { font-weight: 500; }
+
+/* Entries */
+.lx-concierge .lx-concierge-head h3 {
+  margin: 0; font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 600; font-size: 12.5pt; line-height: 1.2; overflow-wrap: anywhere;
+}
+.lx-concierge .pg-side .lx-concierge-head h3 { font-size: 11.6pt; }
+.lx-concierge .lx-concierge-org {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0 2.4mm; margin-top: 0.4mm;
+  font-weight: 500; font-size: 8.6pt; text-transform: uppercase; letter-spacing: 0.1em;
+}
+.lx-concierge .pg-side .lx-concierge-org { justify-content: center; }
+.lx-concierge .lx-concierge-loc { font-weight: 400; text-transform: none; letter-spacing: 0.02em; color: var(--muted); font-size: 8.6pt; }
+.lx-concierge .lx-concierge-sep { width: 1.1mm; height: 1.1mm; background: var(--gold-line); transform: rotate(45deg); flex: none; }
+.lx-concierge .lx-concierge-dates { margin-top: 0.2mm; font-family: 'Cormorant Garamond', Georgia, serif; font-style: italic; font-weight: 500; font-size: 10pt; color: var(--gold); }
+.lx-concierge .lx-concierge-note { margin: 1.4mm 0 0.6mm; font-weight: 500; color: var(--ink); }
+.lx-concierge .lx-concierge-head + .lx-concierge-text { margin-top: 1.4mm; }
+.lx-concierge .lx-concierge-entry-end { padding-bottom: 5.4mm; }
+.lx-concierge .lx-concierge-sub {
+  margin: 1.6mm 0 0.6mm; font-weight: 500; font-size: 7.6pt; text-transform: uppercase; letter-spacing: 0.16em; color: var(--gold);
+}
+.lx-concierge .lx-concierge-bullets { list-style: none; margin: 0; padding: 0; }
+.lx-concierge .lx-concierge-bullets li { position: relative; padding-left: 4.4mm; margin: 0.5mm 0; overflow-wrap: anywhere; }
+.lx-concierge .lx-concierge-bullets li::before {
+  content: ''; position: absolute; left: 0.6mm; top: 1.9mm; width: 1.4mm; height: 1.4mm; background: var(--gold-line); transform: rotate(45deg);
+}
+.lx-concierge .pg-side .lx-concierge-bullets li { padding-left: 0; padding-top: 2.4mm; }
+.lx-concierge .pg-side .lx-concierge-bullets li::before { left: 50%; top: 0.4mm; margin-left: -0.7mm; }
+
+/* Details */
+.lx-concierge .lx-concierge-details { margin: 0; }
+.lx-concierge .lx-concierge-details div { margin-bottom: 2.4mm; }
+.lx-concierge .lx-concierge-details dt { font-weight: 500; font-size: 7.2pt; text-transform: uppercase; letter-spacing: 0.2em; color: var(--gold); }
+.lx-concierge .lx-concierge-details dd { margin: 0; overflow-wrap: anywhere; }
+.lx-concierge .pg-main .lx-concierge-details { display: grid; grid-template-columns: 1fr 1fr; gap: 0 6mm; }
+
+/* Levels */
+.lx-concierge .lx-concierge-level { margin-bottom: 2.6mm; }
+.lx-concierge .lx-concierge-level-name { display: block; overflow-wrap: anywhere; }
+.lx-concierge .lx-concierge-dia { display: inline-flex; gap: 1.8mm; padding: 1.2mm 0.6mm 0.4mm; }
+.lx-concierge .lx-concierge-dia i { display: block; width: 2mm; height: 2mm; transform: rotate(45deg); background: var(--gold-soft); }
+.lx-concierge .lx-concierge-dia i.on { background: var(--gold); }
+.lx-concierge .pg-main .lx-concierge-level { display: flex; align-items: center; justify-content: space-between; gap: 4mm; max-width: 90mm; }
+.lx-concierge.lx-concierge-nomain .pg-main::before { display: none; }
