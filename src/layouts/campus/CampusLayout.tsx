@@ -40,6 +40,7 @@ function Heading({ sec }: { sec: Section }) {
         {icon && <span className={`${P}-ico`} aria-hidden>{icon}</span>}
         {sec.title}
       </h2>
+      <span className={`${P}-bar`} aria-hidden />
     </div>
   )
 }
@@ -53,7 +54,7 @@ function entryHead(en: Entry, job: boolean): ReactNode {
           {en.title || en.organisation}
           {en.title && en.organisation && <span className={`${P}-org`}>{job ? ' at ' : ', '}{en.organisation}</span>}
         </h3>
-        {dates && <span className={`${P}-date`}>{dates}</span>}
+        {dates && <span className={`${P}-date`}><span className={`${P}-date-t`}>{dates}</span><span className={`${P}-date-bar`} aria-hidden /></span>}
       </div>
       {en.location && <div className={`${P}-loc`}>{en.location}</div>}
       {en.note && <div className={`${P}-note`}><Rich text={en.note} /></div>}
