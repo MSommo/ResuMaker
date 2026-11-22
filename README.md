@@ -64,6 +64,8 @@ Frontend dependency changes need a rebuild (`make build-web`) unless you use `HO
 
 **Without Docker for the app:** `make infra` starts just the scratch Postgres and Redis, then `make local-api` and `make local-web` run the API and frontend on the host (needs Node 22+, [uv](https://docs.astral.sh/uv/) and Chrome). Host-side commands default to the **scratch** database, never the stable one.
 
+**Layout parity (required for every layout, including future ones).** A layout must look the same on screen, in the browser's Print dialog and in the downloaded PDF; backgrounds (skill bars, rules, dots) are the usual casualty, which is why the shared `.pg` wrapper forces `print-color-adjust: exact`. `make check-layouts` (needs `make stack`, and `EVAL_LOGIN` / `EVAL_PASSWORD` for a user) renders every layout in the catalog, compares the three side by side (images in `backend/layout-parity/`) and fails if any painted background is missing. A new layout needs no test code, it is picked up from the catalog, but it must pass this before it is merged. Build layouts on `Paginated` and draw bars/rules with CSS backgrounds or borders, never rely on the browser printing them by default.
+
 ## Text formatting
 
 Every text box (profile, descriptions, free-text sections) is **Markdown** (CommonMark + GitHub flavour): headings, **bold**, *italic*, ~~strikethrough~~, `code`, links, bulleted / numbered / task lists (nestable), quotes, tables and rules. The editor has a toolbar, shortcuts (⌘/Ctrl + B, I, K, ⇧X), list continuation on Enter, a Write / Preview toggle and a built-in cheat sheet. Single-line fields (bullets, highlight lines) take inline Markdown only. A single line break is kept as typed.
