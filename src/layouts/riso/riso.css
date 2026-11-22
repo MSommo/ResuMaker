@@ -1,0 +1,121 @@
+/* Risograph layout. All rules scoped under .lx-riso. */
+.pg.lx-riso {
+  --paper: #fbf7ef; --ink: #1c2160; --pink: #ff48b0; --pink-text: #b3126b; --purple: #7a3fb0; --tint: #f4e9f3; --pink-tint: #fbdcef;
+  --muted: #4d5073;
+  --pad-t: 14mm; --pad-x: 14mm; --pad-b: 11mm; --side-w: 54mm; --side-pr: 0mm; --main-pl: 0mm; --main-rule: none;
+  --col-pad: 6mm; --col-pad-rest: 1mm;
+  font-family: 'Bricolage Grotesque', 'Inter', system-ui, sans-serif;
+  font-size: 9.2pt; line-height: 1.45; color: var(--ink);
+}
+.lx-riso .pg-page { background: var(--paper); }
+.lx-riso .pg-body { grid-template-columns: 1fr var(--side-w); }
+.lx-riso .pg-side { order: 2; padding-left: 7mm; padding-right: 1.6mm; }
+.lx-riso .pg-main { order: 1; min-width: 0; }
+.lx-riso .pg-side, .lx-riso .pg-main { min-width: 0; }
+.lx-riso .end-section { padding-bottom: 5mm; }
+.lx-riso .pg-main .end-section:has(> .lx-riso-entry-end) { padding-bottom: 0.5mm; }
+.lx-riso .pg-side .end-section { padding-bottom: 6mm; }
+
+/* ---------- header ---------- */
+.lx-riso-header { display: grid; grid-template-columns: minmax(0, 1fr) 42mm; column-gap: 4mm; align-items: start; }
+.lx-riso-head-text { min-width: 0; padding-top: 1mm; }
+.lx-riso-name {
+  margin: 0; font-weight: 800; font-size: 40pt; line-height: 0.98; letter-spacing: -0.03em; color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.lx-riso-name span { display: block; }
+.lx-riso-headline {
+  margin-top: 3mm; font-family: 'Space Mono', ui-monospace, monospace; font-size: 9pt; line-height: 1.35;
+  text-transform: uppercase; letter-spacing: 0.08em; color: var(--pink-text); font-weight: 400;
+}
+.lx-riso-contact {
+  list-style: none; margin: 2.2mm 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.6mm 4mm;
+  font-family: 'Space Mono', ui-monospace, monospace; font-size: 7.8pt; line-height: 1.4; color: var(--ink);
+}
+.lx-riso-contact li { overflow-wrap: anywhere; }
+.lx-riso-extras { grid-column: 1 / -1; }
+.lx-riso-extras .hx { margin-top: 5mm; }
+.lx-riso .hx-p { font-size: 9.2pt; line-height: 1.45; }
+.lx-riso .hx-text { border-left: 1.2mm solid var(--pink); padding-left: 3.5mm; }
+.lx-riso .hx-facts { font-family: 'Space Mono', ui-monospace, monospace; font-size: 7.8pt; }
+.lx-riso .hx-facts b { font-weight: 700; color: var(--pink-text); }
+
+/* decoration block */
+.lx-riso-deco { position: relative; width: 42mm; height: 30mm; flex: none; }
+.lx-riso-deco div { position: absolute; }
+.lx-riso-halftone {
+  right: 0; bottom: 0; width: 16mm; height: 16mm;
+  background-image: radial-gradient(circle, var(--pink) 0.26mm, transparent 0.3mm); background-size: 1mm 1mm;
+}
+.lx-riso-pink { left: 0; top: 0; width: 24mm; height: 24mm; border-radius: 50%; background: var(--pink); }
+.lx-riso-blue { left: 16mm; top: 5mm; width: 24mm; height: 24mm; border-radius: 50%; background: var(--ink); }
+.lx-riso-lens { left: 0; top: 0; width: 24mm; height: 24mm; border-radius: 50%; overflow: hidden; }
+.lx-riso-purple { left: 16mm; top: 5mm; width: 24mm; height: 24mm; border-radius: 50%; background: var(--purple); }
+
+/* ---------- headings: pills ---------- */
+.lx-riso-h { margin: 0 0 3mm; font-size: inherit; line-height: 1; }
+.lx-riso-pill { position: relative; display: inline-grid; grid-template-columns: auto auto; vertical-align: top; transform: rotate(-1.5deg); transform-origin: left center; }
+/* the ink ribbon is an empty box twice as long as the title (an invisible copy of the title fills the tail), so its centre is never under text and it prints exactly as it shows */
+.lx-riso-pill-bg { position: absolute; inset: 0; background: var(--ink); border-radius: 99px; }
+.lx-riso-pill-txt {
+  position: relative; display: flex; align-items: center; gap: 1.6mm; color: var(--paper); width: max-content; max-width: 70mm;
+  font-weight: 800; font-size: 9.6pt; line-height: 1.2; padding: 1.1mm 4mm; overflow-wrap: anywhere;
+}
+.lx-riso-pill-tail { visibility: hidden; }
+.lx-riso-ico { display: inline-flex; width: 3.6mm; height: 3.6mm; color: var(--pink); flex: none; }
+.lx-riso-ico svg { width: 100%; height: 100%; }
+
+/* ---------- side panels ---------- */
+.lx-riso-panel { position: relative; }
+.lx-riso-shadow { position: absolute; left: calc(100% - 0.2mm); right: -1.2mm; top: 0; bottom: 0; background: var(--pink); }
+.lx-riso-shadow-b { display: none; position: absolute; left: 1.2mm; right: -1.2mm; bottom: -1.2mm; height: 1.4mm; background: var(--pink); }
+.lx-riso-panel.is-first .lx-riso-shadow { top: 1.2mm; }
+.lx-riso-panel.is-last .lx-riso-shadow { bottom: 0; }
+.lx-riso-panel.is-last .lx-riso-shadow-b { display: block; }
+.lx-riso-panel:not(.is-first) .lx-riso-panel-in::before { content: ''; position: absolute; top: -0.4mm; left: 0; right: 0; height: 0.4mm; background: var(--tint); }
+.lx-riso-panel-in {
+  position: relative; overflow: hidden; background: var(--tint); border: 0.6mm solid var(--ink); border-top-width: 0; border-bottom-width: 0;
+  padding: 2mm 3.2mm;
+}
+.lx-riso-panel.is-first .lx-riso-panel-in { border-top-width: 0.6mm; padding-top: 4mm; }
+.lx-riso-panel.is-last .lx-riso-panel-in { border-bottom-width: 0.6mm; padding-bottom: 4mm; }
+.lx-riso-panel.is-first:not(.is-last) .lx-riso-panel-in { padding-bottom: 1.5mm; }
+.lx-riso-panel .lx-riso-h { margin-left: -1mm; margin-bottom: 3mm; }
+.lx-riso-panel .lx-riso-pill-txt { max-width: 40mm; font-size: 8.8pt; padding: 1mm 3.2mm; }
+
+/* ---------- entries ---------- */
+.lx-riso-dates { font-family: 'Space Mono', ui-monospace, monospace; font-weight: 700; font-size: 7.8pt; line-height: 1.3; color: var(--pink-text); margin-bottom: 0.6mm; }
+.lx-riso-title { margin: 0; font-weight: 800; font-size: 10.6pt; line-height: 1.22; color: var(--ink); overflow-wrap: anywhere; }
+.lx-riso-org { margin-top: 0.4mm; line-height: 1.35; }
+.lx-riso-org b { font-weight: 600; }
+.lx-riso-loc { color: var(--muted); }
+.lx-riso-sep { color: var(--pink-text); }
+.lx-riso-note { margin: 1.8mm 0 0; background: var(--pink-tint); padding: 1mm 2.4mm; font-weight: 600; border-left: 1.2mm solid var(--pink); }
+.lx-riso-text { margin: 1.6mm 0 0; overflow-wrap: anywhere; }
+.lx-riso-text:first-child { margin-top: 0; }
+.lx-riso-bullets { margin: 0.8mm 0 0; padding: 0; list-style: none; }
+.lx-riso-bullets li { position: relative; padding-left: 4.4mm; overflow-wrap: anywhere; }
+.lx-riso-bullets li::before { content: ''; position: absolute; left: 0.5mm; top: 0.62em; width: 1.8mm; height: 1.8mm; background: var(--pink); }
+.lx-riso-sub { margin: 2mm 0 0; font-family: 'Space Mono', ui-monospace, monospace; font-weight: 700; font-size: 7.8pt; letter-spacing: 0.06em; text-transform: uppercase; color: var(--purple); }
+.lx-riso-entry-end { padding-bottom: 4.4mm; }
+.lx-riso-panel .lx-riso-entry-end { padding-bottom: 2mm; }
+.lx-riso .md strong { font-weight: 800; }
+.lx-riso .md a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--pink); text-decoration-thickness: 0.35mm; text-underline-offset: 0.5mm; }
+.lx-riso .md code { font-family: 'Space Mono', ui-monospace, monospace; font-size: 0.9em; background: var(--pink-tint); padding: 0 0.8mm; }
+.lx-riso .md table { border-collapse: collapse; }
+.lx-riso .md th, .lx-riso .md td { border: 0.3mm solid var(--ink); padding: 0.6mm 1.6mm; }
+
+/* ---------- facts, levels, links ---------- */
+.lx-riso-facts { margin: 0; }
+.lx-riso-facts > div + div { margin-top: 2mm; }
+.lx-riso-facts dt { font-family: 'Space Mono', ui-monospace, monospace; font-size: 7.2pt; text-transform: uppercase; letter-spacing: 0.08em; color: var(--pink-text); font-weight: 700; }
+.lx-riso-facts dd { margin: 0; overflow-wrap: anywhere; }
+.lx-riso-level { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.6mm 2mm; margin-bottom: 1.6mm; }
+.lx-riso-level-name { display: block; flex: 1 0 auto; max-width: 100%; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+.lx-riso-dots { display: flex; gap: 1mm; flex: none; }
+.lx-riso-dots i { width: 3mm; height: 3mm; border-radius: 50%; background: radial-gradient(circle, var(--paper) 0 0.95mm, var(--pink) 1mm); }
+.lx-riso-dots i.on { background: var(--ink); }
+.lx-riso-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.lx-riso-linkrow { margin-bottom: 1.2mm; overflow-wrap: anywhere; }
+.lx-riso-link { color: var(--ink); font-weight: 600; text-decoration: underline; text-decoration-color: var(--pink); text-decoration-thickness: 0.4mm; text-underline-offset: 0.6mm; }
+.lx-riso .pg-unit { display: flow-root; }

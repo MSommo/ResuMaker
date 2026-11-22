@@ -6,6 +6,7 @@ import Shell from './app/Shell'
 import Accept from './pages/Accept'
 import Account from './pages/Account'
 import EditorPage from './pages/Editor'
+import Lab from './pages/Lab'
 import Login from './pages/Login'
 import PersonaPage from './pages/PersonaPage'
 import Preview from './pages/Preview'
@@ -53,6 +54,9 @@ function AdminOnly({ children }: { children: ReactNode }) {
  */
 export default function App() {
   const { state } = useAuth()
+  // Dev only: look at a layout without signing in.
+  if (import.meta.env.DEV && location.pathname.startsWith('/lab/'))
+    return <Routes><Route path="lab/:layoutId" element={<Lab />} /></Routes>
   if (state.status === 'loading') return <div className="state-box" aria-busy="true"><p>Loading…</p></div>
   if (state.status === 'anon')
     return (

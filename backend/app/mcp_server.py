@@ -160,7 +160,7 @@ async def get_resume(resume_id: str) -> dict[str, Any]:
 
 @mcp.tool()
 async def create_resume(layout_id: str = "sidebar", template: str = "blank") -> dict[str, str]:
-    """Create a new CV for you. layout_id: 'sidebar' or 'timeline'. template: 'blank' or 'sample' (sample text; your own details are always used)."""
+    """Create a new CV for you. layout_id: one of the ids in the layout catalogue (e.g. 'sidebar', 'timeline', 'document', 'terminal', 'plain'). template: 'blank' or 'sample' (sample text; your own details are always used)."""
     async with infra().session() as s:
         row, _ = await repo.create_resume(s, me(), layout_id=layout_id, template=template)
         return {"id": str(row.id), "title": row.title}

@@ -1,0 +1,102 @@
+/* Data Ledger layout. All rules scoped under .lx-ledger. */
+.pg.lx-ledger {
+  --ink: #111827; --muted: #4b5563; --blue: #1d4ed8; --grid: #d1d5db; --tint: #f3f6fb;
+  --pad-t: 14mm; --pad-x: 12mm; --pad-b: 12mm; --col-pad: 7mm; --col-pad-rest: 0mm;
+  --side-w: 61mm; --main-rule: none;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 9pt; line-height: 1.42; color: var(--ink);
+}
+/* Side panel on the right: painted on the body, bleeding to the page's right and bottom edges; on continuation pages also to the top. */
+.lx-ledger .pg-body {
+  grid-template-columns: 1fr var(--side-w);
+  margin: 0 calc(-1 * var(--pad-x)) calc(-1 * var(--pad-b)) 0; padding: 0 var(--pad-x) var(--pad-b) 0;
+  background: linear-gradient(to right, transparent calc(100% - var(--side-w) - var(--pad-x)), var(--tint) 0);
+}
+.lx-ledger .pg-cont .pg-body { margin-top: calc(-1 * var(--pad-t)); padding-top: var(--pad-t); }
+.lx-ledger .pg-main { padding: var(--col-pad) 7mm 0 0; border: 0; min-width: 0; }
+.lx-ledger .pg-side { order: 2; padding: var(--col-pad) 0 0 5mm; min-width: 0; overflow-wrap: anywhere; }
+.lx-ledger .pg-cont .pg-main, .lx-ledger .pg-cont .pg-side { padding-top: var(--col-pad-rest); }
+.lx-ledger .pg-unit.end-section { padding-bottom: 6mm; }
+
+/* Header */
+.lx-ledger .lx-ledger-top { display: flex; justify-content: space-between; align-items: flex-end; gap: 10mm; }
+.lx-ledger .lx-ledger-id { min-width: 0; }
+.lx-ledger .lx-ledger-name { margin: 0; font-size: 26pt; font-weight: 600; line-height: 1.05; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.lx-ledger .lx-ledger-headline { margin-top: 1.8mm; font-size: 11pt; font-weight: 500; color: var(--blue); }
+.lx-ledger .lx-ledger-table { flex: none; width: 62mm; margin-bottom: .6mm; }
+.lx-ledger .lx-ledger-trow { display: grid; grid-template-columns: 17mm 1fr; gap: 2mm; align-items: baseline; padding: 1.1mm 0; border-top: 1px solid var(--grid); }
+.lx-ledger .lx-ledger-trow:last-child { border-bottom: 1px solid var(--grid); }
+.lx-ledger .lx-ledger-tk { font: 400 7.2pt 'IBM Plex Mono', ui-monospace, monospace; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.lx-ledger .lx-ledger-tv { font-size: 8.6pt; overflow-wrap: anywhere; }
+.lx-ledger .lx-ledger-rule { height: .7mm; background: var(--blue); margin-top: 4mm; }
+.lx-ledger .hx { margin-top: 4mm; }
+.lx-ledger .hx-p { font-size: 9pt; color: var(--ink); }
+.lx-ledger .hx-facts { font-size: 8.4pt; color: var(--muted); gap: .5mm 5mm; }
+.lx-ledger .hx-facts b { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-weight: 500; font-size: 7.2pt; text-transform: uppercase; letter-spacing: .06em; }
+
+/* Headings */
+.lx-ledger .lx-ledger-head { display: flex; align-items: center; gap: 2mm; margin-bottom: 3mm; }
+.lx-ledger .lx-ledger-mark { flex: none; width: 3mm; height: 3mm; background: var(--blue); }
+.lx-ledger .lx-ledger-icon { flex: none; width: 3.6mm; height: 3.6mm; color: var(--blue); display: inline-flex; }
+.lx-ledger .lx-ledger-icon svg { width: 100%; height: 100%; }
+.lx-ledger .lx-ledger-h { margin: 0; font-size: 9pt; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; line-height: 1.2; }
+.lx-ledger .lx-ledger-hline { flex: 1; min-width: 2mm; height: .25mm; background: var(--grid); }
+
+/* Entries as table rows */
+.lx-ledger .lx-ledger-rowrule { height: .25mm; background: var(--grid); margin-bottom: 2.2mm; }
+.lx-ledger .lx-ledger-rowrule.first, .lx-ledger .pg-cont .pg-unit:first-child .lx-ledger-rowrule { display: none; }
+.lx-ledger .lx-ledger-row { display: grid; grid-template-columns: 27mm minmax(0, 1fr) auto; column-gap: 3mm; align-items: baseline; }
+.lx-ledger .lx-ledger-dates { font: 400 8pt/1.35 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; color: var(--muted); }
+.lx-ledger .lx-ledger-dates span { display: block; }
+.lx-ledger .lx-ledger-dates span:first-child { color: var(--ink); font-weight: 500; }
+.lx-ledger .lx-ledger-title { margin: 0; font-size: 9.6pt; font-weight: 600; line-height: 1.3; }
+.lx-ledger .lx-ledger-org { color: var(--muted); }
+.lx-ledger .lx-ledger-loc { max-width: 30mm; text-align: right; color: var(--muted); font-size: 8.4pt; overflow-wrap: anywhere; }
+.lx-ledger .lx-ledger-note { margin: 1.6mm 0 0 30mm; padding: 1.2mm 2.4mm 1.2mm 3.2mm; background: var(--tint); font-weight: 600; font-size: 8.6pt; box-shadow: inset .8mm 0 0 var(--blue); }
+.lx-ledger .lx-ledger-text, .lx-ledger .lx-ledger-bullets, .lx-ledger .lx-ledger-sub { margin-left: 30mm; }
+.lx-ledger .lx-ledger-text { margin-top: 1.4mm; font-size: 9pt; }
+.lx-ledger .lx-ledger-bullets { margin-top: .8mm; padding: 0; list-style: none; }
+.lx-ledger .lx-ledger-entry-end { padding-bottom: 2.6mm; }
+.lx-ledger .lx-ledger-bullets li { position: relative; padding-left: 4mm; margin: 0; }
+.lx-ledger .lx-ledger-bullets li::before { content: ''; position: absolute; left: .4mm; top: .62em; width: 1.2mm; height: 1.2mm; background: var(--blue); }
+.lx-ledger .lx-ledger-sub { margin-top: 1.6mm; font: 500 7.6pt 'IBM Plex Mono', ui-monospace, monospace; text-transform: uppercase; letter-spacing: .06em; color: var(--blue); }
+/* A text section directly under a heading has no date column to align with */
+.lx-ledger .lx-ledger-head + .lx-ledger-text, .lx-ledger .pg-unit > .lx-ledger-text { margin-left: 0; }
+.lx-ledger .pg-unit > .lx-ledger-text + .lx-ledger-text { margin-top: 1.2mm; }
+.lx-ledger .pg-unit > .lx-ledger-text { margin-top: 0; }
+.lx-ledger .pg-unit > .lx-ledger-head + .lx-ledger-text { margin-top: 0; }
+/* Side column: stacked rows */
+.lx-ledger .pg-side .lx-ledger-row { grid-template-columns: minmax(0, 1fr); row-gap: .6mm; }
+.lx-ledger .pg-side .lx-ledger-dates { order: -1; }
+.lx-ledger .pg-side .lx-ledger-loc { max-width: none; text-align: left; font-size: 8.2pt; }
+.lx-ledger .pg-side .lx-ledger-note, .lx-ledger .pg-side .lx-ledger-text, .lx-ledger .pg-side .lx-ledger-bullets, .lx-ledger .pg-side .lx-ledger-sub { margin-left: 0; }
+.lx-ledger .pg-side .lx-ledger-note { margin-top: 1.4mm; background: #fff; }
+.lx-ledger .pg-side .lx-ledger-rowrule { background: #c3cde3; }
+.lx-ledger .pg-side .lx-ledger-text { font-size: 8.8pt; }
+
+/* Levels */
+.lx-ledger .lx-ledger-level { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; column-gap: 2.4mm; padding: 1.4mm 0; border-bottom: .25mm solid #c3cde3; }
+.lx-ledger .pg-main .lx-ledger-level { border-bottom-color: var(--grid); }
+.lx-ledger .lx-ledger-level-name { overflow-wrap: anywhere; }
+.lx-ledger .lx-ledger-sq { display: inline-flex; gap: .7mm; }
+.lx-ledger .lx-ledger-sq i { width: 2.8mm; height: 2.8mm; background: #dbe3f3; box-shadow: inset 0 0 0 .2mm #9fb0d6; }
+.lx-ledger .lx-ledger-sq i.on { background: var(--blue); box-shadow: none; }
+.lx-ledger .lx-ledger-num { font: 400 8pt 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; color: var(--muted); min-width: 7mm; text-align: right; }
+
+/* Links */
+.lx-ledger .lx-ledger-linkrow { padding: 1mm 0; }
+.lx-ledger .lx-ledger-link { font: 500 8pt 'IBM Plex Mono', ui-monospace, monospace; color: var(--blue); text-decoration: underline; text-underline-offset: .5mm; overflow-wrap: anywhere; }
+
+/* Details key/value */
+.lx-ledger .lx-ledger-kv-row { padding: 1.4mm 0; border-bottom: .25mm solid #c3cde3; }
+.lx-ledger .lx-ledger-k { font: 400 7.2pt 'IBM Plex Mono', ui-monospace, monospace; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.lx-ledger .lx-ledger-v { font-size: 8.8pt; }
+.lx-ledger .pg-main .lx-ledger-kv-row { display: grid; grid-template-columns: 27mm 1fr; column-gap: 3mm; border-bottom-color: var(--grid); }
+.lx-ledger .pg-main .lx-ledger-k { padding-top: .5mm; }
+
+/* Markdown */
+.lx-ledger strong { font-weight: 600; }
+.lx-ledger a { color: var(--blue); text-decoration: underline; text-underline-offset: .4mm; }
+.lx-ledger code { font: 400 .92em 'IBM Plex Mono', ui-monospace, monospace; background: #e8edf7; padding: 0 .8mm; }
+.lx-ledger .md p { margin: 0; }
+.lx-ledger .md table { border-collapse: collapse; font-size: 8.4pt; }
+.lx-ledger .md th, .lx-ledger .md td { border: .25mm solid var(--grid); padding: .6mm 1.6mm; text-align: left; }

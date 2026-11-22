@@ -1,0 +1,106 @@
+/* Changelog layout. All rules scoped under .lx-changelog. */
+.pg.lx-changelog {
+  --pad-t: 14mm; --pad-x: 14mm; --pad-b: 14mm; --side-w: 58mm; --side-pr: 0; --main-pl: 0; --main-rule: 0 none; --col-pad: 6mm; --col-pad-rest: 0mm;
+  --ink: #1f2328; --muted: #59636e; --green: #1a7f37; --blue: #0969da; --amber: #9a6700; --panel: #f6f8fa; --border: #d0d7de;
+  --mono: 'Fira Code', ui-monospace, monospace;
+  font-family: 'Inter', system-ui, sans-serif; font-size: 9pt; line-height: 1.45; color: var(--ink);
+}
+.lx-changelog .pg-body { grid-template-columns: 1fr var(--side-w); }
+.lx-changelog .pg-side { order: 2; padding: var(--col-pad) 0 0 6mm; }
+.lx-changelog .pg-main { padding: var(--col-pad) 6mm 0 0; border-left: 0; }
+.lx-changelog .pg-cont .pg-side, .lx-changelog .pg-cont .pg-main { padding-top: 0; }
+
+/* Header */
+.lx-changelog-header h1 { margin: 0; font-size: 26pt; line-height: 1.12; font-weight: 700; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.lx-changelog-h1hash, .lx-changelog-h2hash, .lx-changelog-hash { font-family: var(--mono); font-weight: 400; color: var(--muted); }
+.lx-changelog-h1hash { font-size: 20pt; margin-right: 1mm; }
+.lx-changelog-headline { margin-top: 1mm; font-size: 12pt; color: var(--muted); }
+.lx-changelog-h2hash { font-size: 9.5pt; margin-right: 1mm; }
+.lx-changelog-contact { margin-top: 2.4mm; font-family: var(--mono); font-size: 7.8pt; color: var(--muted); overflow-wrap: anywhere; }
+.lx-changelog-hrule { height: 1px; margin-top: 4.5mm; background: var(--border); }
+.lx-changelog .hx { margin-top: 4mm; }
+.lx-changelog .hx-p { font-size: 9pt; }
+.lx-changelog .hx-facts { font-size: 8.4pt; color: var(--muted); }
+.lx-changelog .hx-facts b { color: var(--ink); }
+
+/* Section headings */
+.lx-changelog-h2 {
+  margin: 0 0 4mm; padding-bottom: 1.6mm; font-size: 13pt; line-height: 1.25; font-weight: 700; break-after: avoid;
+  background: linear-gradient(var(--border), var(--border)) left bottom / 100% 1px no-repeat;
+}
+.lx-changelog-hash { font-size: 11pt; margin-right: 1mm; }
+.lx-changelog .end-section { padding-bottom: 6mm; }
+.lx-changelog .pg-side .end-section { padding-bottom: 4mm; }
+
+/* Releases */
+.lx-changelog-row {
+  display: grid; grid-template-columns: 27mm 1fr;
+  background: linear-gradient(var(--border), var(--border)) 25.8mm 0 / 1.2mm 100% no-repeat;
+}
+.lx-changelog-row:has(> .lx-changelog-gut-first) { background-position: 25.8mm 2mm; background-size: 1.2mm calc(100% - 2mm); }
+.lx-changelog-row-end { padding-bottom: 5mm; }
+.lx-changelog-gut { position: relative; text-align: right; padding-right: 4.6mm; font-family: var(--mono); }
+.lx-changelog-node {
+  position: absolute; right: -0.9mm; top: 0.5mm; width: 3mm; height: 3mm; box-sizing: border-box; border-radius: 50%;
+  background: #fff; border: 0.5mm solid var(--muted);
+}
+.lx-changelog-node-head { background: var(--green); border-color: var(--green); }
+.lx-changelog-ver { font-size: 7.8pt; font-weight: 500; line-height: 1.5; padding-top: 0.2mm; }
+.lx-changelog-prev { font-size: 7.8pt; color: var(--muted); line-height: 1.5; }
+.lx-changelog-headpill {
+  display: inline-block; margin-top: 0.6mm; padding: 0 1.8mm; border-radius: 4mm; background: var(--green); color: #fff;
+  font-size: 7.2pt; font-weight: 500; letter-spacing: 0.04em; line-height: 1.55;
+}
+.lx-changelog-rel { padding-left: 5mm; min-width: 0; }
+.lx-changelog-title { margin: 0; font-size: 10.5pt; line-height: 1.3; font-weight: 700; overflow-wrap: anywhere; }
+.lx-changelog-org { font-weight: 400; color: var(--muted); }
+.lx-changelog-loc { font-size: 8.4pt; color: var(--muted); margin-top: 0.3mm; }
+.lx-changelog-meta { font-family: var(--mono); font-size: 7.4pt; color: var(--muted); margin-top: 0.4mm; }
+.lx-changelog-note {
+  margin: 2mm 0 1.2mm; padding: 1.3mm 2.5mm 1.3mm 3.6mm; background-color: var(--panel); font-weight: 500; font-size: 8.8pt;
+  background-image: linear-gradient(var(--green), var(--green)); background-size: 0.8mm 100%; background-repeat: no-repeat;
+}
+.lx-changelog-text { margin: 0; padding: 1.4mm 0 0; }
+.lx-changelog-bullets { margin: 0; padding: 0.8mm 0 0 4mm; list-style: none; }
+.lx-changelog-bullets li { position: relative; }
+.lx-changelog-bullets li::before { content: '-'; position: absolute; left: -3.4mm; color: var(--muted); font-family: var(--mono); }
+.lx-changelog-tag {
+  display: inline-block; margin-top: 1.8mm; padding: 0 2mm; border-radius: 1mm; font-family: var(--mono);
+  font-size: 7.6pt; font-weight: 500; line-height: 1.6;
+}
+.lx-changelog-tag-green { background: #dafbe1; color: #116329; }
+.lx-changelog-tag-blue { background: #ddf4ff; color: #0550ae; }
+.lx-changelog-tag-amber { background: #fff8c5; color: #7d4e00; }
+.lx-changelog-compact-end { padding-bottom: 2.6mm; }
+
+/* Side panels (front matter) */
+.lx-changelog-panel { padding: 0 3.5mm; background: var(--panel); border: 1px solid var(--border); border-top: 0; border-bottom: 0; }
+.lx-changelog-panel-first { border-top: 1px solid var(--border); border-radius: 3mm 3mm 0 0; padding-top: 2.6mm; }
+.lx-changelog-panel-last { border-bottom: 1px solid var(--border); border-radius: 0 0 3mm 3mm; padding-bottom: 2.6mm; }
+.lx-changelog-panel-first.lx-changelog-panel-last { border-radius: 3mm; }
+.lx-changelog-fm { font-family: var(--mono); font-size: 7.8pt; color: var(--muted); line-height: 1.5; }
+.lx-changelog-panel-last .lx-changelog-fm { margin-top: 1mm; }
+.lx-changelog-ptitle { margin: 0.4mm 0 1.6mm; font-size: 9.6pt; font-weight: 700; line-height: 1.3; break-after: avoid; }
+.lx-changelog-kv { margin: 0; }
+.lx-changelog-kv > div { padding-bottom: 1.4mm; }
+.lx-changelog-kv dt { font-family: var(--mono); font-size: 7.4pt; color: var(--muted); }
+.lx-changelog-kv dd { margin: 0; font-size: 8.4pt; overflow-wrap: anywhere; }
+.lx-changelog-level { display: flex; align-items: center; justify-content: space-between; gap: 2mm; padding: 0.7mm 0; font-size: 8.8pt; }
+.lx-changelog-level > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.lx-changelog-squares { display: inline-flex; gap: 0.8mm; flex: none; }
+.lx-changelog-squares i { display: block; width: 2.6mm; height: 2.6mm; background: var(--border); }
+.lx-changelog-squares i.on { background: var(--green); }
+.lx-changelog-link { padding: 0.7mm 0; font-size: 8.6pt; overflow-wrap: anywhere; }
+.lx-changelog-link a { color: var(--blue); text-decoration: underline; }
+.lx-changelog-br { font-family: var(--mono); font-size: 7.6pt; color: var(--muted); }
+.lx-changelog-panel .lx-changelog-text { padding-top: 0; padding-bottom: 1mm; font-size: 8.8pt; }
+
+/* Side-style kinds placed in the main column */
+.lx-changelog .pg-main .lx-changelog-level { max-width: 90mm; }
+.lx-changelog .pg-main .lx-changelog-kv > div { display: flex; gap: 2mm; }
+
+.lx-changelog strong { font-weight: 700; }
+.lx-changelog a { color: var(--blue); text-decoration: underline; }
+.lx-changelog code { font-family: var(--mono); font-size: 0.92em; background: var(--panel); padding: 0 0.8mm; border-radius: 0.8mm; }
+.lx-changelog .md table { border-collapse: collapse; font-size: 8.4pt; }
+.lx-changelog .md th, .lx-changelog .md td { border: 1px solid var(--border); padding: 0.6mm 1.6mm; }

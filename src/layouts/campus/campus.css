@@ -1,0 +1,79 @@
+/* Campus layout. All rules scoped under .lx-campus. */
+.pg.lx-campus {
+  --ink: #2b2438; --muted: #575062; --paper: #fffdf7; --band: #f6f1ff;
+  --pad-t: 13mm; --pad-x: 13mm; --pad-b: 12mm; --side-w: 52mm; --side-pr: 6mm; --main-pl: 8mm; --main-rule: 0 none;
+  --col-pad: 7mm; --col-pad-rest: 3mm;
+  font-family: 'Nunito Sans', system-ui, sans-serif; font-size: 9.4pt; line-height: 1.48; color: var(--ink);
+}
+.lx-campus .pg-page {
+  background-color: var(--paper);
+  background-image: linear-gradient(to right, var(--band) 0, var(--band) calc(var(--pad-x) + var(--side-w)), transparent calc(var(--pad-x) + var(--side-w)));
+}
+
+/* Header: covers the band on page 1 so the name sits on clean paper */
+.lx-campus .pg-header { margin: calc(-1 * var(--pad-t)) calc(-1 * var(--pad-x)) 0; padding: var(--pad-t) var(--pad-x) 5mm; background: var(--paper); }
+.lx-campus-name { margin: 0; font-family: 'Quicksand', 'Nunito Sans', sans-serif; font-weight: 700; font-size: 31pt; line-height: 1.12; color: var(--ink); overflow-wrap: anywhere; }
+.lx-campus-squiggle { display: block; width: 62mm; height: 3mm; margin: 0.6mm 0 2.2mm -0.4mm; color: #5b4bdb; overflow: visible; }
+.lx-campus-headline { font-weight: 600; font-size: 11.5pt; color: var(--muted); }
+.lx-campus-contact { list-style: none; margin: 3mm 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.5mm 4.5mm; font-size: 8.8pt; color: var(--muted); }
+.lx-campus-contact li { display: flex; align-items: center; gap: 1.6mm; overflow-wrap: anywhere; }
+.lx-campus-contact i { flex: none; width: 1.8mm; height: 1.8mm; border-radius: 50%; }
+.lx-campus .hx { margin-top: 4mm; }
+.lx-campus .hx-text { background: #f6f1ff; border-radius: 3mm; padding: 3mm 4.5mm; }
+.lx-campus .hx-p { font-size: 9.4pt; line-height: 1.5; color: var(--ink); }
+.lx-campus .hx-facts { font-size: 8.8pt; color: var(--muted); }
+
+/* Folder-tab headings */
+.lx-campus-sec { --c: #5b4bdb; --t: #ebe9fb; }
+.lx-campus-head { margin: 0 0 3.4mm; padding-top: 0.5mm; }
+/* Folder tab = outlined label sitting on a solid, empty colour bar (the only painted box; no text over it) */
+.lx-campus-tab {
+  display: inline-flex; align-items: center; gap: 1.6mm; margin: 0; padding: 1.2mm 3.5mm; max-width: 100%;
+  border: 0.45mm solid var(--c); border-bottom: 0; color: var(--c); border-radius: 2.4mm 2.4mm 0 0;
+  font-family: 'Quicksand', 'Nunito Sans', sans-serif; font-weight: 700; font-size: 8.8pt; line-height: 1.25; overflow-wrap: anywhere;
+}
+.lx-campus-bar { display: block; height: 1.2mm; background-color: var(--c); }
+.lx-campus-ico { flex: none; width: 3.4mm; height: 3.4mm; display: inline-flex; }
+.lx-campus-ico svg { width: 100%; height: 100%; }
+
+/* Entries */
+.lx-campus-entry { padding-bottom: 1.2mm; }
+.lx-campus-entry-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 3mm; }
+.lx-campus-title { margin: 0; font-weight: 700; font-size: 10pt; line-height: 1.3; color: var(--ink); overflow-wrap: anywhere; }
+.lx-campus-org { font-weight: 600; color: var(--ink); }
+.lx-campus-date { flex: none; display: flex; flex-direction: column; margin-top: 0.3mm; white-space: nowrap; }
+.lx-campus-date-t { padding: 0 0.6mm; color: var(--c); font-weight: 700; font-size: 7.8pt; line-height: 1.4; transform: rotate(-1deg); }
+.lx-campus-date-bar { display: block; height: 1.1mm; margin-top: 0.3mm; background-color: var(--c); }
+.lx-campus-loc { color: var(--muted); font-size: 8.6pt; }
+.lx-campus-note { margin-top: 1mm; font-weight: 700; font-size: 9pt; color: var(--ink); }
+.lx-campus-text { margin: 0; padding-bottom: 2mm; }
+.lx-campus-entry-end { padding-bottom: 5mm; }
+.lx-campus-bullets { margin: 0; padding: 0 0 0.6mm 4.6mm; list-style: none; }
+.lx-campus-bullets li { position: relative; }
+.lx-campus-bullets li::before { content: ''; position: absolute; left: -4.6mm; top: 1.6mm; width: 1.8mm; height: 1.8mm; border-radius: 50%; background: var(--c); }
+.lx-campus-sub { margin: 1.5mm 0 0.6mm; font-family: 'Quicksand', 'Nunito Sans', sans-serif; font-weight: 700; font-size: 9pt; color: var(--c); }
+.lx-campus strong { font-weight: 700; }
+.lx-campus em { font-style: italic; }
+.lx-campus a { color: var(--c, var(--ink)); }
+.lx-campus code { font-size: 0.92em; background: #f6f1ff; padding: 0 0.8mm; border-radius: 0.8mm; }
+.lx-campus .md table { border-collapse: collapse; font-size: 8.6pt; }
+.lx-campus .md th, .lx-campus .md td { padding: 0.6mm 2mm; border-bottom: 0.25mm solid #d8d2e4; text-align: left; }
+
+/* Side items */
+.lx-campus .pg-side .lx-campus-title { font-size: 9.6pt; }
+.lx-campus .pg-side .lx-campus-entry-top { flex-direction: column; gap: 1mm; align-items: flex-start; }
+.lx-campus .pg-side .lx-campus-text { font-size: 9pt; }
+.lx-campus-detail { padding-bottom: 2.6mm; }
+.lx-campus-label { font-family: 'Quicksand', 'Nunito Sans', sans-serif; font-weight: 700; font-size: 7.6pt; color: var(--c); }
+.lx-campus-value { font-size: 9pt; overflow-wrap: anywhere; }
+.lx-campus-level { display: flex; align-items: center; justify-content: space-between; gap: 2mm; padding-bottom: 2.4mm; }
+.lx-campus-level-name { min-width: 0; overflow-wrap: anywhere; font-weight: 600; font-size: 9pt; }
+.lx-campus-dots { flex: none; display: inline-flex; gap: 0.9mm; }
+.lx-campus-dots i {
+  display: block; width: 2.6mm; height: 2.6mm; border-radius: 50%;
+  background: radial-gradient(circle closest-side, #f6f1ff calc(100% - 0.45mm), var(--c) calc(100% - 0.45mm), var(--c) 100%, transparent 100%);
+}
+.lx-campus-dots i.on { background: var(--c); }
+.lx-campus-linkrow { padding-bottom: 1.8mm; overflow-wrap: anywhere; }
+.lx-campus-link { font-weight: 700; font-size: 9pt; color: var(--c); text-decoration: underline; text-underline-offset: 0.5mm; }
+.lx-campus .end-section { padding-bottom: 3mm; }

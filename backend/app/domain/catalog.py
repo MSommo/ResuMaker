@@ -52,8 +52,26 @@ def accepts(zone: Zone, kind: str, icon: str = "none") -> bool:
     return kind in zone.accepts or f"{kind}:{icon}" in zone.accepts
 
 LAYOUTS: dict[str, Layout] = {
-    "sidebar": Layout("sidebar", "Sidebar", (_SIDE, _MAIN, _HEADER)),
-    "timeline": Layout("timeline", "Timeline", (_SIDE, _MAIN, _HEADER)),
+    "sidebar": Layout("sidebar", "Monolith", (_SIDE, _MAIN, _HEADER)),
+    "timeline": Layout("timeline", "Waypoints", (_SIDE, _MAIN, _HEADER)),
+    "document": Layout("document", "JSON Document", (_SIDE, _MAIN, _HEADER)),
+    "terminal": Layout("terminal", "Terminal", (_SIDE, _MAIN, _HEADER)),
+    "ledger": Layout("ledger", "Data Ledger", (_SIDE, _MAIN, _HEADER)),
+    "blueprint": Layout("blueprint", "Blueprint", (_SIDE, _MAIN, _HEADER)),
+    "roadmap": Layout("roadmap", "Roadmap", (_SIDE, _MAIN, _HEADER)),
+    "datasheet": Layout("datasheet", "Datasheet", (_SIDE, _MAIN, _HEADER)),
+    "changelog": Layout("changelog", "Changelog", (_SIDE, _MAIN, _HEADER)),
+    "swiss": Layout("swiss", "Swiss Grid", (_SIDE, _MAIN, _HEADER)),
+    "plain": Layout("plain", "Plain", (_SIDE, _MAIN, _HEADER)),
+    "atelier": Layout("atelier", "Atelier", (_SIDE, _MAIN, _HEADER)),
+    "editorial": Layout("editorial", "Editorial", (_SIDE, _MAIN, _HEADER)),
+    "billboard": Layout("billboard", "Billboard", (_SIDE, _MAIN, _HEADER)),
+    "clinic": Layout("clinic", "Clinic", (_SIDE, _MAIN, _HEADER)),
+    "campus": Layout("campus", "Campus", (_SIDE, _MAIN, _HEADER)),
+    "concierge": Layout("concierge", "Concierge", (_SIDE, _MAIN, _HEADER)),
+    "chambers": Layout("chambers", "Chambers", (_SIDE, _MAIN, _HEADER)),
+    "exhibit": Layout("exhibit", "Exhibit", (_SIDE, _MAIN, _HEADER)),
+    "riso": Layout("riso", "Risograph", (_SIDE, _MAIN, _HEADER)),
 }
 DEFAULT_LAYOUT = "sidebar"
 

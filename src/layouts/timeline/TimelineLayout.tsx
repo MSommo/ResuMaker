@@ -5,6 +5,7 @@ import { zoneSections } from '../../model/sections'
 import type { Basics, Entry, Leveled, Resume, Section } from '../../model/types'
 import { SECTION_ICONS } from '../icons'
 import { Paginated, type Unit } from '../Paginated'
+import { detailRows } from '../kit'
 import { Rich, entryLine, paragraphs, parseBullets, HeaderExtras } from '../shared'
 import './timeline.css'
 
@@ -127,7 +128,7 @@ function details(b: Basics): ReactNode {
 function sideUnits(sec: Section, b: Basics): Unit[] {
   const nodes: ReactNode[] = (() => {
     switch (sec.kind) {
-      case 'details': return [details(b)]
+      case 'details': return detailRows(b).length ? [details(b)] : []
       case 'text': return paragraphs(sec.text, 'tm-hobby')
       case 'levels': return sec.items.map(levelRow)
       case 'links':

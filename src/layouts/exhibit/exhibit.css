@@ -1,0 +1,101 @@
+/* Exhibit layout. All rules scoped under .lx-exhibit. */
+.pg.lx-exhibit {
+  --pad-t: 14mm; --pad-x: 14mm; --pad-b: 14mm; --side-w: 46mm; --side-pr: 5mm; --main-pl: 6mm; --main-rule: none;
+  --col-pad: 6mm; --col-pad-rest: 0mm;
+  --ink: #0a0a0a; --muted: #4a4a46; --hl: #c6ff00; --hang: 9mm;
+  font-family: 'Space Grotesk', system-ui, sans-serif; font-size: 9pt; line-height: 1.45; color: var(--ink);
+}
+.lx-exhibit .pg-page { background: #f2f0eb; }
+.lx-exhibit .pg-body { grid-template-columns: var(--side-w) 1fr; }
+.lx-exhibit .pg-main { border-left: 0; }
+.lx-exhibit .end-section { padding-bottom: 5.5mm; }
+
+/* Header */
+.lx-exhibit-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8mm; }
+.lx-exhibit-name { margin: 0; font-weight: 500; letter-spacing: -0.05em; line-height: 0.92; color: var(--ink); overflow-wrap: anywhere; min-width: 0; }
+.lx-exhibit-first, .lx-exhibit-last { display: block; }
+.lx-exhibit-last { margin-left: 30mm; }
+.lx-exhibit-headline {
+  margin: 1.5mm 0 0; max-width: 62mm; flex: none; font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-weight: 400;
+  font-size: 17pt; line-height: 1.12; color: var(--ink); text-align: left; overflow-wrap: anywhere;
+}
+.lx-exhibit-headline::before { content: '\201C'; }
+.lx-exhibit-headline::after { content: '\201D'; }
+.lx-exhibit-caps { display: flex; flex-wrap: wrap; gap: 1.5mm 7mm; margin: 4mm 0 0 calc(var(--side-w) + var(--main-pl)); }
+.lx-exhibit-capcell { display: flex; flex-direction: column; gap: 0.4mm; min-width: 0; }
+.lx-exhibit-capk, .lx-exhibit-capv { font-size: 7.4pt; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; line-height: 1.3; overflow-wrap: anywhere; }
+.lx-exhibit-capk { color: var(--muted); }
+.lx-exhibit-capv { color: var(--ink); }
+.lx-exhibit-hrule { height: 0.5mm; background: var(--ink); margin-top: 4mm; }
+.lx-exhibit .hx { margin-top: 4mm; margin-left: calc(var(--side-w) + var(--main-pl)); }
+.lx-exhibit .hx-p { font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-size: 13pt; line-height: 1.25; color: var(--ink); }
+.lx-exhibit .hx-facts { font-size: 7.6pt; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink); }
+.lx-exhibit .hx-facts b { font-weight: 500; color: var(--muted); }
+
+/* Section headings: rule + highlighter strip */
+.lx-exhibit-rule { height: 0.3mm; background: var(--ink); margin-bottom: 2.6mm; }
+.lx-exhibit-h { margin: 0 0 3.2mm; display: flex; align-items: center; gap: 1.8mm; }
+.lx-exhibit-strip {
+  position: relative; display: inline-block; padding: 0.6mm 2mm 1.8mm; color: var(--ink); font-weight: 700; font-size: 10pt; line-height: 1.25;
+  text-transform: uppercase; letter-spacing: 0.08em; overflow-wrap: anywhere; min-width: 0;
+}
+.lx-exhibit-hlbox { position: absolute; left: 0; right: 0; bottom: 0; height: 62%; background: var(--hl); z-index: -1; }
+.lx-exhibit-strip { z-index: 0; isolation: isolate; }
+.lx-exhibit-icon { flex: none; width: 5mm; height: 5mm; background: var(--ink); color: var(--hl); display: inline-flex; align-items: center; justify-content: center; }
+.lx-exhibit-icon svg { width: 3.2mm; height: 3.2mm; }
+.lx-exhibit .pg-side .lx-exhibit-strip { font-size: 8.2pt; }
+
+/* Captions (museum labels) */
+.lx-exhibit-cap { font-size: 7.6pt; line-height: 1.4; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 500; color: var(--muted); overflow-wrap: anywhere; }
+.lx-exhibit-facts { margin: 0; }
+.lx-exhibit-fact { margin-bottom: 1.8mm; }
+.lx-exhibit-fact dt, .lx-exhibit-fact dd { margin: 0; }
+.lx-exhibit-v { color: var(--ink); letter-spacing: 0.04em; }
+
+/* Wall-label entries */
+.lx-exhibit-head { display: grid; grid-template-columns: var(--hang) 1fr; position: relative; padding-top: 2.2mm; }
+.lx-exhibit-tick { position: absolute; left: 0; right: 0; top: 0; height: 0.3mm; background: #8f8c84; }
+.lx-exhibit-idx { font-size: 8pt; font-weight: 500; color: var(--muted); line-height: 1.9; font-variant-numeric: tabular-nums; }
+.lx-exhibit-title {
+  margin: 0; font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; font-size: 15pt; line-height: 1.12; color: var(--ink); overflow-wrap: anywhere;
+}
+.lx-exhibit-label { min-width: 0; }
+.lx-exhibit-label .lx-exhibit-cap { margin-top: 0.3mm; }
+.lx-exhibit-label .lx-exhibit-title + .lx-exhibit-cap { margin-top: 1.2mm; }
+.lx-exhibit-dates { color: var(--ink); font-weight: 700; }
+.lx-exhibit-note { margin-top: 1.6mm; font-family: 'Instrument Serif', Georgia, serif; font-style: italic; font-size: 11pt; line-height: 1.25; color: var(--ink); }
+.lx-exhibit-note strong { font-weight: 400; }
+.lx-exhibit-ent .lx-exhibit-text, .lx-exhibit-ent .lx-exhibit-bullets, .lx-exhibit-ent .lx-exhibit-sub { margin-left: var(--hang); }
+.lx-exhibit-entry-end { padding-bottom: 4.5mm; }
+.lx-exhibit .pg-side { --hang: 6.5mm; }
+.lx-exhibit .pg-side .lx-exhibit-title { font-size: 12.5pt; }
+
+.lx-exhibit-text { margin: 0 0 1.8mm; font-size: 9pt; line-height: 1.45; overflow-wrap: anywhere; }
+.lx-exhibit .pg-side .lx-exhibit-text { font-size: 8.2pt; line-height: 1.4; }
+.lx-exhibit-ent .lx-exhibit-text { margin-top: 1.8mm; margin-bottom: 0; }
+.lx-exhibit-ent .lx-exhibit-text + .lx-exhibit-text { margin-top: 1.4mm; }
+.lx-exhibit-sub { margin-top: 1.6mm; font-size: 7.6pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink); }
+.lx-exhibit-bullets { list-style: none; margin: 0.4mm 0 0; padding: 0; }
+.lx-exhibit-bullets li { position: relative; padding-left: 3.6mm; overflow-wrap: anywhere; }
+.lx-exhibit-bullets li::before { content: '/'; position: absolute; left: 0; font-weight: 700; color: var(--ink); }
+.lx-exhibit-ent .lx-exhibit-bullets { margin-top: 1.2mm; }
+.lx-exhibit .pg-side .lx-exhibit-bullets li { font-size: 8.2pt; }
+
+/* Markdown */
+.lx-exhibit strong { font-weight: 700; }
+.lx-exhibit em { font-style: italic; }
+.lx-exhibit a { color: var(--ink); background-image: linear-gradient(var(--hl), var(--hl)); background-repeat: no-repeat; background-position: 0 100%; background-size: 100% 35%; text-decoration: underline; text-decoration-thickness: 0.2mm; text-underline-offset: 0.6mm; }
+.lx-exhibit code { font-family: 'Space Grotesk', monospace; font-weight: 500; background: rgba(10, 10, 10, 0.07); padding: 0 0.8mm; }
+.lx-exhibit .md table { border-collapse: collapse; font-size: 8.4pt; }
+.lx-exhibit .md th, .lx-exhibit .md td { border: 0.2mm solid var(--ink); padding: 0.6mm 1.6mm; text-align: left; }
+
+/* Levels: line + square marker */
+.lx-exhibit-level { margin-bottom: 2mm; }
+.lx-exhibit-level .lx-exhibit-cap { color: var(--ink); }
+.lx-exhibit-track { position: relative; height: 2.4mm; margin-top: 0.8mm; }
+.lx-exhibit-line { position: absolute; left: 0; right: 0; top: 1.05mm; height: 0.3mm; background: var(--ink); }
+.lx-exhibit-mark { position: absolute; top: 0; width: 2.4mm; height: 2.4mm; background: var(--ink); left: calc((100% - 2.4mm) * var(--p)); }
+
+/* Links */
+.lx-exhibit-linkrow { margin-bottom: 1.2mm; font-size: 8.6pt; overflow-wrap: anywhere; }
+.lx-exhibit .pg-side .lx-exhibit-link { font-size: 7.8pt; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500; }

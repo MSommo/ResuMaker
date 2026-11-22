@@ -1,0 +1,66 @@
+/* JSON Document layout. All rules scoped under .lx-document. */
+.pg.lx-document {
+  --pad-t: 0mm; --pad-x: 14mm; --pad-b: 12mm; --side-w: 0mm; --side-pr: 0mm; --main-pl: 0mm; --main-rule: 0 none;
+  --col-pad: 1mm; --col-pad-rest: 14mm;
+  --k: #0451a5; --s: #a31515; --n: #098658; --b: #0000ff; --p: #383a42; --c: #6a737d; --guide: #e5e7eb;
+  font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 8.4pt; line-height: 1.5; color: var(--p);
+}
+.lx-document .pg-page {
+  background: #fff;
+  background-image: linear-gradient(to right, transparent calc(var(--pad-x) + 8.6mm), #eceef1 calc(var(--pad-x) + 8.6mm), #eceef1 calc(var(--pad-x) + 8.85mm), transparent calc(var(--pad-x) + 8.85mm));
+}
+.lx-document .pg-body { grid-template-columns: 0 1fr; }
+.lx-document .pg-main { min-width: 0; }
+.lx-document .pg-header { margin: 0 calc(-1 * var(--pad-x)); }
+.lx-document .pg-unit.end-section { padding-bottom: 3.2mm; }
+
+/* tab strip */
+.lx-document .lx-document-tabs {
+  position: relative; height: 7mm; background: #f3f4f6; display: flex; align-items: stretch; padding-left: var(--pad-x); margin-bottom: 4mm;
+}
+.lx-document .lx-document-tabs::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: .25mm; background: #d5d9df; }
+.lx-document .lx-document-tab {
+  position: relative; z-index: 1; display: flex; align-items: center; gap: 1.8mm; padding: 0 4mm; background: #fff; color: var(--c); font-size: 7.4pt; font-weight: 400;
+  box-shadow: inset 0 .5mm 0 var(--k); border-right: .25mm solid #d5d9df;
+}
+.lx-document .lx-document-dot { width: 2mm; height: 2mm; border-radius: 50%; background: var(--k); }
+.lx-document .lx-document-top { padding: 0 var(--pad-x); }
+
+/* rows */
+.lx-document .lx-document-row { display: grid; grid-template-columns: 9mm minmax(0, 1fr); }
+.lx-document .lx-document-gut { color: #8b93a1; font-size: 7pt; text-align: center; line-height: 1.5; }
+.lx-document .lx-document-ln {
+  padding-left: calc(var(--d) * 2ch); min-width: 0; overflow-wrap: anywhere;
+  background-image:
+    repeating-linear-gradient(to bottom, #fff 0 .5mm, transparent .5mm 1mm),
+    repeating-linear-gradient(to right, var(--guide) 0 .2mm, transparent .2mm 2ch);
+  background-size: calc(var(--d) * 2ch) 100%; background-repeat: no-repeat;
+}
+.lx-document .lx-document-v { padding-left: 2ch; text-indent: -2ch; }
+.lx-document .lx-document-v.lx-document-cont { text-indent: 0; }
+
+/* syntax */
+.lx-document .lx-document-k { color: var(--k); font-weight: 500; }
+.lx-document .lx-document-s { color: var(--s); }
+.lx-document .lx-document-n { color: var(--n); }
+.lx-document .lx-document-b { color: var(--b); }
+.lx-document .lx-document-p { color: var(--p); }
+.lx-document .lx-document-c { color: var(--c); font-weight: 400; font-size: inherit; margin: 0; }
+.lx-document h1, .lx-document h2, .lx-document h3 { display: inline; margin: 0; font-family: inherit; line-height: inherit; }
+.lx-document .lx-document-name { font-size: 11pt; font-weight: 700; color: var(--s); }
+.lx-document .lx-document-title { font-size: inherit; font-weight: 700; color: var(--s); }
+.lx-document .lx-document-note { font-weight: 500; }
+
+/* markdown inside strings stays inline, in the string colour */
+.lx-document .md, .lx-document .md p, .lx-document .hx, .lx-document .hx-text, .lx-document .hx-p, .lx-document .hx-facts { display: inline; margin: 0; padding: 0; font-size: inherit; line-height: inherit; }
+.lx-document .hx-p + .hx-p::before, .lx-document .hx-facts span + span::before { content: ' '; }
+.lx-document .hx-facts b { font-weight: 500; margin-right: 0; }
+.lx-document .hx-facts b::after { content: ':'; }
+.lx-document .md ul, .lx-document .md ol, .lx-document .md li { display: inline; list-style: none; margin: 0; padding: 0; }
+.lx-document strong { font-weight: 700; }
+.lx-document em { font-style: normal; text-decoration: underline dotted; text-underline-offset: .35ex; }
+.lx-document code { font-family: inherit; font-size: inherit; background: none; padding: 0; color: inherit; }
+.lx-document a { color: var(--s); text-decoration: underline; text-underline-offset: .3ex; }
+.lx-document .md table { display: inline-table; border-collapse: collapse; }
+.lx-document .md th, .lx-document .md td { border: .2mm solid var(--guide); padding: 0 1mm; }

@@ -1,0 +1,119 @@
+/* Blueprint layout. All rules scoped under .lx-blueprint. */
+.pg.lx-blueprint {
+  --pad-t: 15mm; --pad-x: 14mm; --pad-b: 13mm; --side-w: 52mm; --side-pr: 5mm; --main-pl: 6mm; --col-pad: 7mm; --col-pad-rest: 2mm;
+  --main-rule: 0.35mm solid #cfe6ff;
+  --bg: #0b3a6e; --ink: #eaf3ff; --line: #cfe6ff; --cy: #7fd4ff; --mut: #b4cff0;
+  font-family: 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif; font-weight: 500; font-size: 10pt; line-height: 1.3;
+  color: var(--ink);
+}
+.lx-blueprint .pg-page {
+  position: relative; background-color: var(--bg); color: var(--ink);
+  background-image:
+    repeating-linear-gradient(0deg, rgba(255,255,255,.1) 0 0.2mm, transparent 0.2mm 5mm),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.1) 0 0.2mm, transparent 0.2mm 5mm);
+}
+/* corner registration marks: eight 6 mm ticks painted as backgrounds */
+.lx-blueprint .pg-page::before {
+  content: ''; position: absolute; inset: 6mm; pointer-events: none;
+  background-repeat: no-repeat;
+  background-image:
+    linear-gradient(var(--line), var(--line)), linear-gradient(var(--line), var(--line)),
+    linear-gradient(var(--line), var(--line)), linear-gradient(var(--line), var(--line)),
+    linear-gradient(var(--line), var(--line)), linear-gradient(var(--line), var(--line)),
+    linear-gradient(var(--line), var(--line)), linear-gradient(var(--line), var(--line));
+  background-size: 6mm 0.35mm, 0.35mm 6mm, 6mm 0.35mm, 0.35mm 6mm, 6mm 0.35mm, 0.35mm 6mm, 6mm 0.35mm, 0.35mm 6mm;
+  background-position: left top, left top, right top, right top, left bottom, left bottom, right bottom, right bottom;
+}
+.lx-blueprint .pg-unit { display: flow-root; } /* keep child margins inside the measured unit */
+.lx-blueprint .pg-unit.end-section { margin-bottom: 6mm; }
+.lx-blueprint .pg-side .pg-unit.end-section { margin-bottom: 7mm; }
+
+/* title block */
+.lx-blueprint .lx-blueprint-block {
+  display: grid; grid-template-columns: 1fr auto auto auto; border: 0.35mm solid var(--line); background: var(--bg);
+}
+.lx-blueprint .lx-blueprint-cell { padding: 1.6mm 3mm 2mm; border-left: 0.35mm solid var(--line); min-width: 0; }
+.lx-blueprint .lx-blueprint-cell-name { border-left: 0; padding-bottom: 2.4mm; }
+.lx-blueprint .lx-blueprint-label {
+  font-family: 'Space Mono', ui-monospace, monospace; font-weight: 400; font-size: 7.2pt; letter-spacing: .08em; text-transform: uppercase; color: var(--cy); line-height: 1.2;
+}
+.lx-blueprint .lx-blueprint-name {
+  margin: 0.6mm 0 0; font-weight: 600; font-size: 30pt; line-height: 1.02; text-transform: uppercase; letter-spacing: .03em; color: #fff; overflow-wrap: anywhere;
+}
+.lx-blueprint .lx-blueprint-value { margin-top: 1mm; font-size: 10.5pt; line-height: 1.25; max-width: 48mm; overflow-wrap: anywhere; }
+.lx-blueprint .lx-blueprint-cell-role .lx-blueprint-value { max-width: 40mm; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+.lx-blueprint .lx-blueprint-cell-contact .lx-blueprint-value { font-family: 'Space Mono', ui-monospace, monospace; font-size: 7.8pt; max-width: 52mm; }
+.lx-blueprint .lx-blueprint-cell-loc .lx-blueprint-value { max-width: 34mm; }
+
+.lx-blueprint .hx { margin-top: 4mm; }
+.lx-blueprint .hx-p { font-size: 10.5pt; line-height: 1.35; color: var(--ink); }
+.lx-blueprint .hx-facts { font-size: 9.5pt; color: var(--mut); }
+.lx-blueprint .hx-facts b { font-family: 'Space Mono', ui-monospace, monospace; font-weight: 400; font-size: 7.4pt; text-transform: uppercase; color: var(--cy); }
+
+/* headings: dimension lines */
+.lx-blueprint .lx-blueprint-dim { display: flex; align-items: center; margin: 0 0 3.2mm; font-size: 12pt; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: #fff; }
+.lx-blueprint .lx-blueprint-dim-line { flex: 1; height: 0.35mm; background: var(--line); min-width: 4mm; }
+.lx-blueprint .lx-blueprint-dim-label { flex: none; padding: 0 3mm; display: inline-flex; align-items: center; gap: 2mm; line-height: 1.1; }
+.lx-blueprint .lx-blueprint-icon { width: 4.2mm; height: 4.2mm; color: var(--cy); display: inline-flex; }
+.lx-blueprint .lx-blueprint-icon svg { width: 100%; height: 100%; }
+.lx-blueprint .lx-blueprint-arrow { flex: none; width: 2.6mm; height: 2.2mm; background: var(--line); }
+.lx-blueprint .lx-blueprint-arrow-l { clip-path: polygon(0 50%, 100% 0, 100% 100%); }
+.lx-blueprint .lx-blueprint-arrow-r { clip-path: polygon(100% 50%, 0 0, 0 100%); }
+
+/* side boxes with a label tab */
+.lx-blueprint .lx-blueprint-tab {
+  position: relative; z-index: 1; display: table; margin: 0 0 0 3mm; padding: 0.4mm 2mm;
+  border: 0.35mm solid var(--line); border-bottom: 0; font-size: 10pt; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: #fff; line-height: 1.15;
+}
+.lx-blueprint .lx-blueprint-box { border-left: 0.35mm solid var(--line); border-right: 0.35mm solid var(--line); padding: 0 3mm; }
+.lx-blueprint .lx-blueprint-box.is-first { border-top: 0.35mm solid var(--line); padding-top: 2.4mm; }
+.lx-blueprint .lx-blueprint-box > * { margin-bottom: 0 !important; }
+.lx-blueprint .lx-blueprint-box { padding-bottom: 1.8mm; }
+.lx-blueprint .lx-blueprint-box.is-last { border-bottom: 0.35mm solid var(--line); padding-bottom: 3mm; }
+
+/* text */
+.lx-blueprint .lx-blueprint-text { margin: 0 0 1.6mm; }
+.lx-blueprint .lx-blueprint-text:last-child { margin-bottom: 0; }
+.lx-blueprint a { color: var(--cy); text-decoration: underline; text-underline-offset: 0.5mm; overflow-wrap: anywhere; }
+.lx-blueprint strong { font-weight: 600; color: #fff; }
+.lx-blueprint em { font-style: normal; color: var(--cy); }
+.lx-blueprint code { font-family: 'Space Mono', ui-monospace, monospace; font-size: 8pt; color: var(--cy); }
+.lx-blueprint .md table { border-collapse: collapse; font-size: 9pt; }
+.lx-blueprint .md th, .lx-blueprint .md td { border: 0.25mm solid var(--line); padding: 0.6mm 1.6mm; }
+.lx-blueprint .md p { margin: 0 0 1.4mm; }
+
+/* entries */
+.lx-blueprint .lx-blueprint-head { margin-bottom: 1.4mm; }
+.lx-blueprint .lx-blueprint-tag {
+  display: inline-block; margin-bottom: 1.2mm; padding: 0.3mm 1.6mm; border: 0.3mm solid var(--cy); color: var(--cy);
+  font-family: 'Space Mono', ui-monospace, monospace; font-weight: 400; font-size: 7.8pt; letter-spacing: .02em; line-height: 1.3;
+}
+.lx-blueprint .lx-blueprint-title { margin: 0; font-size: 12pt; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: #fff; line-height: 1.15; overflow-wrap: anywhere; }
+.lx-blueprint .lx-blueprint-org { color: var(--mut); font-size: 10.5pt; }
+.lx-blueprint .lx-blueprint-note { margin-top: 1mm; padding-left: 2mm; border-left: 0.6mm solid var(--cy); font-weight: 600; color: var(--ink); }
+.lx-blueprint .lx-blueprint-bullets { list-style: none; margin: 0; padding: 0; }
+.lx-blueprint .lx-blueprint-bullets li { position: relative; padding-left: 3.6mm; margin: 0.4mm 0; }
+.lx-blueprint .lx-blueprint-bullets li::before { content: '\2013'; position: absolute; left: 0; color: var(--cy); }
+.lx-blueprint .lx-blueprint-sub { margin: 1.6mm 0 0.4mm; font-family: 'Space Mono', ui-monospace, monospace; font-size: 7.6pt; text-transform: uppercase; letter-spacing: .08em; color: var(--cy); }
+.lx-blueprint .lx-blueprint-entry-end { margin-bottom: 5mm; }
+.lx-blueprint .pg-side .lx-blueprint-entry-end { margin-bottom: 3mm; }
+
+/* details / facts */
+.lx-blueprint .lx-blueprint-facts { margin: 0; }
+.lx-blueprint .lx-blueprint-facts > div { margin-bottom: 2mm; }
+.lx-blueprint .lx-blueprint-facts > div:last-child { margin-bottom: 0; }
+.lx-blueprint .lx-blueprint-facts dt { font-family: 'Space Mono', ui-monospace, monospace; font-weight: 400; font-size: 7.2pt; letter-spacing: .08em; text-transform: uppercase; color: var(--cy); }
+.lx-blueprint .lx-blueprint-facts dd { margin: 0; overflow-wrap: anywhere; }
+
+/* levels: a ruler */
+.lx-blueprint .lx-blueprint-level { margin-bottom: 2.4mm; }
+.lx-blueprint .lx-blueprint-level-top { display: flex; justify-content: space-between; align-items: baseline; gap: 2mm; }
+.lx-blueprint .lx-blueprint-level-name { overflow-wrap: anywhere; }
+.lx-blueprint .lx-blueprint-level-num { font-family: 'Space Mono', ui-monospace, monospace; font-size: 7.8pt; color: var(--cy); flex: none; }
+.lx-blueprint .lx-blueprint-ruler { position: relative; height: 3mm; margin: 0.6mm 0.2mm 0; }
+.lx-blueprint .lx-blueprint-ruler::before { content: ''; position: absolute; left: 0; right: 0; top: 1.5mm; height: 0.35mm; margin-top: -0.175mm; background: var(--line); }
+.lx-blueprint .lx-blueprint-ruler-fill { position: absolute; left: 0; top: 0.8mm; height: 1.4mm; background: var(--cy); }
+.lx-blueprint .lx-blueprint-tick { position: absolute; top: 0; width: 0.35mm; height: 3mm; margin-left: -0.175mm; background: var(--line); }
+
+/* links */
+.lx-blueprint .lx-blueprint-linkrow { margin-bottom: 1mm; overflow-wrap: anywhere; }

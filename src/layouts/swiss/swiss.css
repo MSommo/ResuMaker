@@ -1,0 +1,68 @@
+/* Swiss Grid layout. All rules scoped under .lx-swiss. */
+.pg.lx-swiss {
+  --ink: #111111; --muted: #555555; --red: #e30613; --hair: #dddddd; --rail: 40mm;
+  --pad-t: 15mm; --pad-b: 14mm; --pad-x: 14mm; --col-pad: 6mm; --col-pad-rest: 0mm;
+  font-family: 'Inter', system-ui, sans-serif; font-size: 9pt; line-height: 1.42; color: var(--ink); text-align: left;
+}
+.lx-swiss .pg-body { grid-template-columns: 1fr; }
+.lx-swiss .pg-side { display: none; }
+.lx-swiss .pg-main { padding-left: 0; padding-right: 0; border-left: 0; overflow-wrap: anywhere; }
+.lx-swiss .pg-cont .pg-main { padding-top: 0; }
+
+/* Header */
+.lx-swiss .lx-swiss-name { margin: 0; font-weight: 900; font-size: 40pt; line-height: 0.95; letter-spacing: -0.03em; }
+.lx-swiss .lx-swiss-hrow { display: grid; grid-template-columns: var(--rail) 1fr; margin-top: 7mm; align-items: start; }
+.lx-swiss .lx-swiss-contact { display: grid; gap: 2mm; padding-right: 4mm; }
+.lx-swiss .lx-swiss-label { font-size: 7.2pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--red); line-height: 1.3; }
+.lx-swiss .lx-swiss-cval { font-size: 8.6pt; }
+.lx-swiss .lx-swiss-bar { width: 14mm; height: 2mm; background: var(--red); margin-bottom: 3mm; }
+.lx-swiss .lx-swiss-headline { font-weight: 500; font-size: 12pt; line-height: 1.3; }
+.lx-swiss .lx-swiss-hrule { height: 0.7mm; background: var(--ink); margin-top: 6mm; }
+.lx-swiss .hx { margin: 5mm 0 0 var(--rail); }
+.lx-swiss .hx-p { font-size: 9pt; color: var(--ink); }
+.lx-swiss .hx-facts { color: var(--muted); }
+.lx-swiss .hx-facts b { color: var(--red); font-weight: 700; text-transform: uppercase; font-size: 7.2pt; letter-spacing: 0.08em; }
+
+/* Rows: rail + content */
+.lx-swiss .lx-swiss-row { position: relative; display: grid; grid-template-columns: var(--rail) 1fr; }
+.lx-swiss .lx-swiss-first { padding-top: 3mm; }
+.lx-swiss .lx-swiss-rule { position: absolute; left: 0; right: 0; top: 0; height: 0.4mm; background: var(--ink); }
+.lx-swiss .lx-swiss-rail { padding-right: 5mm; }
+.lx-swiss .lx-swiss-body { min-width: 0; }
+.lx-swiss .end-section { padding-bottom: 6mm; }
+.lx-swiss .lx-swiss-num { font-weight: 300; font-size: 20pt; line-height: 1; color: var(--red); letter-spacing: -0.01em; }
+.lx-swiss .lx-swiss-title { margin: 1.6mm 0 0; font-weight: 700; font-size: 7.8pt; line-height: 1.35; text-transform: uppercase; letter-spacing: 0.1em; }
+.lx-swiss .lx-swiss-dates { font-weight: 500; font-size: 8pt; line-height: 1.45; color: var(--muted); padding-top: 0.5mm; }
+.lx-swiss .lx-swiss-title + .lx-swiss-dates { margin-top: 3mm; }
+
+/* Content */
+.lx-swiss .lx-swiss-etitle { margin: 0; font-size: 10pt; font-weight: 700; line-height: 1.3; }
+.lx-swiss .lx-swiss-esub { font-weight: 400; color: var(--muted); font-size: 9pt; }
+.lx-swiss .lx-swiss-note { margin-top: 1mm; font-weight: 700; }
+.lx-swiss .lx-swiss-text { margin: 0; padding-bottom: 2mm; }
+.lx-swiss .lx-swiss-etitle + .lx-swiss-text, .lx-swiss .lx-swiss-note + .lx-swiss-text { margin-top: 1.6mm; }
+.lx-swiss .lx-swiss-etitle + .lx-swiss-bullets, .lx-swiss .lx-swiss-note + .lx-swiss-bullets { margin-top: 1.6mm; }
+.lx-swiss .lx-swiss-etitle + div > .lx-swiss-bullets { margin-top: 1.6mm; }
+.lx-swiss .lx-swiss-entry-end { padding-bottom: 4.5mm; }
+.lx-swiss .lx-swiss-bullets { margin: 0; padding: 0; list-style: none; }
+.lx-swiss .lx-swiss-bullets li { position: relative; padding: 0 0 0.8mm 4.5mm; }
+.lx-swiss .lx-swiss-bullets li::before { content: '\2013'; position: absolute; left: 0; color: var(--ink); }
+.lx-swiss .lx-swiss-sub { font-weight: 700; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.06em; padding: 1mm 0 0.8mm; }
+.lx-swiss strong { font-weight: 700; }
+.lx-swiss a { color: var(--ink); text-decoration: underline; text-underline-offset: 0.5mm; text-decoration-thickness: 0.2mm; }
+.lx-swiss code { font-family: ui-monospace, monospace; font-size: 0.92em; background: #f1f1f1; padding: 0 0.8mm; }
+.lx-swiss .md table { border-collapse: collapse; font-size: 8.6pt; }
+.lx-swiss .md th, .lx-swiss .md td { border-bottom: 1px solid var(--hair); padding: 0.8mm 3mm 0.8mm 0; text-align: left; }
+.lx-swiss .lx-swiss-fact { display: grid; grid-template-columns: 36mm 1fr; padding-bottom: 1.6mm; }
+.lx-swiss .lx-swiss-fact .lx-swiss-label { color: var(--muted); padding-top: 0.5mm; }
+.lx-swiss .lx-swiss-level { display: grid; grid-template-columns: 34mm 1fr 9mm; gap: 3mm; align-items: center; padding-bottom: 1.6mm; }
+.lx-swiss .lx-swiss-track { display: block; height: 0.7mm; background: var(--hair); }
+.lx-swiss .lx-swiss-track > span { display: block; height: 100%; background: var(--ink); }
+.lx-swiss .lx-swiss-score { font-weight: 500; font-size: 8pt; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.lx-swiss .lx-swiss-link { display: inline-block; padding-bottom: 1.2mm; font-weight: 500; }
+/* In a section of three or more units the rail may hang below its first row instead of stretching it (the later rows have empty rails). */
+.lx-swiss .lx-swiss-free > .lx-swiss-rail { height: 0; overflow: visible; }
+/* The header's own rule already closes the top of page 1. */
+.lx-swiss .pg-page:not(.pg-cont) .pg-main > .pg-unit:first-child .lx-swiss-rule { visibility: hidden; }
+.lx-swiss .lx-swiss-head { margin-bottom: 3mm; }
+.lx-swiss .lx-swiss-head .lx-swiss-title { margin-top: 1.4mm; }

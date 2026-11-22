@@ -1,0 +1,62 @@
+/* Chambers layout. All rules scoped under .lx-chambers. */
+.pg.lx-chambers {
+  --pad-t: 17mm; --pad-x: 20mm; --pad-b: 15mm; --col-pad: 7mm; --col-pad-rest: 0mm;
+  --navy: #1f2a44; --ink: #1a1a1a; --muted: #4a4a4a;
+  font-family: 'EB Garamond', Georgia, serif; font-size: 10.6pt; line-height: 1.4; color: var(--ink);
+}
+.lx-chambers .pg-page { background: #fff; }
+.lx-chambers .pg-body { grid-template-columns: 1fr; }
+.lx-chambers .pg-side { display: none; }
+.lx-chambers .pg-main { padding-left: 0; border-left: 0; }
+.lx-chambers .pg-cont .pg-main { padding-top: 1mm; }
+
+.lx-chambers-header { text-align: center; }
+.lx-chambers-name { margin: 0; color: var(--navy); font-weight: 500; font-size: 25pt; line-height: 1.15; letter-spacing: 0.08em; text-transform: uppercase; overflow-wrap: anywhere; }
+.lx-chambers-headline { margin-top: 1.5mm; font-style: italic; font-size: 12pt; color: var(--muted); }
+.lx-chambers-contact { margin-top: 2.5mm; font-size: 9.6pt; color: var(--muted); }
+.lx-chambers-contact span + span::before { content: '·'; margin: 0 2.2mm; }
+.lx-chambers-double { margin-top: 5mm; }
+.lx-chambers-double i { display: block; background: var(--navy); height: 0.7mm; }
+.lx-chambers-double i + i { height: 0.25mm; margin-top: 0.8mm; }
+.lx-chambers .hx { margin-top: 5mm; text-align: center; }
+.lx-chambers .hx-p { font-size: 10.2pt; line-height: 1.4; text-align: justify; hyphens: auto; }
+.lx-chambers .hx-facts { justify-content: center; font-size: 9.6pt; }
+.lx-chambers .hx-facts b { font-weight: 600; }
+
+.lx-chambers-heading {
+  margin: 0 0 3mm; padding-bottom: 1.2mm; color: var(--navy); font-weight: 600; font-size: 10.6pt; line-height: 1.3;
+  letter-spacing: 0.1em; text-transform: uppercase; break-after: avoid;
+  background: linear-gradient(var(--navy), var(--navy)) left bottom / 100% 0.25mm no-repeat;
+}
+.lx-chambers-num { display: inline-block; min-width: 8mm; }
+.lx-chambers .end-section { padding-bottom: 4mm; }
+
+.lx-chambers-line { display: flex; align-items: baseline; gap: 1.5mm; }
+.lx-chambers-title { margin: 0; font-weight: 600; font-size: 10.6pt; line-height: 1.35; flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.lx-chambers-leader { flex: 1 1 8mm; min-width: 6mm; height: 0.6mm; align-self: end; margin-bottom: 1.1mm; background: radial-gradient(circle, var(--muted) 38%, transparent 42%) 0 0 / 1.1mm 0.6mm repeat-x; }
+.lx-chambers-dates { flex: none; font-style: italic; white-space: nowrap; }
+.lx-chambers-sub-line { font-style: italic; color: var(--muted); }
+.lx-chambers-note { margin-top: 0.8mm; font-weight: 600; }
+.lx-chambers-text { margin: 0; padding-bottom: 2mm; text-align: justify; hyphens: auto; overflow-wrap: anywhere; }
+.lx-chambers-entry-end { padding-bottom: 4mm; }
+.lx-chambers-sub-line + .lx-chambers-text, .lx-chambers-line + .lx-chambers-text, .lx-chambers-note + .lx-chambers-text { margin-top: 1.2mm; }
+.lx-chambers-bullets { margin: 0; padding-left: 6mm; list-style: none; text-align: left; }
+.lx-chambers-bullets li { position: relative; }
+.lx-chambers-bullets li::before { content: '\2013'; position: absolute; left: -4.5mm; color: var(--navy); }
+.lx-chambers-sub { margin-top: 1mm; font-weight: 600; font-style: italic; color: var(--navy); }
+
+.lx-chambers-runin { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; }
+.lx-chambers-runin li + li::before { content: '\00b7'; margin: 0 2.2mm; color: var(--navy); font-weight: 600; }
+.lx-chambers-link { padding-bottom: 1.2mm; overflow-wrap: anywhere; }
+.lx-chambers-link a { color: var(--navy); text-decoration: underline; text-underline-offset: 0.5mm; }
+.lx-chambers-facts { margin: 0; }
+.lx-chambers-facts dt, .lx-chambers-facts dd { display: inline; margin: 0; }
+.lx-chambers-facts dt { font-weight: 600; }
+.lx-chambers-facts > div { padding-bottom: 0.8mm; overflow-wrap: anywhere; }
+
+.lx-chambers strong { font-weight: 600; }
+.lx-chambers em { font-style: italic; }
+.lx-chambers a { color: var(--navy); text-decoration: underline; text-underline-offset: 0.5mm; }
+.lx-chambers .md code { font-family: ui-monospace, monospace; font-size: 9pt; }
+.lx-chambers .md table { border-collapse: collapse; }
+.lx-chambers .md th, .lx-chambers .md td { border-bottom: 0.25mm solid var(--navy); padding: 0.5mm 2mm; text-align: left; }
