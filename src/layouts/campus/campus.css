@@ -25,15 +25,14 @@
 
 /* Folder-tab headings */
 .lx-campus-sec { --c: #5b4bdb; --t: #ebe9fb; }
-.lx-campus-head {
-  margin: 0 0 3.4mm; padding-top: 0.5mm;
-  background: linear-gradient(var(--c), var(--c)) left bottom / 100% 0.5mm no-repeat;
-}
+.lx-campus-head { margin: 0 0 3.4mm; padding-top: 0.5mm; }
+/* Folder tab = outlined label sitting on a solid, empty colour bar (the only painted box; no text over it) */
 .lx-campus-tab {
   display: inline-flex; align-items: center; gap: 1.6mm; margin: 0; padding: 1.2mm 3.5mm; max-width: 100%;
-  background: var(--c); color: #fff; border-radius: 2.4mm 2.4mm 0 0;
+  border: 0.45mm solid var(--c); border-bottom: 0; color: var(--c); border-radius: 2.4mm 2.4mm 0 0;
   font-family: 'Quicksand', 'Nunito Sans', sans-serif; font-weight: 700; font-size: 8.8pt; line-height: 1.25; overflow-wrap: anywhere;
 }
+.lx-campus-bar { display: block; height: 1.2mm; background-color: var(--c); }
 .lx-campus-ico { flex: none; width: 3.4mm; height: 3.4mm; display: inline-flex; }
 .lx-campus-ico svg { width: 100%; height: 100%; }
 
@@ -42,10 +41,9 @@
 .lx-campus-entry-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 3mm; }
 .lx-campus-title { margin: 0; font-weight: 700; font-size: 10pt; line-height: 1.3; color: var(--ink); overflow-wrap: anywhere; }
 .lx-campus-org { font-weight: 600; color: var(--ink); }
-.lx-campus-date {
-  flex: none; margin-top: 0.3mm; padding: 0.4mm 2mm; border-radius: 1.2mm; background: var(--t); color: var(--c);
-  font-weight: 700; font-size: 7.8pt; line-height: 1.4; white-space: nowrap; transform: rotate(-1deg);
-}
+.lx-campus-date { flex: none; display: flex; flex-direction: column; margin-top: 0.3mm; white-space: nowrap; }
+.lx-campus-date-t { padding: 0 0.6mm; color: var(--c); font-weight: 700; font-size: 7.8pt; line-height: 1.4; transform: rotate(-1deg); }
+.lx-campus-date-bar { display: block; height: 1.1mm; margin-top: 0.3mm; background-color: var(--c); }
 .lx-campus-loc { color: var(--muted); font-size: 8.6pt; }
 .lx-campus-note { margin-top: 1mm; font-weight: 700; font-size: 9pt; color: var(--ink); }
 .lx-campus-text { margin: 0; padding-bottom: 2mm; }
