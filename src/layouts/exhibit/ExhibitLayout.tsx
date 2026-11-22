@@ -28,7 +28,7 @@ function Heading({ sec }: { sec: Section }) {
       <div className={`${P}-rule`} aria-hidden />
       <h2 className={`${P}-h`}>
         {icon && <span className={`${P}-icon`} aria-hidden>{icon}</span>}
-        <span className={`${P}-strip`}>{sec.title}</span>
+        <span className={`${P}-strip`}><span className={`${P}-hlbox`} aria-hidden />{sec.title}</span>
       </h2>
     </div>
   )
