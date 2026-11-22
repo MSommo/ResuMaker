@@ -1,2 +1,47 @@
-/* Plain layout. All rules scoped under .lx-plain. */
-.pg.lx-plain { font-family: system-ui, sans-serif; font-size: 9.5pt; line-height: 1.35; }
+/* Plain: single column, no colour, reading order = visual order (ATS friendly). All rules scoped under .lx-plain. */
+.pg.lx-plain {
+  --ink: #111111; --muted: #444444;
+  --pad-t: 15mm; --pad-b: 14mm; --pad-x: 17mm; --col-pad: 4mm; --col-pad-rest: 0mm;
+  font-family: 'Source Sans 3', system-ui, sans-serif; font-size: 10pt; line-height: 1.38; color: var(--ink);
+}
+.lx-plain .pg-body { grid-template-columns: 1fr; }
+.lx-plain .pg-side { display: none; }
+.lx-plain .pg-main { border-left: 0; padding-left: 0; padding-right: 0; }
+
+.lx-plain-header h1 { margin: 0; font-size: 20pt; font-weight: 700; line-height: 1.15; }
+.lx-plain-headline { margin-top: 0.5mm; font-size: 11pt; }
+.lx-plain-contact { margin-top: 1mm; color: var(--muted); overflow-wrap: anywhere; }
+.lx-plain-rule { height: 0.25mm; background: var(--ink); }
+.lx-plain-rule-top { margin-top: 3mm; }
+.lx-plain .hx { margin-top: 3mm; }
+.lx-plain .hx-p { font-size: 10pt; line-height: 1.38; }
+.lx-plain .hx-facts { font-size: 10pt; color: var(--muted); }
+.lx-plain .hx-facts b { font-weight: 600; color: var(--ink); }
+
+.lx-plain-heading { margin: 0 0 2mm; break-after: avoid; }
+.lx-plain-heading h2 {
+  margin: 0 0 0.8mm; font-size: 10.5pt; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; line-height: 1.25;
+}
+.lx-plain .end-section { padding-bottom: 5mm; }
+
+.lx-plain-line { display: flex; justify-content: space-between; align-items: baseline; gap: 6mm; }
+.lx-plain-line h3 { margin: 0; font-size: 10pt; font-weight: 700; line-height: 1.38; overflow-wrap: anywhere; }
+.lx-plain-dates { flex: none; white-space: nowrap; }
+.lx-plain-sub-line { color: var(--muted); }
+.lx-plain-note { font-weight: 600; margin-top: 0.5mm; }
+.lx-plain-entry-end { padding-bottom: 3mm; }
+.lx-plain-text { margin: 0; padding-bottom: 1.5mm; }
+.lx-plain-bullets { margin: 0; padding-left: 4mm; list-style: none; }
+.lx-plain-bullets li { position: relative; }
+.lx-plain-bullets li::before { content: '•'; position: absolute; left: -4mm; width: 4mm; text-align: center; }
+.lx-plain-sub { font-weight: 600; padding: 1mm 0 0.3mm; }
+
+.lx-plain-run { margin: 0; overflow-wrap: anywhere; }
+.lx-plain-fact, .lx-plain-link { overflow-wrap: anywhere; }
+.lx-plain-fact b { font-weight: 600; }
+.lx-plain a { color: var(--ink); text-decoration: underline; }
+.lx-plain strong { font-weight: 700; }
+.lx-plain code { font-family: ui-monospace, monospace; font-size: 0.92em; }
+.lx-plain .md p { margin: 0; }
+.lx-plain .md table { border-collapse: collapse; }
+.lx-plain .md th, .lx-plain .md td { border: 0.25mm solid var(--ink); padding: 0.5mm 1.5mm; }
